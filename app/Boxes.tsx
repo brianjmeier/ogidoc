@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { joinLines } from "../src/shared/diff.ts";
-import type { Box, Snapshot } from "../src/types.ts";
+import type { Box, BoxChanges, Snapshot } from "../src/types.ts";
 import { STATUS_LABEL, decorate, isPassKey, symbolPattern } from "./text.ts";
 
 // The boxes canvas. Boxes are laid out in columns by what they use: a box sits to the
@@ -9,6 +9,14 @@ import { STATUS_LABEL, decorate, isPassKey, symbolPattern } from "./text.ts";
 const W = 250;
 const GAP_X = 56;
 const GAP_Y = 22;
+
+// While an agent turn plays: when the boxes it added or changed animate in, and which
+// boxes receive moved lines (name → delay in ms).
+export interface BoxAnimation {
+  delay: number;
+  pulse: Record<string, number>;
+  changes: BoxChanges;
+}
 
 export interface BoxesApi {
   // Close an open box editor and hand back its text, to go with the pen.
@@ -20,9 +28,7 @@ interface Props {
   boxes: Box[];
   symbols: Snapshot["symbols"];
   editable: boolean;
-  // While an agent turn plays: when new and changed boxes animate in, and which boxes
-  // receive moved lines (name → delay in ms).
-  animate: { delay: number; pulse: Record<string, number> } | null;
+  animate: BoxAnimation | null;
   onEdit: (name: string, text: string) => void;
   onPass: () => void;
 }
@@ -134,14 +140,14 @@ export function Boxes(props: Props) {
     const a = props.animate;
     if (!a) return "";
     if (b.name in a.pulse) return "pulse";
-    if (b.isNew) return "pop-in";
-    return b.changed ? "pulse" : "";
+    const c = a.changes[b.name];
+    return c === "new" ? "pop-in" : c === "changed" ? "pulse" : "";
   };
   const boxDelay = (b: Box, i: number) => {
     const a = props.animate;
     if (!a) return "0ms";
     if (b.name in a.pulse) return `${a.pulse[b.name]}ms`;
-    return `${b.isNew ? a.delay + i * 90 : a.delay}ms`;
+    return `${a.changes[b.name] === "new" ? a.delay + i * 90 : a.delay}ms`;
   };
 
   return (

@@ -17,8 +17,6 @@ export interface Box {
   lines: Line[];
   status: Status;
   uses: string[];
-  isNew?: boolean;
-  changed?: boolean;
 }
 
 export interface Message {
@@ -96,6 +94,9 @@ export type AnimationOp =
   | { op: "mod"; b: number; old: string }
   | { op: "del"; text: string }
   | { op: "move"; text: string; to: string };
+
+// Which boxes an agent turn added or changed, for the browser to animate.
+export type BoxChanges = Record<string, "new" | "changed">;
 
 export interface Settings {
   model: string;

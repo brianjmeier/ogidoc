@@ -7,6 +7,9 @@ import type { Clock } from "./clock.ts";
 export interface Agent {
   name: string;
   choices: Choices;
+  // Whether the CLI takes this model name: one of `choices.models` or a full name in the
+  // CLI's own form. It goes into the CLI's arguments, so nothing else gets through.
+  acceptsModel(name: string): boolean;
   run(opts: {
     prompt: string;
     cwd: string;
@@ -55,12 +58,15 @@ export function makeAgent(name: string, opts: AgentOpts): Agent {
 
 export const AGENTS = ["claude", "pi"];
 
+const CLAUDE_MODELS = ["fable", "opus", "sonnet", "haiku"];
+
 function claudeAgent({ env, bin = env.UNDERPAINT_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
   // Claude Code refuses to start inside another Claude Code session unless told otherwise.
   const { CLAUDECODE: _, ...childEnv } = env;
   return {
     name: "claude",
-    choices: { models: ["fable", "opus", "sonnet", "haiku"], efforts: ["low", "medium", "high", "xhigh", "max"] },
+    choices: { models: CLAUDE_MODELS, efforts: ["low", "medium", "high", "xhigh", "max"] },
+    acceptsModel: (m) => CLAUDE_MODELS.includes(m) || /^claude-[a-z0-9.-]+(\[1m\])?$/.test(m),
     run({ prompt, cwd, onActivity, signal, model, effort }) {
       const argv = [
         ...(model ? ["--model", model] : []),
@@ -92,6 +98,8 @@ function piAgent({ env, bin = env.UNDERPAINT_PI || "pi", args = [] }: AgentOpts)
   return {
     name: "pi",
     choices: { models: [], efforts: ["off", "minimal", "low", "medium", "high", "xhigh", "max"] },
+    // pi names models as provider/model, e.g. anthropic/claude-opus-5-5.
+    acceptsModel: (m) => /^\w[\w.:/-]*$/.test(m),
     run({ prompt, cwd, onActivity, signal, model, effort }) {
       const argv = [
         "-p", "--mode", "json", "--no-session",
@@ -182,6 +190,7 @@ function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] })
   return {
     name: "mock",
     choices: { models: [], efforts: [] },
+    acceptsModel: () => false,
     async run({ cwd, onActivity }) {
       const t = turns[Math.min(i++, turns.length - 1)];
       for (const a of t.activity || []) {

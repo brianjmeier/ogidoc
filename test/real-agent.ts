@@ -34,19 +34,19 @@ console.log(`Running one ${name} turn in ${dir}`);
 const t0 = Date.now();
 await s.pass({ text: plan });
 console.log(`Turn took ${Math.round((Date.now() - t0) / 1000)}s`);
-if (!s.last || s.last.error) throw new Error(s.last?.error ?? "no reply");
-const last = s.last;
+const { last, lines } = s.snapshot();
+if (!last || last.error) throw new Error(last?.error ?? "no reply");
 
 console.log("\nPlan after the agent's turn:");
-for (const l of s.lines) console.log(`  ${(l.status || "").padEnd(8)} ${(l.kind || "").padEnd(9)} ${l.by} | ${l.text}`);
+for (const l of lines) console.log(`  ${(l.status || "").padEnd(8)} ${(l.kind || "").padEnd(9)} ${l.by} | ${l.text}`);
 console.log(`\nSummary: ${last.summary}`);
 console.log(`Files: ${(last.files ?? []).map((f) => `${f.op} ${f.path}`).join(", ")}`);
 console.log(`Checks: ${(last.checks ?? []).map((c) => `${c.ok ? "✓" : "✕"} ${c.name}`).join(", ")}`);
 console.log(`Commit: ${g("log", "-1", "--format=%s")}`);
 console.log(`Files in repo: ${readdirSync(dir).join(", ")}`);
 
-assert.ok(s.lines.length >= 3, "the agent returned a plan");
-assert.ok(s.lines.some((l) => l.status === "built"), "something is built");
+assert.ok(lines.length >= 3, "the agent returned a plan");
+assert.ok(lines.some((l) => l.status === "built"), "something is built");
 assert.match(g("log", "-1", "--format=%s"), /underpaint: turn 1 on slug/);
 execFileSync("npm", ["test", "--silent"], { cwd: dir, stdio: "inherit" });
 console.log("\nReal agent turn checks passed.");

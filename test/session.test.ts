@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AnimationOp } from "../src/types.ts";
-import { PLAN, emptyDir, open, repo, testClock, texts } from "./support/index.ts";
+import { makeAgent } from "../src/agents.ts";
+import { PLAN, emptyDir, fakeAgent, open, repo, testClock, texts } from "./support/index.ts";
 
 test("a full session: ask, build, move into boxes, disagree in a box, done, undo", async () => {
   const { dir, log } = repo();
@@ -102,14 +103,10 @@ test("a thread stays on its line while the person edits around it, and keeps the
 
 test("a failed turn that changed code can be undone", async () => {
   const { dir, log } = repo();
-  const agent = {
-    name: "sloppy",
-    choices: { models: [], efforts: [] },
-    run: async ({ cwd }: { cwd: string }) => {
+  const agent = fakeAgent("sloppy", async ({ cwd }: { cwd: string }) => {
       writeFileSync(join(cwd, "half.js"), "// half done\n");
       return "I forgot the JSON";
-    },
-  };
+    });
   const { session: s, view } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
   assert.match(view().last!.error!, /no JSON block/);
@@ -122,7 +119,7 @@ test("a failed turn that changed code can be undone", async () => {
 
 test("a failed agent turn gives the pen back with an error", async () => {
   const { dir } = repo();
-  const { session: s, view } = open(dir, { planFile: "p.plan", agent: { name: "broken", choices: { models: [], efforts: [] }, run: async () => "I forgot the JSON" } });
+  const { session: s, view } = open(dir, { planFile: "p.plan", agent: fakeAgent("broken", async () => "I forgot the JSON") });
   await s.pass({ text: "hello" });
   assert.equal(view().working, false);
   assert.match(view().last!.error!, /no JSON block/);
@@ -165,14 +162,10 @@ test("undo history survives a restart", async () => {
 
 test("a turn reports how long the agent took", async () => {
   const clock = testClock(1_000_000);
-  const agent = {
-    name: "slow",
-    choices: { models: [], efforts: [] },
-    run: async () => {
+  const agent = fakeAgent("slow", async () => {
       clock.advance(7_400);
       return '```json\n{"plan":[{"text":"hello"}],"summary":"ok"}\n```';
-    },
-  };
+    });
   const { session: s, view } = open(emptyDir(), { planFile: "p.plan", clock, agent });
   await s.pass({ text: "hello" });
   assert.equal(view().last!.seconds, 7);
@@ -185,17 +178,13 @@ test("an agent's renames, deletions and staged edits all land in its turn's comm
   writeFileSync(join(dir, "staged.js"), "c\n");
   git("add", ".");
   git("commit", "-qm", "files");
-  const agent = {
-    name: "git-savvy",
-    choices: { models: [], efforts: [] },
-    run: async () => {
+  const agent = fakeAgent("git-savvy", async () => {
       git("mv", "old.js", "new.js");
       git("rm", "-q", "gone.js");
       writeFileSync(join(dir, "staged.js"), "c2\n");
       git("add", "staged.js");
       return '```json\n{"plan":[{"text":"hello"}],"summary":"moved things"}\n```';
-    },
-  };
+    });
   const { session: s } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
   const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".underpaint"));
@@ -245,4 +234,15 @@ test("a session saved by an older version still opens with its undo history", as
   const { view } = open(dir);
   assert.equal(view().canUndo, true);
   assert.equal(readFileSync(at(".gitignore"), "utf8"), "# local\nstate.json\nhistory.json\n");
+});
+
+test("only models and efforts the agent knows are accepted", () => {
+  const { session: s, view } = open(emptyDir(), { agent: makeAgent("claude", { env: {} }) });
+  s.setSettings({ model: "opus", effort: "high" });
+  s.setSettings({ model: "claude-sonnet-5-5" });
+  assert.deepEqual(view().settings, { model: "claude-sonnet-5-5", effort: "high" });
+  assert.throws(() => s.setSettings({ model: "--dangerously-skip-permissions" }), /claude has no model/);
+  assert.throws(() => s.setSettings({ effort: "turbo" }), /claude has no effort/);
+  s.setSettings({ model: "" });
+  assert.equal(view().settings.model, "", "empty means the CLI's own default");
 });

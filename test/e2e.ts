@@ -124,6 +124,7 @@ try {
   await page.keyboard.press("Control+Enter");
   await waitPen(/agent's pen/);
   await page.waitForSelector(".rows .a-move", { timeout: 15000 });
+  assert.ok(await page.$(".canvas .box.pop-in"), "boxes the agent added pop in");
   await page.waitForTimeout(350);
   await shot("07-moving-into-boxes");
   await waitPen(/your pen/);

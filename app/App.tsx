@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { Button } from "@kobalte/core/button";
 import type { AnimationOp, LastTurn, Snapshot } from "../src/types.ts";
-import { listen, notice, post, state } from "./api.ts";
-import { Boxes, type BoxesApi } from "./Boxes.tsx";
+import { listen, notice, post, state, type TurnChanges } from "./api.ts";
+import { Boxes, type BoxAnimation, type BoxesApi } from "./Boxes.tsx";
 import { Editor, type EditorApi } from "./Editor.tsx";
 import { TopBar } from "./TopBar.tsx";
 import { sendAll, setOpenId, waitingOnYou } from "./threads.ts";
@@ -15,7 +15,7 @@ export function App() {
   let editTimer: ReturnType<typeof setTimeout> | undefined;
   const [writing, setWriting] = createSignal(false);
   const [passing, setPassing] = createSignal(false);
-  const [boxAnim, setBoxAnim] = createSignal<{ delay: number; pulse: Record<string, number> } | null>(null);
+  const [boxAnim, setBoxAnim] = createSignal<BoxAnimation | null>(null);
   const [hint, setHint] = createSignal("");
   const [now, setNow] = createSignal(Date.now());
   const [workStart, setWorkStart] = createSignal(0);
@@ -39,15 +39,16 @@ export function App() {
     await post("/api/pass", { text: editor.text(), accepted: editor.takeAccepted(), boxes: boxes?.take() });
   }
 
-  async function onEvent(next: Snapshot, prev: Pick<Snapshot, "turn" | "working"> | null, animation?: AnimationOp[]) {
+  async function onEvent(next: Snapshot, prev: Pick<Snapshot, "turn" | "working"> | null, turn?: TurnChanges) {
     document.title = `${next.name} · Underpaint`;
     const turnChanged = !prev || prev.turn !== next.turn;
     const agentFinished = !!prev && prev.working && !next.working;
-    if (animation) {
+    if (turn) {
+      const { animation, boxChanges } = turn;
       const oldLines = editor.lines();
       const pulse: Record<string, number> = {};
       animation.filter((o) => o.op === "move").forEach((m, i) => { pulse[(m as { to: string }).to] ??= 500 + i * 40; });
-      setBoxAnim({ delay: 250, pulse });
+      setBoxAnim({ delay: 250, pulse, changes: boxChanges });
       setWriting(true);
       await editor.animate(animation, oldLines, next);
       setWriting(false);

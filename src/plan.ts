@@ -1,6 +1,6 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
-import type { AnimationOp, Box, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
 // the comment threads pinned to its lines. Every change returns a new plan.
@@ -79,14 +79,15 @@ export function isDone(plan: Plan, last: LastTurn | null): boolean {
 
 // Take the agent's reply apart into lines, boxes and threads, keeping authorship, and
 // describe the change so the browser can animate it.
-export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan; animation: AnimationOp[] } {
+export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges } {
   const oldLines = plan.lines;
   const newTexts = reply.plan.map((l) => l.text);
   const ops = diffLines(oldLines.map((l) => l.text), newTexts);
   const ts = threads.fromAgent(threads.move(plan.threads, ops, oldLines.length), reply, newTexts.length, turn);
 
   const oldBoxes = new Map(plan.boxes.map((b) => [b.name, b]));
-  const boxes = reply.boxes.map((rb) => {
+  const boxChanges: BoxChanges = {};
+  const boxes = reply.boxes.map((rb): Box => {
     const old = oldBoxes.get(rb.name);
     const oldL = old ? old.lines : [];
     const bops = diffLines(oldL.map((l) => l.text), rb.lines);
@@ -95,13 +96,14 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
       if (o.op === "eq") lines[o.b] = { ...oldL[o.a], chg: false };
       else if (o.op !== "del") lines[o.b] = { text: rb.lines[o.b], by: "a", chg: true };
     }
-    const changed = !old || bops.some((o) => o.op !== "eq");
-    return { name: rb.name, lines, status: rb.status, uses: rb.uses, isNew: !old, changed };
+    if (!old) boxChanges[rb.name] = "new";
+    else if (bops.some((o) => o.op !== "eq")) boxChanges[rb.name] = "changed";
+    return { name: rb.name, lines, status: rb.status, uses: rb.uses };
   });
 
   // A line that left the plan and shows up in a box was moved there.
   const boxOf = new Map<string, string>();
-  for (const b of boxes) if (b.changed) for (const l of b.lines) boxOf.set(norm(l.text), b.name);
+  for (const b of boxes) if (b.name in boxChanges) for (const l of b.lines) boxOf.set(norm(l.text), b.name);
 
   const lines: Line[] = new Array(newTexts.length);
   const animation: AnimationOp[] = [];
@@ -120,7 +122,7 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
       animation.push(o.op === "mod" ? { op: "mod", b: o.b, old: oldLines[o.a].text } : { op: "add", b: o.b });
     }
   }
-  return { plan: { lines, boxes, threads: ts }, animation };
+  return { plan: { lines, boxes, threads: ts }, animation, boxChanges };
 }
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");

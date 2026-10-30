@@ -18,20 +18,8 @@ import type { Box, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
 //   .underpaint/weekly/state.json      local
 //   .underpaint/weekly/history.json    local
 
-// The session as it was just before an agent turn, so the turn can be taken back.
-export interface HistoryEntry {
-  lines: Line[];
-  boxes: Box[];
-  threads: Thread[];
-  base: Base;
-  last: LastTurn | null;
-  symbols: Symbol[];
-  suggestions: string[];
-  turn: number;
-  commit: string | null;
-}
-
-interface Stored {
+// Everything a session remembers.
+export interface SessionState {
   turn: number;
   lines: Line[];
   boxes: Box[];
@@ -42,11 +30,19 @@ interface Stored {
   base: Base;
   history: HistoryEntry[];
   settings: Settings;
-  log: LogState;
+}
+
+// What an agent turn can take back: everything but the undo history and the settings.
+export type TurnState = Omit<SessionState, "history" | "settings">;
+
+export interface HistoryEntry extends TurnState {
+  commit: string | null;
 }
 
 // What `load` hands back: what was saved, and the text now on disk, which wins.
-export interface Loaded extends Stored {
+export interface Loaded {
+  state: SessionState;
+  log: LogState;
   planText: string;
   boxTexts: Record<string, string>;
 }
@@ -89,7 +85,7 @@ export function planStore(cwd: string, planFile: string) {
       const s = readJson("state.json") ?? {};
       const boxTexts: Record<string, string> = {};
       for (const f of readdirSync(boxDir)) if (f.endsWith(".plan")) boxTexts[f.slice(0, -5)] = readText(join(boxDir, f));
-      return {
+      const state: SessionState = {
         turn: s.turn || 1,
         lines: s.lines || [],
         boxes: s.boxes || [],
@@ -101,6 +97,9 @@ export function planStore(cwd: string, planFile: string) {
         // Sessions saved before history had its own file kept it in state.json.
         history: readJson("history.json") ?? s.history ?? [],
         settings: { model: "", effort: "", ...s.settings },
+      };
+      return {
+        state,
         // Older sessions kept the turn log's state at the top level.
         log: s.log ?? { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase },
         planText: readText(planPath),
@@ -108,7 +107,7 @@ export function planStore(cwd: string, planFile: string) {
       };
     },
 
-    save({ history, threads, log, ...s }: Stored) {
+    save({ history, threads, ...s }: SessionState, log: LogState) {
       mkdirSync(boxDir, { recursive: true });
       writeFileSync(planPath, joinLines(s.lines) + "\n");
       const keep = new Set(s.boxes.map((b) => `${b.name}.plan`));
