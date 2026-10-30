@@ -17,6 +17,6 @@ show with animations:
       make pseudocode mroe like code, less like prose.
       for psedocode in different style in (python-like, js/c-like, clojure-like) {
           show that agent adapts and follows style
-          person writes click(), agent adds "a taken cell does nothing" in the same style; three scenes stacked
+             person writes click(), agent adds "a taken cell does nothing" in the same style; three scenes stacked
       }
 
