@@ -95,7 +95,7 @@ Your last reply didn't end the turn. ${problem}
 
 Whatever you changed in the code is still there. Carry on from where you are and keep
 building until your turn ends the way "When your turn ends" says. Then end with the
-reply described above.`;
+reply the turn's instructions describe.`;
 
 // The agent ends its reply with a fenced JSON object. Take the last one that parses.
 export function parseReply(text: string): Reply {

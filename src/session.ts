@@ -167,14 +167,20 @@ export class Session extends EventEmitter {
 
   // Run the agent until a reply ends its turn. One that doesn't goes back to it with
   // the reason, out of the person's sight, a couple of times before the turn fails.
+  // The retry carries on the agent's own conversation when its CLI can, so it keeps
+  // what it read and did; otherwise it starts over with the whole prompt.
   private async runTurn(prompt: string, turn: number): Promise<{ reply: Reply; next: ReturnType<typeof plan.fromReply> }> {
     const onActivity = (a: string) => {
       this.activity.push(a);
       this.emit("change", {});
     };
+    let conversation: string | undefined;
+    const onSession = (id: string) => { conversation = id; };
     let problem = "";
     for (let attempt = 1; attempt <= TURN_ATTEMPTS; attempt++) {
-      const out = await this.agent.run({ prompt: problem ? `${prompt}\n\n${notATurn(problem)}` : prompt, cwd: this.store.cwd, ...this.s.settings, onActivity });
+      const resume = problem ? conversation : undefined;
+      const ask = !problem ? prompt : resume ? notATurn(problem) : `${prompt}\n\n${notATurn(problem)}`;
+      const out = await this.agent.run({ prompt: ask, resume, cwd: this.store.cwd, ...this.s.settings, onActivity, onSession });
       try {
         const reply = parseReply(out);
         const next = plan.fromReply(this.plan, reply, turn);

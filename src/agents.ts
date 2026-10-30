@@ -16,6 +16,10 @@ export interface Agent {
     model?: string;
     effort?: string;
     onActivity: (a: string) => void;
+    // The CLI's id for this conversation, once it says it. Passing it back as `resume`
+    // carries on the same conversation, so the agent still has what it did and read.
+    onSession?: (id: string) => void;
+    resume?: string;
     signal?: AbortSignal;
   }): Promise<string>;
 }
@@ -42,6 +46,7 @@ interface Acc {
 
 // An agent takes a prompt, works in the project directory with its own tools,
 // and returns its final message as text. Progress arrives through onActivity.
+// A CLI that can carry on a conversation reports its id through onSession.
 // `settingOptions` lists the models and efforts the browser offers; an empty model or
 // effort leaves the CLI's own default in place.
 
@@ -67,8 +72,9 @@ function claudeAgent({ env, bin = env.OGIDOC_CLAUDE || "claude", args = [] }: Ag
     name: "claude",
     settingOptions: { models: CLAUDE_MODELS, efforts: ["low", "medium", "high", "xhigh", "max"] },
     acceptsModel: (m) => CLAUDE_MODELS.includes(m) || /^claude-[a-z0-9.-]+(\[1m\])?$/.test(m),
-    run({ prompt, cwd, onActivity, signal, model, effort }) {
+    run({ prompt, cwd, onActivity, onSession, resume, signal, model, effort }) {
       const argv = [
+        ...(resume ? ["--resume", sessionId(resume)] : []),
         ...(model ? ["--model", model] : []),
         ...(effort ? ["--effort", effort] : []),
         "-p",
@@ -79,6 +85,7 @@ function claudeAgent({ env, bin = env.OGIDOC_CLAUDE || "claude", args = [] }: Ag
         ...args,
       ];
       return runJsonLines(bin, argv, { cwd, env: childEnv, stdin: prompt, signal }, (ev, acc) => {
+        if (ev.type === "system" && ev.subtype === "init" && typeof ev.session_id === "string") onSession?.(ev.session_id);
         if (ev.type === "assistant") {
           for (const c of ev.message?.content || []) {
             if (c.type === "tool_use") onActivity(describeTool(c.name, c.input));
@@ -100,14 +107,16 @@ function piAgent({ env, bin = env.OGIDOC_PI || "pi", args = [] }: AgentOpts): Ag
     settingOptions: { models: [], efforts: ["off", "minimal", "low", "medium", "high", "xhigh", "max"] },
     // pi names models as provider/model, e.g. anthropic/claude-opus-5-5.
     acceptsModel: (m) => /^\w[\w.:/-]*$/.test(m),
-    run({ prompt, cwd, onActivity, signal, model, effort }) {
+    run({ prompt, cwd, onActivity, onSession, resume, signal, model, effort }) {
       const argv = [
-        "-p", "--mode", "json", "--no-session",
+        "-p", "--mode", "json",
+        ...(resume ? ["--session", sessionId(resume)] : []),
         ...(model ? ["--model", model] : []),
         ...(effort ? ["--thinking", effort] : []),
         ...args, prompt,
       ];
       return runJsonLines(bin, argv, { cwd, env, signal }, (ev, acc) => {
+        if (ev.type === "session" && typeof ev.id === "string") onSession?.(ev.id);
         if (ev.type === "tool_execution_start") onActivity(describeTool(ev.toolName, ev.args));
         if (ev.type === "message_end" && ev.message?.role === "assistant") {
           if (ev.message.stopReason === "error") acc.error = ev.message.errorMessage || "the model call failed";
@@ -121,6 +130,12 @@ function piAgent({ env, bin = env.OGIDOC_PI || "pi", args = [] }: AgentOpts): Ag
       });
     },
   };
+}
+
+// A session id goes into the CLI's arguments, so only an id's characters get through.
+function sessionId(id: string): string {
+  if (!/^[\w-]+$/.test(id)) throw new Error(`"${id}" is not a session id.`);
+  return id;
 }
 
 function textOf(message: any): string {

@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AnimationOp } from "../src/types.ts";
 import { makeAgent } from "../src/agents.ts";
-import { PLAN, emptyDir, fakeAgent, open, replying, repo, testClock, texts } from "./support/index.ts";
+import { PLAN, emptyDir, fakeAgent, jsonReply, open, replying, repo, testClock, texts } from "./support/index.ts";
 
 test("a full session: build with a choice, comment, move into boxes, disagree in a box, done, undo", async () => {
   const { dir, log } = repo();
@@ -210,6 +210,26 @@ test("a reply that only relabels lines goes back to the agent, and the person ne
   assert.equal(view().last!.summary, "built it");
   assert.equal(view().lines[0].status, "built");
   assert.equal(view().turn, 2);
+});
+
+test("a retry carries on the agent's own conversation with just the reason, when its CLI can", async () => {
+  const { dir } = repo();
+  const asked: { prompt: string; resume?: string }[] = [];
+  const replies = [
+    { plan: [{ text: "hello", status: "stale" }], summary: "not yet" },
+    { plan: [{ text: "hello", status: "built" }], summary: "built" },
+  ];
+  const agent = fakeAgent("resumable", async ({ prompt, resume, onSession }) => {
+    asked.push({ prompt, resume });
+    onSession?.("conv-1");
+    return jsonReply(replies[asked.length - 1]);
+  });
+  const { session: s, view } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "hello" });
+  assert.equal(asked[0].resume, undefined);
+  assert.equal(asked[1].resume, "conv-1");
+  assert.match(asked[1].prompt, /^# Your turn isn't over/, "only the reason, not the whole prompt again");
+  assert.equal(view().last!.summary, "built");
 });
 
 test("a turn that only changes code, with lines still to build, goes back to the agent", async () => {
