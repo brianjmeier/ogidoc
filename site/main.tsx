@@ -32,8 +32,8 @@ function Page() {
     <main class="site">
       <header class="hero">
         <h1 class="brand wordmark"><span class="word">ogidoc</span></h1>
-        <p class="lede">Write code that wouldn't compile. Get a program that&nbsp;does.</p>
-        <p class="sub">You and an agent take turns on one pseudocode file. You make the structure and architecture decisions; the agent turns each line into real code, test first, and marks it built.</p>
+        <p class="lede"><span>Write code that wouldn't&nbsp;compile.</span><span> Get a&nbsp;program that&nbsp;does.</span></p>
+        <p class="sub">You and an agent take turns on one pseudocode file. You make the structure and architecture decisions; the agent turns each line into real code, test first, and marks it&nbsp;built.</p>
         <div class="get">
           <Install />
           <a class="repo" href={REPO}>Source on GitHub</a>
@@ -42,29 +42,29 @@ function Page() {
       </header>
       <section class="beat">
         <div class="copy-col">
-          <h2>The agent codes in seconds. You spend minutes describing what you&nbsp;want.</h2>
-          <p>Write a line of pseudocode and hand over. The agent writes a failing test, makes it pass, and the line is built.</p>
+          <h2><span>The agent codes in&nbsp;seconds.</span><span> You spend minutes describing what you&nbsp;want.</span></h2>
+          <p>Write a line of pseudocode and hand over. The agent writes a failing test, makes it pass, and the line is&nbsp;built.</p>
         </div>
         <Scene label="A pseudocode line gets built" start={promptWithCode.start} frames={frames(promptWithCode.start, promptWithCode.beats)} />
       </section>
       <section class="beat">
         <div class="copy-col">
-          <h2>When code gets complicated, abstractions get created for you.</h2>
-          <p>Once a piece settles, it folds into a named box and leaves one line behind, so the plan stays short enough to think in.</p>
+          <h2>When code gets complicated, abstractions get created for&nbsp;you.</h2>
+          <p>Once a piece settles, it folds into a named box and leaves one line behind, so the plan stays short enough to think&nbsp;in.</p>
         </div>
         <Scene label="Settled lines fold into a named box" start={abstractions.start} frames={frames(abstractions.start, abstractions.beats)} />
       </section>
       <section class="beat">
         <div class="copy-col">
-          <h2>When a decision matters, you choose. Every option is already in the&nbsp;plan.</h2>
-          <p>The other way sits on the same lines. Switch to it and hand over, and the agent builds that one instead.</p>
+          <h2><span>When&nbsp;a&nbsp;decision&nbsp;matters, you&nbsp;choose.</span><span> Every option is already in the&nbsp;plan.</span></h2>
+          <p>The other way sits on the same lines. Switch to it and hand over, and the agent builds that one&nbsp;instead.</p>
         </div>
         <Scene label="The agent offers another way and builds the one you pick" start={choices.start} frames={frames(choices.start, choices.beats)} />
       </section>
       <section class="beat">
         <div class="copy-col">
-          <h2>Write pseudocode the way you think. The agent writes in your style.</h2>
-          <p>Python, C, Lisp, or plain words. There is no syntax to learn; the agent's lines read like yours.</p>
+          <h2><span>Write pseudocode the way you&nbsp;think.</span><span> The agent writes in your&nbsp;style.</span></h2>
+          <p>Python, C, Lisp, or plain words. There is no syntax to learn; the agent's lines read like&nbsp;yours.</p>
         </div>
         <div class="styles">
           <Scene label="Python-like pseudocode, and the agent's line in the same style" under={false} start={styles.python.start} frames={frames(styles.python.start, styles.python.beats)} />
@@ -73,7 +73,7 @@ function Page() {
         </div>
       </section>
       <footer class="end">
-        <p class="note">Code exists because prose isn't precise enough. Write the parts that matter, wave at the rest, and the agent makes it&nbsp;run.</p>
+        <p class="note"><span>Code exists because prose isn't precise&nbsp;enough.</span><span> Write the parts that matter, wave&nbsp;at&nbsp;the&nbsp;rest, and the agent makes it&nbsp;run.</span></p>
         <Install />
         <p class="links"><span class="brand">ogidoc</span><a href={REPO}>GitHub</a><a href={`${REPO}#readme`}>Read the docs</a><span>MIT licensed</span></p>
       </footer>
