@@ -82,6 +82,18 @@ export function isDone(plan: Plan, last: LastTurn | null): boolean {
   return (last.checks || []).every((c) => c.ok);
 }
 
+// The person hands over: whatever the agent wrote and they left as it is, they agreed
+// to, so it is theirs now. Proposals and open choices are still the agent's offer.
+export function agree(plan: Plan): Plan {
+  const offered = new Set(plan.choices.flatMap((c) => c.options[c.current].map((_, i) => c.line + i)));
+  const own = (l: Line): Line => (l.by === "a" ? { ...l, by: "h" } : l);
+  return {
+    ...plan,
+    lines: plan.lines.map((l, i) => (l.kind === "proposal" || offered.has(i) ? l : own(l))),
+    boxes: plan.boxes.map((b) => (b.lines.some((l) => l.by === "a") ? { ...b, lines: b.lines.map(own) } : b)),
+  };
+}
+
 // Why a reply doesn't end the agent's turn, or null when it does. A turn moves the plan
 // on: it changes code or the plan's text, offers or settles a choice, shapes a box,
 // answers the person, stops on something only the person has, or finds everything

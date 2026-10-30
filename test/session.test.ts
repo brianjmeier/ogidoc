@@ -234,6 +234,27 @@ test("a turn that stops on something only the person has, or finds it all built,
   assert.equal(view().last!.error, undefined);
 });
 
+test("handing over agrees to the agent's lines the person left alone, but not to what it still offers", async () => {
+  const { dir } = repo();
+  const replies = [
+    { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }], choices: [{ line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "one" },
+    { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }, { text: "  loudly", status: "built" }], choices: [{ id: "c1", line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "two" },
+  ];
+  let n = 0;
+  const agent = fakeAgent("fake", async ({ cwd }) => {
+    writeFileSync(join(cwd, `t${n}.js`), "x\n");
+    return "```json\n" + JSON.stringify(replies[Math.min(n++, 1)]) + "\n```";
+  });
+  const { session: s, view } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "say hi" });
+  assert.deepEqual(view().lines.map((l) => l.by), ["h", "a", "a"]);
+  await s.pass();
+  assert.deepEqual(view().lines.map((l) => l.by), ["h", "a", "a", "a"], "the open choice and the proposal stay the agent's; the new line is the agent's until the next hand-over");
+  await s.pass();
+  assert.equal(view().lines[3].by, "h", "left alone across a hand-over, so agreed");
+  assert.equal(view().last!.error, undefined);
+});
+
 test("without a repository the session works and keeps undo", async () => {
   const dir = emptyDir();
   const { session: s, view } = open(dir);

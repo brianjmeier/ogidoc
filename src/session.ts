@@ -168,6 +168,7 @@ export class Session extends EventEmitter {
   async pass({ text, boxes, accepted }: EditInput = {}) {
     this.guard("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
+    this.setPlan(plan.agree(this.plan));
     const s = this.s;
     const prompt = buildPrompt({
       skill: readAgentFile("SKILL.md"),

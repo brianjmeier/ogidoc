@@ -1,6 +1,6 @@
 import { diffLines, splitLines } from "../src/shared/diff.ts";
 import { choose } from "../src/choices.ts";
-import { edit, fromReply, type Plan } from "../src/plan.ts";
+import { agree, edit, fromReply, type Plan } from "../src/plan.ts";
 import type { AnimationOp, BoxChanges, LastTurn, Line, Reply } from "../src/types.ts";
 
 // The site's scenes are written as turns, and played through the same plan code the
@@ -34,7 +34,7 @@ export function frames(start: Plan, beats: Beat[]): Frame[] {
       plan = { ...plan, ...choose(plan.lines, plan.choices, plan.choices[0].id, beat.pick) };
       out.push({ kind: "type", plan, picked: true });
     } else {
-      const r = fromReply(plan, { ...NO_REPLY, ...beat.agent }, turn++);
+      const r = fromReply(agree(plan), { ...NO_REPLY, ...beat.agent }, turn++);
       plan = r.plan;
       out.push({ kind: "turn", plan, animation: r.animation, boxChanges: r.boxChanges, last: beat.last });
     }
