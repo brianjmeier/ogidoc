@@ -42,7 +42,7 @@ function Page() {
       </header>
       <section class="beat">
         <div class="copy-col">
-          <h2>Coding is slow but fun. You can prompt with code.</h2>
+          <h2>The agent codes in seconds. You spend minutes describing what you&nbsp;want.</h2>
           <p>Write a line of pseudocode and hand over. The agent writes a failing test, makes it pass, and the line is built.</p>
         </div>
         <Scene label="A pseudocode line gets built" start={promptWithCode.start} frames={frames(promptWithCode.start, promptWithCode.beats)} />
@@ -56,7 +56,7 @@ function Page() {
       </section>
       <section class="beat">
         <div class="copy-col">
-          <h2>When the agent has a question, it builds its best guess and shows you the other ways.</h2>
+          <h2>When a decision matters, you choose. Every option is already in the&nbsp;plan.</h2>
           <p>The other way sits on the same lines. Switch to it and hand over, and the agent builds that one instead.</p>
         </div>
         <Scene label="The agent offers another way and builds the one you pick" start={choices.start} frames={frames(choices.start, choices.beats)} />
@@ -73,7 +73,7 @@ function Page() {
         </div>
       </section>
       <footer class="end">
-        <p class="note">Code is more precise than prose for software. That's the whole reason it exists. So keep writing code, leave out the parts that bore you, and let the agent make it&nbsp;run.</p>
+        <p class="note">Code exists because prose isn't precise enough. Write the parts that matter, wave at the rest, and the agent makes it&nbsp;run.</p>
         <Install />
         <p class="links"><span class="brand">ogidoc</span><a href={REPO}>GitHub</a><a href={`${REPO}#readme`}>Read the docs</a><span>MIT licensed</span></p>
       </footer>
