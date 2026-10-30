@@ -36,13 +36,13 @@ try {
     const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);
     await count(`${scene(1)} .ln`, 4);
     assert.deepEqual(await marks(1), ["built", "built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
-    assert.equal(await page.$(`${scene(1)} .scene-main .under`), null, `${colorScheme}: no code before the turn`);
+    assert.equal(await page.$(`${scene(1)} .under-slot > .under`), null, `${colorScheme}: no code before the turn`);
     const before = await height(1);
     await count(`${scene(1)} .m-built`, 4);
-    await page.waitForSelector(`${scene(1)} .scene-main .under`, { timeout: 20000 });
-    assert.match((await page.textContent(`${scene(1)} .scene-main .under`)) ?? "", /src\/game\.ts/, `${colorScheme}: code lands underneath`);
+    await page.waitForSelector(`${scene(1)} .under-slot > .under`, { timeout: 20000 });
+    assert.match((await page.textContent(`${scene(1)} .under-slot > .under`)) ?? "", /src\/game\.ts/, `${colorScheme}: code lands underneath`);
     assert.ok(Math.abs((await height(1)) - before) <= 1, `${colorScheme}: the scene keeps its size when Underneath appears, ${before} -> ${await height(1)}`);
-    await page.waitForFunction((s) => !document.querySelector(s), `${scene(1)} .scene-main .under`, { timeout: 20000 });
+    await page.waitForFunction((s) => !document.querySelector(s), `${scene(1)} .under-slot > .under`, { timeout: 20000 });
     assert.ok(Math.abs((await height(1)) - before) <= 1, `${colorScheme}: the scene keeps its size when the loop starts over`);
     console.log(`· ${colorScheme}: a line types itself, gets built, code lands underneath, and the scene never resizes`);
 

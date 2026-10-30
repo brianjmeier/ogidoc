@@ -5,7 +5,6 @@
 @font-face { font-family: "Ogidoc Wordmark"; src: url("./fonts/jetbrains-mono-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
 
 :root {
-  --font-display: var(--font-brand);
   --font-mark: "Ogidoc Wordmark", var(--font-mono);
   --side: clamp(16px, 4vw, 48px);
 }
@@ -42,7 +41,7 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 @media (prefers-reduced-motion: reduce) {
   .wordmark .word, .wordmark::after { animation: none; }
 }
-.lede { margin: 0; font: 500 clamp(27px, 3.4vw, 42px)/1.16 var(--font-display); letter-spacing: -0.01em; max-width: 24em; text-wrap: balance; }
+.lede { margin: 0; font: 500 clamp(27px, 3.4vw, 42px)/1.16 var(--font-brand); letter-spacing: -0.01em; max-width: 24em; text-wrap: balance; }
 .sub { margin: 0; font-size: clamp(16.5px, 1.4vw, 18.5px); line-height: 1.6; color: var(--muted); max-width: 34em; text-wrap: pretty; }
 .get { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 10px; }
 .repo { font: 500 15px/1 var(--font-ui); }
@@ -57,7 +56,7 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 
 /* ---------- the four beats ---------- */
 .beat { display: grid; gap: 22px; padding: clamp(40px, 9vh, 96px) 0; border-top: 1px solid var(--line); }
-.copy-col h2 { margin: 0 0 12px; font: 600 clamp(24px, 2.3vw, 31px)/1.2 var(--font-display); letter-spacing: -0.005em; text-wrap: balance; }
+.copy-col h2 { margin: 0 0 12px; font: 600 clamp(24px, 2.3vw, 31px)/1.2 var(--font-brand); letter-spacing: -0.005em; text-wrap: balance; }
 .copy-col p { margin: 0; font-size: 16.5px; line-height: 1.6; color: var(--muted); max-width: 30em; text-wrap: pretty; }
 .styles { display: grid; gap: 18px; }
 @media (min-width: 1080px) {
@@ -75,7 +74,11 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 /* The plan takes the room Underneath will need until it arrives, so the card never resizes. */
 .scene-main { display: flex; flex-direction: column; }
 .scene-body { flex: 1; }
-.under-measure { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; pointer-events: none; }
+/* Every Underneath the scene will show, stacked in one cell so it is as tall as the
+   tallest; only the one on show is visible. */
+.under-slot { display: grid; }
+.under-slot > * { grid-area: 1 / 1; }
+.under-slot > [aria-hidden] { visibility: hidden; }
 .scene-body.split { display: grid; grid-template-columns: minmax(0, 1fr) 286px; }
 .scene-body.split .box-pane { border-left: 1px solid var(--line); background: var(--surface-2); }
 .scene .rows { padding-bottom: 14px; }
@@ -85,7 +88,6 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 .scene .code:not(.has-ways) .ln, .scene .code:not(.has-ways) > textarea { padding-right: 2.5em; }
 .scene .under summary { pointer-events: none; }
 .scene .under { max-height: none; }
-.slide-in { animation: rowIn 420ms ease-out both; }
 
 @media (max-width: 640px) {
   .scene-body.split { grid-template-columns: minmax(0, 1fr); }
@@ -103,6 +105,6 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 
 /* ---------- end ---------- */
 .end { display: grid; gap: 26px; justify-items: start; padding: clamp(56px, 10vh, 112px) 0 72px; border-top: 1px solid var(--line); }
-.note { margin: 0; font: 500 clamp(21px, 2.2vw, 27px)/1.4 var(--font-display); max-width: 30em; text-wrap: pretty; }
+.note { margin: 0; font: 500 clamp(21px, 2.2vw, 27px)/1.4 var(--font-brand); max-width: 30em; text-wrap: pretty; }
 .links { margin: 12px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; font-size: 14px; color: var(--muted); }
 .links .brand { font-size: 18px; color: var(--ink); }
