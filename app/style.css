@@ -144,6 +144,9 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .code.has-ways .ln, .code.has-ways > textarea { padding-right: 15em; }
 .ways { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: auto; padding-left: 14px; font: 500 11.5px/1 var(--font-ui); color: var(--muted); }
 .ways-row { display: flex; align-items: flex-start; gap: 2px; }
+/* A key on a small pill, shown while the caret is on what the pill does. */
+.ways-row, .ways span { white-space: nowrap; }
+.ways .use kbd, .decide kbd { font: 9.5px/1 var(--font-mono); padding: 1px 3px; margin-left: 2px; border-radius: 3px; vertical-align: 1px; }
 .ways-keys { margin-top: 2px; font: 10.5px/1.4 var(--font-ui); white-space: nowrap; }
 .ways-keys kbd { font: 10.5px/1 var(--font-mono); padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
 .ways::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 6px; border: 2px solid var(--agent); border-left: 0; border-radius: 0 3px 3px 0; opacity: 0.55; }
