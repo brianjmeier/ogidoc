@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
-// Plays the website's three scenes in Chromium, in light and dark: a line gets built,
-// settled lines fold into a box, and a choice is offered, picked and built.
+// Plays the website's scenes in Chromium, in light and dark: a line gets built, settled
+// lines fold into a box, a choice is offered, picked and built, and the agent writes in
+// three pseudocode styles.
 //
 //   npm run build:site && node test/site-e2e.ts
 
@@ -30,24 +31,24 @@ try {
     assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("\"Patrick Hand\"")), `${colorScheme}: "Underpaint" is handwritten everywhere on the page, got ${brandFonts}`);
     assert.ok(await page.evaluate(() => document.fonts.load('400 17px "Patrick Hand"', "Underpaint").then((f) => f.length > 0)), `${colorScheme}: the handwriting ships with the site, not from the visitor's computer`);
 
-    await count(`${scene(1)} .ln`, 3);
-    assert.deepEqual(await marks(1), ["built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
+    await count(`${scene(1)} .ln`, 4);
+    assert.deepEqual(await marks(1), ["built", "built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
     assert.equal(await page.$(`${scene(1)} .under`), null, `${colorScheme}: no code before the turn`);
-    await count(`${scene(1)} .m-built`, 3);
-    assert.match((await page.textContent(`${scene(1)} .under`)) ?? "", /src\/reflect\.ts/, `${colorScheme}: code lands underneath`);
+    await count(`${scene(1)} .m-built`, 4);
+    assert.match((await page.textContent(`${scene(1)} .under`)) ?? "", /src\/game\.ts/, `${colorScheme}: code lands underneath`);
     console.log(`· ${colorScheme}: a line types itself, gets built, code lands underneath`);
 
     await page.locator(scene(2)).scrollIntoViewIfNeeded();
-    await count(`${scene(2)} .box[data-name="topFeeling"]`, 1);
-    await count(`${scene(2)} .row:not(.a-move) .ln`, 4);
-    assert.match((await page.textContent(`${scene(2)} .box`)) ?? "", /ties go to the most recent day/, `${colorScheme}: the settled lines are in the box`);
+    await count(`${scene(2)} .box[data-name="winner"]`, 1);
+    await count(`${scene(2)} .row:not(.a-move) .ln`, 6);
+    assert.match((await page.textContent(`${scene(2)} .box`)) ?? "", /three on a diagonal -> that mark/, `${colorScheme}: the settled lines are in the box`);
     console.log(`· ${colorScheme}: three settled lines fold into a box`);
 
     await page.locator(scene(3)).scrollIntoViewIfNeeded();
     await count(`${scene(3)} .ways`, 1);
     const beside = () => page.$eval(scene(3), (s) => {
       const w = s.querySelector(".ways")!.getBoundingClientRect();
-      const r = s.querySelectorAll(".rows .row")[4].getBoundingClientRect();
+      const r = s.querySelectorAll(".rows .row")[5].getBoundingClientRect();
       return { top: Math.round(w.top - r.top), right: Math.round(w.right) };
     });
     const at = await beside();
@@ -55,9 +56,17 @@ try {
     await page.waitForFunction((s) => document.querySelector(s)?.textContent === "2 of 2", `${scene(3)} .ways span`, { timeout: 20000 });
     assert.deepEqual(await beside(), at, `${colorScheme}: the switch stays put when the person picks the other way`);
     if (colorScheme === "light") await page.locator(scene(3)).screenshot({ path: "/tmp/site-scene3.png" });
-    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("one table in a local database"), `${scene(3)} .rows`, { timeout: 20000 });
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("loser goes first"), `${scene(3)} .rows`, { timeout: 20000 });
     await count(`${scene(3)} .ways`, 0);
     console.log(`· ${colorScheme}: the agent offers another way, the person picks it, the agent builds it`);
+
+    for (const [k, guard] of ["if board[row][col]: return", "if (taken(cell)) return;", "(ignore-when (taken? cell))"].entries()) {
+      const style = `section:nth-of-type(4) .scene:nth-child(${k + 1})`;
+      await page.locator(style).scrollIntoViewIfNeeded();
+      await page.waitForFunction(([s, g]) => document.querySelector(s as string)?.textContent?.includes(g as string), [`${style} .rows`, guard] as const, { timeout: 20000 });
+      assert.equal(await page.$$eval(`${style} .mk .m`, (els) => els.every((e) => e.classList.contains("m-built"))), true, `${colorScheme}: the agent's line in style ${k + 1} is built`);
+    }
+    console.log(`· ${colorScheme}: the agent writes in python-like, js-like and clojure-like pseudocode`);
     assert.deepEqual(errors, []);
     await page.close();
   }

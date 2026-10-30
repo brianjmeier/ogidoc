@@ -1,6 +1,6 @@
 import { render } from "solid-js/web";
 import { Scene } from "./Scene.tsx";
-import { abstractions, choices, frames, promptWithCode } from "./scenes.ts";
+import { abstractions, choices, frames, promptWithCode, styles } from "./scenes.ts";
 import "../app/style.css";
 import "./site.css";
 
@@ -23,6 +23,14 @@ function Page() {
       <section>
         <h2>When the agent has a question, it builds its best guess and shows you the other ways.</h2>
         <Scene label="The agent offers another way and builds the one you pick" start={choices.start} frames={frames(choices.start, choices.beats)} />
+      </section>
+      <section>
+        <h2>Write pseudocode the way you think. The agent writes in your style.</h2>
+        <div class="styles">
+          <Scene label="Python-like pseudocode, and the agent's line in the same style" start={styles.python.start} frames={frames(styles.python.start, styles.python.beats)} />
+          <Scene label="JavaScript-like pseudocode, and the agent's line in the same style" start={styles.js.start} frames={frames(styles.js.start, styles.js.beats)} />
+          <Scene label="Clojure-like pseudocode, and the agent's line in the same style" start={styles.clojure.start} frames={frames(styles.clojure.start, styles.clojure.beats)} />
+        </div>
       </section>
     </main>
   );

@@ -10,6 +10,7 @@ body, #root { display: block; }
 .hero h1 { margin: 0; font-size: 44px; }
 .hero p { margin: 0; font-size: 19px; line-height: 1.5; color: var(--muted); max-width: 36em; }
 .hero code { justify-self: start; font: 13.5px/1 var(--font-mono); padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+section .styles { display: grid; gap: 24px; }
 section h2 { font: 600 20px/1.35 var(--font-ui); margin: 0 0 18px; }
 
 .scene { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.06); }

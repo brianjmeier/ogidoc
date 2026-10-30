@@ -12,3 +12,11 @@ show with animations:
 
       "Underpaint" font: rounder felt-marker hand (Patrick Hand), upright and easy to read small, shipped with the site
 
+      let's use building a tic tac toe as an example for the landing.
+          one game across the scenes: click(cell) gets built, winner(board) folds into a box, restart() offers X-first or loser-first
+      make pseudocode mroe like code, less like prose.
+      for psedocode in different style in (python-like, js/c-like, clojure-like) {
+          show that agent adapts and follows style
+          person writes click(), agent adds "a taken cell does nothing" in the same style; three scenes stacked
+      }
+
