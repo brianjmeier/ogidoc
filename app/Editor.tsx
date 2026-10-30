@@ -1,12 +1,12 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSelector, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "../src/shared/diff.ts";
 import { choose, follow } from "../src/choices.ts";
-import { nextStop, stops } from "../src/shared/stops.ts";
+import { anyStop, isOpenProposal, nextStop, stops, waitingOnYou } from "../src/shared/stops.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
-import { STATUS_LABEL, STATUS_MARK, brackets, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, STATUS_MARK, brackets, decorate, keys, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
-import { draftLine, openId, setOpenId, startThread, waitingOnYou } from "./threads.ts";
+import { draftLine, openId, setOpenId, startThread } from "./threads.ts";
 
 // The plan editor. A transparent textarea sits on top of a rendered copy of the same
 // text, so typing stays native while the copy carries color, marks, comment pins and
@@ -24,6 +24,8 @@ interface Row {
   to?: string;
 }
 
+const indentOf = (text: string) => text.match(/^\s*/)![0];
+
 // What the editor shows: the plan's lines and the choices offered on them.
 type Shown = { lines: Line[]; choices?: Choice[] };
 
@@ -34,10 +36,12 @@ export interface EditorApi {
   lines(): Line[];
   takeAccepted(): number[];
   focus(): void;
+  // Typing goes back to the plan when nothing else has the keyboard, as after a card or a button went away.
+  focusIfIdle(): void;
   // Nothing typed since the plan last came from the server, so the undo key undoes the agent's turn.
   fresh(): boolean;
-  // The lines that wait on the person, and moving the caret to the next one.
-  stops(): number[];
+  // Whether a line waits on the person, and moving the caret to the next one.
+  hasStops(): boolean;
   jump(by: 1 | -1): void;
 }
 
@@ -56,6 +60,9 @@ interface Props {
   onUndo?: () => void;
 }
 
+// The buttons on a row leave the keyboard where it was; they go away once used.
+const keepFocus = (e: MouseEvent) => e.preventDefault();
+
 export function Editor(props: Props) {
   let ta!: HTMLTextAreaElement;
   const [lines, setLines] = createSignal<Line[]>([]);
@@ -64,7 +71,9 @@ export function Editor(props: Props) {
   const symbols = () => state()?.symbols ?? [];
   const suggestions = () => state()?.suggestions ?? [];
   const built = () => !!state() && anyBuilt(state()!.lines, state()!.boxes);
-  const [caret, setCaret] = createSignal({ line: 0, col: 0, collapsed: true });
+  const [caret, setCaret] = createSignal({ line: 0, col: 0, collapsed: true }, { equals: (a, b) => a.line === b.line && a.col === b.col && a.collapsed === b.collapsed });
+  const caretLine = createMemo(() => caret().line);
+  const onCaretLine = createSelector<number, number | null>(caretLine);
   const [ghostOff, setGhostOff] = createSignal(false);
   const [anim, setAnim] = createSignal<Row[] | null>(null);
   const accepted = new Set<number>();
@@ -93,8 +102,8 @@ export function Editor(props: Props) {
   const written = createMemo(() => new Set(lines().map((l) => l.text.trim())));
 
   // Whether a line's or a choice's keys work right now.
-  const keysOn = (n: number | null) => props.editable && active() && n === caret().line;
-  const inChoice = (c: Choice) => props.editable && active() && choiceAt().get(caret().line) === c;
+  const keysOn = (n: number | null) => props.editable && active() && onCaretLine(n);
+  const inChoice = (c: Choice) => props.editable && active() && isCaretChoice(c);
   const rows = (): Row[] => anim() ?? lines().map((line, n) => ({ line, n }));
   // Which choice each line belongs to.
   const choiceAt = createMemo(() => {
@@ -102,6 +111,8 @@ export function Editor(props: Props) {
     for (const c of choices()) for (let i = 0; i < c.options[c.current].length; i++) at.set(c.line + i, c);
     return at;
   });
+  const caretChoice = createMemo(() => choiceAt().get(caretLine()));
+  const isCaretChoice = createSelector<Choice | undefined, Choice>(caretChoice);
   // Where each choice's lines sit, so its control stays beside them on the right, still
   // while the text changes. Measured after the rows render, and again when they rewrap.
   let rowsEl!: HTMLDivElement;
@@ -124,7 +135,7 @@ export function Editor(props: Props) {
   });
   // When a comment card closes, typing goes back to the plan, where the caret was.
   createEffect(on(openId, (id, prev) => {
-    if (prev && !id) setTimeout(() => { if (document.activeElement === document.body && props.editable) ta.focus({ preventScroll: true }); });
+    if (prev && !id) setTimeout(focusIfIdle);
   }, { defer: true }));
   const openOn = createMemo(() => {
     const by = new Map<number, Thread[]>();
@@ -152,9 +163,19 @@ export function Editor(props: Props) {
     setLines(next);
     setChoices((cs) => follow(cs, ops, next));
     setGhostOff(false);
-    setFresh(false);
     readCaret();
-    props.onEdit();
+    edited();
+  }
+
+  // The person changed the plan, so the undo key goes back to undoing their typing.
+  function edited(tell: () => void = props.onEdit) {
+    setFresh(false);
+    tell();
+  }
+
+  function focusIfIdle() {
+    const at = document.activeElement;
+    if (props.editable && (!at || at === document.body)) ta.focus({ preventScroll: true });
   }
 
   function insert(s: string) {
@@ -163,7 +184,7 @@ export function Editor(props: Props) {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (isPassKey(e)) {
+    if (keys.pass.is(e)) {
       e.preventDefault();
       props.onPass();
       return;
@@ -218,9 +239,8 @@ export function Editor(props: Props) {
       else setTabLeaves(true);
     } else if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
       // Keep the indentation of the line above.
-      const indent = (lines()[caret().line]?.text.match(/^\s*/) || [""])[0];
       e.preventDefault();
-      insert("\n" + indent);
+      insert("\n" + indentOf(lines()[caret().line]?.text ?? ""));
     }
   }
 
@@ -233,15 +253,16 @@ export function Editor(props: Props) {
     ta.setSelectionRange(at, at);
     readCaret();
   }
+  const placeAtIndent = (n: number) => place(n, indentOf(lines()[n].text).length);
 
   // The caret goes to the next line that waits on the person; a comment the agent
   // answered there opens.
-  const waiting = createMemo(() => stops(lines(), choices(), props.threads));
+  const hasStops = createMemo(() => anyStop(lines(), choices(), props.threads));
   function jump(by: 1 | -1) {
-    const n = nextStop(waiting(), caret().line, by);
+    const n = nextStop(stops(lines(), choices(), props.threads), caret().line, by);
     if (n === null) return;
     ta.focus({ preventScroll: true });
-    place(n, lines()[n].text.match(/^\s*/)![0].length);
+    placeAtIndent(n);
     (rowsEl.children[n] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
     const t = props.threads.find((t) => t.line === n && waitingOnYou(t));
     if (t) setOpenId(t.id);
@@ -249,14 +270,12 @@ export function Editor(props: Props) {
 
   // ---------- proposals ----------
 
-  const proposalAt = (n: number) => lines()[n]?.kind === "proposal" && !!lines()[n].text.trim();
+  const proposalAt = (n: number) => !!lines()[n] && isOpenProposal(lines()[n]);
 
   function accept(n: number) {
     setLines((ls) => ls.map((l, i) => (i === n ? acceptProposal(l, built()) : l)));
     accepted.add(n);
-    setFresh(false);
-    props.onEdit();
-    ta.focus({ preventScroll: true });
+    edited();
   }
 
   // The caret goes to the start of the line that takes the rejected one's place, or to
@@ -266,8 +285,7 @@ export function Editor(props: Props) {
     texts.splice(n, 1);
     ta.value = texts.join("\n");
     onInput();
-    ta.focus({ preventScroll: true });
-    if (n < texts.length) place(n, texts[n].match(/^\s*/)![0].length);
+    if (n < texts.length) placeAtIndent(n);
     else place(n, Infinity);
   }
 
@@ -284,15 +302,12 @@ export function Editor(props: Props) {
     ta.value = joinLines(next.lines);
     ta.setSelectionRange(selectionStart, selectionEnd);
     readCaret();
-    setFresh(false);
-    props.onChoose(c.id, option, before);
+    edited(() => props.onChoose(c.id, option, before));
   }
 
   function settle(c: Choice) {
     setChoices((cs) => cs.filter((x) => x.id !== c.id));
-    setFresh(false);
-    props.onSettle(c.id, ta.value);
-    ta.focus({ preventScroll: true });
+    edited(() => props.onSettle(c.id, ta.value));
   }
 
   // ---------- the agent's turn, animated ----------
@@ -321,10 +336,12 @@ export function Editor(props: Props) {
     return new Promise((resolve) => setTimeout(() => { setAnim(null); resolve(); }, k * step + 1150));
   }
 
-  // Text that comes from the server starts a fresh textarea: the browser's own undo
-  // would otherwise take the person back into the agent's turn and send that as an edit.
+  // Text that comes from the server starts a fresh textarea once the person has typed:
+  // the browser's own undo would otherwise take them back into the agent's turn and send
+  // that as an edit.
   const [copy, setCopy] = createSignal(1);
   function adopt(next: Shown) {
+    const typed = !fresh();
     setLines(next.lines);
     setChoices(next.choices ?? []);
     accepted.clear();
@@ -333,7 +350,7 @@ export function Editor(props: Props) {
     if (ta.value === text) return;
     const focused = document.activeElement === ta;
     const { line, col } = caret();
-    setCopy((k) => k + 1);
+    if (typed) setCopy((k) => k + 1);
     ta.value = text;
     place(line, col);
     if (focused) ta.focus({ preventScroll: true });
@@ -344,8 +361,8 @@ export function Editor(props: Props) {
   const describeId = createUniqueId();
   const described = createMemo(() => {
     if (!props.editable || !active() || anim()) return "";
-    const n = caret().line;
-    const c = choiceAt().get(n);
+    const n = caretLine();
+    const c = caretChoice();
     if (ghost()) return `Suggestion: ${ghost()}. Tab accepts.`;
     if (tabLeaves()) return "Tab leaves the plan.";
     if (c) return `A choice, way ${c.current + 1} of ${c.options.length}. ${keys.alt}${brackets().prev} and ${keys.alt}${brackets().next} switch, ${keys.keep.label} uses this way.`;
@@ -360,8 +377,9 @@ export function Editor(props: Props) {
     lines,
     takeAccepted: () => { const a = [...accepted]; accepted.clear(); return a; },
     focus: () => ta.focus({ preventScroll: true }),
+    focusIfIdle,
     fresh,
-    stops: waiting,
+    hasStops,
     jump,
   });
 
@@ -373,11 +391,11 @@ export function Editor(props: Props) {
             {(r) => {
               const l = () => r().line;
               const n = () => r().n;
-              const indent = () => l().text.match(/^\s*/)![0];
+              const indent = () => indentOf(l().text);
               const body = () => l().text.slice(indent().length);
               const st = () => (l().text.trim() ? l().status : null);
               const chip = () => (l().kind === "example" ? "becomes a test" : "");
-              const deciding = () => l().kind === "proposal" && props.editable && !anim() && n() !== null;
+              const deciding = () => isOpenProposal(l()) && props.editable && !anim() && n() !== null;
               return (
                 <div
                   class={`row ${l().by || "h"} ${r().cls ?? ""}`}
@@ -399,7 +417,7 @@ export function Editor(props: Props) {
                     {indent()}
                     <span class="tx" innerHTML={decorate(body(), symRe())} />
                     <span class="aside">
-                      <Show when={!anim() && n() === caret().line && ghost()}>
+                      <Show when={!anim() && onCaretLine(n()) && ghost()}>
                         <span class="ghost">{ghost()}</span>
                         <span class="tabkey">Tab</span>
                       </Show>
@@ -407,12 +425,12 @@ export function Editor(props: Props) {
                         <span class="tabkey">Tab leaves the plan</span>
                       </Show>
                       <Show when={body() && chip()}><span class="chip">{chip()}</span></Show>
-                      <Show when={body() && deciding()}>
+                      <Show when={deciding()}>
                         <span class="decide">
-                          <button type="button" tabIndex={-1} title="Keep it as a plain line of the plan" onClick={() => accept(n()!)}>
+                          <button type="button" tabIndex={-1} title="Keep it as a plain line of the plan" onMouseDown={keepFocus} onClick={() => accept(n()!)}>
                             Accept<Show when={keysOn(n())}> <kbd>{keys.keep.label}</kbd></Show>
                           </button>
-                          <button type="button" tabIndex={-1} title="Delete it" onClick={() => reject(n()!)}>
+                          <button type="button" tabIndex={-1} title="Delete it" onMouseDown={keepFocus} onClick={() => reject(n()!)}>
                             Reject<Show when={keysOn(n())}> <kbd>{keys.reject.label}</kbd></Show>
                           </button>
                         </span>
@@ -439,10 +457,10 @@ export function Editor(props: Props) {
             {(w) => (
               <div class="ways" style={{ top: `${w().top}px`, height: `${w().height}px` }}>
                 <div class="ways-row">
-                  <button type="button" tabIndex={-1} aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, -1)}>‹</button>
+                  <button type="button" tabIndex={-1} aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, -1)}>‹</button>
                   <span>{w().choice.current + 1} of {w().choice.options.length}</span>
-                  <button type="button" tabIndex={-1} aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, 1)}>›</button>
-                  <button type="button" tabIndex={-1} class="use" title="Keep this way and drop the others" disabled={!props.editable} onClick={() => settle(w().choice)}>
+                  <button type="button" tabIndex={-1} aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, 1)}>›</button>
+                  <button type="button" tabIndex={-1} class="use" title="Keep this way and drop the others" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => settle(w().choice)}>
                     Use this<Show when={inChoice(w().choice)}> <kbd>{keys.keep.label}</kbd></Show>
                   </button>
                 </div>

@@ -4,13 +4,16 @@ import type { Snapshot } from "../src/types.ts";
 import { listen, notice, post, state, type TurnChanges } from "./api.ts";
 import { Boxes, type BoxAnimation, type BoxesApi } from "./Boxes.tsx";
 import { Editor, type EditorApi } from "./Editor.tsx";
-import { TopBar, confirmed } from "./TopBar.tsx";
+import { confirmed } from "./confirm.ts";
+import { TopBar } from "./TopBar.tsx";
 import { Underneath } from "./Underneath.tsx";
-import { sendAll, setOpenId, waitingOnYou } from "./threads.ts";
-import { isPassKey } from "./text.ts";
+import { sendAll, setOpenId } from "./threads.ts";
+import { keys } from "./text.ts";
+import { waitingOnYou } from "../src/shared/stops.ts";
 
 export function App() {
-  let editor!: EditorApi;
+  // The top bar renders before the editor exists.
+  const [editor, setEditor] = createSignal<EditorApi>();
   let boxes: BoxesApi | undefined;
   let editTimer: ReturnType<typeof setTimeout> | undefined;
   const [writing, setWriting] = createSignal(false);
@@ -21,14 +24,13 @@ export function App() {
   const [workStart, setWorkStart] = createSignal(0);
 
   const editable = () => !!state() && !state()!.working && !writing();
+  const live = () => editable() && !!editor();
   const undo = confirmed(() => post("/api/undo"));
-  // The top bar renders before the editor exists.
-  const [ready, setReady] = createSignal(false);
 
   function sendEdit() {
     clearTimeout(editTimer);
     editTimer = undefined;
-    return post("/api/edit", { text: editor.text(), accepted: editor.takeAccepted() });
+    return post("/api/edit", { text: editor()!.text(), accepted: editor()!.takeAccepted() });
   }
 
   // An edit still waiting to be sent goes first, as it was before the switch, so the
@@ -37,7 +39,7 @@ export function App() {
     if (editTimer) {
       clearTimeout(editTimer);
       editTimer = undefined;
-      await post("/api/edit", { text: before, accepted: editor.takeAccepted() });
+      await post("/api/edit", { text: before, accepted: editor()!.takeAccepted() });
     }
     await post(path, body);
   }
@@ -50,7 +52,7 @@ export function App() {
     setPassing(true);
     setTimeout(() => setPassing(false), 500);
     // Everything not sent yet goes with the hand-over in one request.
-    await post("/api/pass", { text: editor.text(), accepted: editor.takeAccepted(), boxes: boxes?.take() });
+    await post("/api/pass", { text: editor()!.text(), accepted: editor()!.takeAccepted(), boxes: boxes?.take() });
   }
 
   async function onEvent(next: Snapshot, prev: Pick<Snapshot, "turn" | "working"> | null, turn?: TurnChanges) {
@@ -59,19 +61,19 @@ export function App() {
     const agentFinished = !!prev && prev.working && !next.working;
     if (turn) {
       const { animation, boxChanges } = turn;
-      const oldLines = editor.lines();
+      const oldLines = editor()!.lines();
       const pulse: Record<string, number> = {};
       animation.filter((o) => o.op === "move").forEach((m, i) => { pulse[(m as { to: string }).to] ??= 500 + i * 40; });
       setBoxAnim({ delay: 250, pulse, changes: boxChanges });
       setWriting(true);
-      await editor.animate(animation, oldLines, next);
+      await editor()!.animate(animation, oldLines, next);
       setWriting(false);
       setBoxAnim(null);
-      editor.focus();
+      editor()!.focus();
     } else if (!prev || (!next.working && (turnChanged || agentFinished))) {
       // During the person's turn the browser owns the text; only adopt the server's copy
       // when the turn moved (an undo) or an agent turn ended without changes (an error).
-      editor.adopt(next);
+      editor()!.adopt(next);
     }
     // The agent's answer in a thread it left open shows by itself when the turn comes back.
     if (agentFinished && !next.last?.error) {
@@ -80,13 +82,13 @@ export function App() {
     }
     // Whatever just closed or went away (a card, a button, the agent's turn), typing goes
     // back to the plan.
-    if (!next.working && document.activeElement === document.body) editor.focus();
+    editor()!.focusIfIdle();
   }
 
   onCleanup(listen(onEvent));
 
   document.addEventListener("keydown", (e) => {
-    if (isPassKey(e) && !(e.target as HTMLElement).closest("textarea")) {
+    if (keys.pass.is(e) && !(e.target as HTMLElement).closest("textarea")) {
       e.preventDefault();
       pass();
     }
@@ -103,26 +105,25 @@ export function App() {
   const whoseTurn = () => {
     const s = state()!;
     if (writing()) return { cls: "a", label: "agent's turn · writing" };
-    if (s.working) return { cls: "a", label: `agent's turn · working ${Math.max(0, Math.round((now() - workStart()) / 1000))}s` };
-    if (s.done && !editor.lines().some((l) => l.chg && l.by === "h")) return { cls: "done", label: "done · every line built" };
+    if (s.working) return { cls: "a", label: "agent's turn · working", seconds: Math.max(0, Math.round((now() - workStart()) / 1000)) };
+    if (s.done && !editor()?.lines().some((l) => l.chg && l.by === "h")) return { cls: "done", label: "done · every line built" };
     const waiting = s.threads.filter(waitingOnYou).length;
     return { cls: "h", label: `your turn${waiting ? ` · ${waiting} comment${waiting > 1 ? "s" : ""} waiting on you` : ""}` };
   };
 
-  // Turn changes, said once to a screen reader; the seconds counting up are left out.
-  const heard = () => (state() ? whoseTurn().label.replace(/ · working \d+s$/, " · working") : "");
 
   return (
     <Show when={state()}>
       {(s) => (
         <Show when={!s().finished} fallback={<Finished state={s()} />}>
-          <div class="sr-only" role="status">{heard()}</div>
-          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={ready() && editable() && editor.fresh()} onNext={ready() && editable() && editor.stops().length ? () => editor.jump(1) : undefined} />
+          {/* Turn changes, said once to a screen reader; the seconds counting up are left out. */}
+          <div class="sr-only" role="status">{whoseTurn().label}</div>
+          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={live() && editor()!.fresh()} onNext={live() && editor()!.hasStops() ? () => editor()!.jump(1) : undefined} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">
                 <Editor
-                  ref={(api) => { editor = api; setReady(true); }}
+                  ref={setEditor}
                   editable={editable()}
                   working={s().working}
                   threads={s().threads}

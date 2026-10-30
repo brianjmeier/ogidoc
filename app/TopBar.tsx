@@ -1,14 +1,16 @@
-import { Show, createMemo, createSignal } from "solid-js";
+import { Show, createMemo } from "solid-js";
 import { Button } from "@kobalte/core/button";
 import { Select } from "@kobalte/core/select";
 import type { Snapshot } from "../src/types.ts";
 import { post } from "./api.ts";
-import { keys, passKey } from "./text.ts";
+import { confirmed, type Confirmed } from "./confirm.ts";
+import { keys } from "./text.ts";
 const DEFAULT = "default";
 
 interface Props {
   state: Snapshot;
-  turn: { cls: string; label: string };
+  // `seconds` counts up beside the label while the agent works.
+  turn: { cls: string; label: string; seconds?: number };
   passing: boolean;
   onPass: () => void;
   undo: Confirmed;
@@ -34,9 +36,9 @@ export function TopBar(props: Props) {
       </Show>
       <Show when={props.state.canUndo}>
         <Button class="btn ghost-btn" onClick={props.undo.click}>
-          <Show when={props.undoKey} fallback={props.undo.armed() ? "Undo it? Click again" : "Undo agent turn"}>
-            {props.undo.armed() ? "Undo it? " : "Undo agent turn "}<kbd>{keys.undo.label}</kbd>{props.undo.armed() ? " again" : ""}
-          </Show>
+          {props.undo.armed() ? "Undo it?" : "Undo agent turn"}
+          <Show when={props.undoKey}> <kbd>{keys.undo.label}</kbd></Show>
+          <Show when={props.undo.armed()}>{props.undoKey ? " again" : " Click again"}</Show>
         </Button>
       </Show>
       <Show when={props.turn.cls === "done"}>
@@ -49,34 +51,13 @@ export function TopBar(props: Props) {
       </Show>
       <span class={`turn ${props.turn.cls}`} classList={{ passing: props.passing }}>
         <i class="dot" />
-        <span>{props.turn.label}</span>
+        <span>{props.turn.label}{props.turn.seconds === undefined ? "" : ` ${props.turn.seconds}s`}</span>
       </span>
       <Button class="btn primary" disabled={props.state.working} onClick={props.onPass}>
-        Hand over <kbd>{passKey} ↵</kbd>
+        Hand over <kbd>{keys.pass.label}</kbd>
       </Button>
     </header>
   );
-}
-
-export type Confirmed = ReturnType<typeof confirmed>;
-
-// An action that is hard to take back runs on the second click within 3 seconds.
-export function confirmed(run: () => unknown) {
-  const [armed, setArmed] = createSignal(false);
-  let disarm: ReturnType<typeof setTimeout> | undefined;
-  return {
-    armed,
-    click() {
-      clearTimeout(disarm);
-      if (!armed()) {
-        setArmed(true);
-        disarm = setTimeout(() => setArmed(false), 3000);
-        return;
-      }
-      setArmed(false);
-      run();
-    },
-  };
 }
 
 const LABEL: Record<string, string> = { xhigh: "Extra high" };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextStop, stops } from "../src/shared/stops.ts";
+import { anyStop, nextStop, stops } from "../src/shared/stops.ts";
 import type { Line, Thread } from "../src/types.ts";
 
 const line = (text: string, more: Partial<Line> = {}): Line => ({ text, by: "a", ...more });
@@ -11,6 +11,8 @@ test("stops are the lines that wait on the person, in order", () => {
   const choices = [{ id: "c1", line: 4, current: 0, options: [[line("e")], [line("f")]] }];
   const threads = [thread(3, "a"), thread(0, "h"), thread(0, "a", true)];
   assert.deepEqual(stops(lines, choices, threads), [1, 2, 3, 4], "not a blank proposal, a thread waiting on the agent, or a resolved one");
+  assert.equal(anyStop(lines, choices, threads), true);
+  assert.equal(anyStop([line("a"), line("  ", { kind: "proposal" })], [], [thread(0, "h"), thread(5, "a")]), false, "nothing waits on a line the plan doesn't have");
 });
 
 test("nextStop goes either way and wraps around", () => {

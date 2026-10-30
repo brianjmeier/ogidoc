@@ -38,6 +38,8 @@ export function keymap(mac: boolean) {
     },
     // ⌘Z / Ctrl+Z before the person has typed anything since the agent's turn.
     undo: { label: mac ? "⌘Z" : "Ctrl+Z", is: (e: KeyLike) => mod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "z" },
+    // Hand over from anywhere. Either ⌘ or Ctrl works on every platform.
+    pass: { label: mac ? "⌘ ↵" : "Ctrl ↵", is: (e: KeyLike) => e.key === "Enter" && (e.metaKey || e.ctrlKey) },
   };
 }
 

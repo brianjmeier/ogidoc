@@ -4,7 +4,7 @@ import { TextField } from "@kobalte/core/text-field";
 import { Button } from "@kobalte/core/button";
 import type { Thread, Who } from "../src/types.ts";
 import { close, draft, openId, pending, resolve, send, setDraft, setOpenId } from "./threads.ts";
-import { passKey } from "./text.ts";
+import { keys } from "./text.ts";
 
 const NAME: Record<Who, string> = { a: "Agent", h: "You" };
 const INITIAL: Record<Who, string> = { a: "A", h: "Y" };
@@ -25,7 +25,7 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
     if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
     e.preventDefault();
     await send(key(), props.thread);
-    if (e.metaKey || e.ctrlKey) props.onPass();
+    if (keys.pass.is(e)) props.onPass();
   };
 
   return (
@@ -51,7 +51,7 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
               </Show>
               {/* Handing over sends what is typed here first. */}
               <Button class="btn ghost-btn" onClick={props.onPass}>
-                Hand over <kbd>{passKey} ↵</kbd>
+                Hand over <kbd>{keys.pass.label}</kbd>
               </Button>
               <Button class="btn primary" disabled={!draft(key()).trim()} onClick={() => send(key(), props.thread)}>
                 {props.thread ? "Reply" : "Comment"} <kbd>↵</kbd>

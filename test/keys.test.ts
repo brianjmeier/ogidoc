@@ -46,6 +46,17 @@ test("the jump key is ⌥⌘↑↓ on macOS and Alt+↑↓ elsewhere", () => {
   assert.equal(pc.jump.by(press("ArrowLeft", { altKey: true })), 0);
 });
 
+test("⌘↵ or Ctrl+↵ hands over on every platform", () => {
+  for (const k of [mac, pc]) {
+    assert.ok(k.pass.is(press("Enter", { metaKey: true })));
+    assert.ok(k.pass.is(press("Enter", { ctrlKey: true })));
+    assert.ok(!k.pass.is(press("Enter")));
+    assert.ok(!k.pass.is(press("Enter", { altKey: true })));
+  }
+  assert.equal(mac.pass.label, "⌘ ↵");
+  assert.equal(pc.pass.label, "Ctrl ↵");
+});
+
 test("the choice keys print as the person's own keyboard labels them", () => {
   assert.deepEqual(bracketLabels(), { prev: "[", next: "]" });
   assert.deepEqual(bracketLabels(new Map([["BracketLeft", "ü"], ["BracketRight", "+"]])), { prev: "Ü", next: "+" });

@@ -8,11 +8,7 @@ export const STATUS_LABEL: Record<Status, string> = { built: "built", stale: "ne
 // Shapes people already read: done, not yet, paused (the pause bars are drawn in CSS).
 export const STATUS_MARK: Record<Status, string> = { built: "✓", stale: "◌", blocked: "" };
 
-export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-export const passKey = isMac ? "⌘" : "Ctrl";
-// ⌘/Ctrl Enter hands over from anywhere.
-export const isPassKey = (e: KeyboardEvent) => e.key === "Enter" && (e.metaKey || e.ctrlKey);
-export const keys = keymap(isMac);
+export const keys = keymap(/Mac|iPhone|iPad/.test(navigator.platform));
 // Only Chromium reads the layout; elsewhere the choice keys print as [ and ].
 export const [brackets, setBrackets] = createSignal(bracketLabels());
 type LayoutMap = { get(code: string): string | undefined };

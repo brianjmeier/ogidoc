@@ -11,8 +11,6 @@ const [drafts, setDrafts] = createSignal<Record<string, string>>({});
 export const draft = (key: string) => drafts()[key] ?? "";
 export const setDraft = (key: string, text: string) => setDrafts((d) => ({ ...d, [key]: text }));
 
-export { waitingOnYou } from "../src/shared/stops.ts";
-
 export function startThread(line: number) {
   setDraftLine(line);
   setOpenId("new");

@@ -2,7 +2,7 @@ import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
-import { passKey } from "../app/text.ts";
+import { keys } from "../app/text.ts";
 import type { Box, LastTurn } from "../src/types.ts";
 import type { Plan } from "../src/plan.ts";
 import type { Frame } from "./scenes.ts";
@@ -101,7 +101,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
         <span class="spacer" />
         <span class={`turn ${whose()}`} classList={{ passing: passing() }}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
         <span class="btn primary" classList={{ pressed: passing() }} data-disabled={whose() === "a" ? "" : undefined} aria-hidden="true">
-          Hand over <kbd>{passKey} ↵</kbd>
+          Hand over <kbd>{keys.pass.label}</kbd>
         </span>
       </div>
       <div class="scene-main" style={{ "min-height": `${rows * 24 + 28 + reserve()}px` }}>

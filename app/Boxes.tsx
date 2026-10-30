@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { joinLines } from "../src/shared/diff.ts";
 import type { Box, BoxChanges, Snapshot } from "../src/types.ts";
-import { STATUS_LABEL, decorate, isPassKey, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, decorate, keys, symbolPattern } from "./text.ts";
 
 // The boxes canvas. Boxes are laid out in columns by what they use: a box sits to the
 // right of the boxes it uses, so the plan reads left to right like the code runs.
@@ -180,7 +180,7 @@ export function Boxes(props: Props) {
                   title={props.editable ? "Click or press Enter to edit" : ""}
                   onClick={() => props.editable && !editing() && setEditing(b.name)}
                   onKeyDown={(e) => {
-                    if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === " ") {
+                    if ((e.key === "Enter" && !keys.pass.is(e)) || e.key === " ") {
                       e.preventDefault();
                       if (props.editable && !editing()) setEditing(b.name);
                     }
@@ -201,7 +201,7 @@ export function Boxes(props: Props) {
                 value={untrack(() => joinLines(b.lines))}
                 onBlur={() => finish(b.name)}
                 onKeyDown={(e) => {
-                  if (isPassKey(e)) { e.preventDefault(); props.onPass(); }
+                  if (keys.pass.is(e)) { e.preventDefault(); props.onPass(); }
                   // Esc leaves the box like clicking away does, keeping what was typed, and
                   // the keyboard stays on the box.
                   if (e.key === "Escape") {
