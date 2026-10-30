@@ -21,6 +21,9 @@
   --lh: 24px;
   --gutter: 56px;
   --fs: 14px;
+  /* The room the text leaves on its right for a choice's switch, and the gap before it. */
+  --ways-w: 15em;
+  --ways-gap: 1em;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -99,7 +102,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .editor { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .scroller { flex: 1; min-height: 0; overflow: auto; }
 /* At most 80 columns of text, then the choice rail, so the rail stays beside the text. */
-.code { position: relative; min-height: 100%; max-width: calc(var(--gutter) + 10px + 80ch + 15em); font: var(--fs)/var(--lh) var(--font-mono); }
+.code { position: relative; min-height: 100%; max-width: calc(var(--gutter) + 10px + 80ch + var(--ways-w)); font: var(--fs)/var(--lh) var(--font-mono); }
 .rows { padding: 14px 0 40vh; color: var(--ink); }
 .code.working .rows { opacity: 0.72; transition: opacity 300ms; }
 .row { display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); }
@@ -140,8 +143,8 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .chip { font: 500 10.5px/1 var(--font-ui); padding: 3px 6px; border-radius: 4px; margin-left: 10px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; font-style: normal; font-weight: 500; }
 /* A choice: a bracket on the right spans its lines, with the switch at its top. It
    sits in a rail of its own, so it stays still while the text beside it changes. */
-.rail { position: absolute; top: 0; right: 0; width: 14em; pointer-events: none; }
-.code.has-ways .ln, .code.has-ways > textarea { padding-right: 15em; }
+.rail { position: absolute; top: 0; right: 0; width: calc(var(--ways-w) - var(--ways-gap)); pointer-events: none; }
+.code.has-ways .ln, .code.has-ways > textarea { padding-right: var(--ways-w); }
 .ways { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: auto; padding-left: 14px; font: 500 11.5px/1 var(--font-ui); color: var(--muted); }
 .ways-row { display: flex; align-items: flex-start; gap: 2px; }
 /* A key on a small pill, shown while the caret is on what the pill does. */
@@ -155,7 +158,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .ways button:disabled { cursor: default; opacity: 0.5; }
 .ways button:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
 .ways button.use { width: auto; padding: 0 9px; margin-left: 6px; font: 500 11.5px/1 var(--font-ui); border-color: var(--agent); }
-.ways span { padding: 0 5px; height: var(--lh); display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ways span { padding: 0 5px; height: var(--lh); display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
 /* Accept or reject the agent's proposal, at the end of its line, above the textarea. */
 .decide { position: relative; z-index: 2; display: inline-flex; gap: 4px; margin-left: 12px; vertical-align: top; height: var(--lh); align-items: center; }
 .decide button { all: unset; cursor: pointer; font: 500 11.5px/1 var(--font-ui); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
@@ -169,11 +172,9 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 
 /* Phone width: a narrower margin and a two-row choice switch leave room for the text. */
 @media (max-width: 520px) {
-  :root { --gutter: 46px; --fs: 13px; }
+  :root { --gutter: 46px; --fs: 13px; --ways-w: 9em; --ways-gap: 0.5em; }
   .g { grid-template-columns: 3px 24px 19px; font-size: 11px; }
   .g .no { padding-right: 6px; }
-  .code.has-ways .ln, .code.has-ways > textarea { padding-right: 9em; }
-  .rail { width: 8.5em; }
   .ways span { padding: 0 3px; }
   .ways-row { flex-wrap: wrap; row-gap: 4px; }
   .ways button.use { margin-left: 2px; }
@@ -198,7 +199,6 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .reply textarea { width: 100%; font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: none; outline: none; }
 .reply textarea:focus { border-color: var(--human); }
 .card-acts { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
-.card .keys { margin-top: -4px; font-size: 11.5px; color: var(--muted); }
 .card .btn { padding: 7px 11px; }
 @keyframes cardIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
 
