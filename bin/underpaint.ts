@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { makeAgent, defaultAgent } from "../src/agents.ts";
+import { AGENTS, makeAgent } from "../src/agents.ts";
 import { AGENT_DIR } from "../src/paths.ts";
 import { systemClock } from "../src/clock.ts";
 import { openSession } from "../src/session.ts";
@@ -58,8 +58,10 @@ if (positionals[0] === "install-skill") {
   process.exit(0);
 }
 
-const agentName = values.agent || defaultAgent();
-const agent = makeAgent(agentName, { args: values["agent-arg"] || [], script: values.script && resolve(values.script), sleep: systemClock.sleep });
+// The first agent CLI on the path, else claude so the error names it.
+const installed = (name: string) => spawnSync(process.platform === "win32" ? "where" : "which", [name]).status === 0;
+const agentName = values.agent || AGENTS.find(installed) || "claude";
+const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), sleep: systemClock.sleep });
 const session = openSession({ cwd: process.cwd(), planFile: positionals[0] || "underpaint.plan", agent, clock: systemClock, commit: !values["no-commit"] });
 session.save();
 const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });

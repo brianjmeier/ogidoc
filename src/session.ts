@@ -6,7 +6,8 @@ import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
 import { planStore, type Base, type HistoryEntry, type Loaded, type PlanStore } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
-import type { Agent, AnimationOp, Box, LastTurn, Line, Reply, Settings, Snapshot, Symbol, Thread } from "./types.ts";
+import type { Agent } from "./agents.ts";
+import type { AnimationOp, Box, LastTurn, Line, Reply, Settings, Snapshot, Symbol, Thread } from "./types.ts";
 
 interface EditInput {
   text?: string;

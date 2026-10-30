@@ -64,7 +64,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
       if (req.method === "POST" && url.pathname === "/api/pass") {
         const b = await body(req);
         if (session.working) return json(res, { error: "The agent already has the pen." }, 409);
-        session.pass(b);
+        session.pass(b).catch((e: Error) => console.error(`Underpaint: the turn could not finish: ${e.message}`));
         return json(res, { ok: true }, 202);
       }
       const action = req.method === "POST" ? actions[url.pathname] : undefined;

@@ -125,16 +125,3 @@ export interface Snapshot {
   done: boolean;
   canUndo: boolean;
 }
-
-export interface Agent {
-  name: string;
-  choices: Choices;
-  run(opts: {
-    prompt: string;
-    cwd: string;
-    model?: string;
-    effort?: string;
-    onActivity: (a: string) => void;
-    signal?: AbortSignal;
-  }): Promise<string>;
-}

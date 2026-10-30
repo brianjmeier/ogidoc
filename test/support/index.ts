@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeAgent } from "../../src/agents.ts";
 import { openSession } from "../../src/session.ts";
-import type { Agent } from "../../src/types.ts";
+import type { Agent } from "../../src/agents.ts";
 import type { Clock } from "../../src/clock.ts";
 
 export const SCRIPT = new URL("../fixtures/weekly.json", import.meta.url).pathname;
@@ -19,7 +19,7 @@ export function testClock(start = 0): Clock & { advance(ms: number): void } {
   return { now: () => t, sleep: async (ms) => { t += ms; }, advance: (ms) => { t += ms; } };
 }
 
-export const scripted = (clock: Clock = testClock()) => makeAgent("mock", { script: SCRIPT, sleep: clock.sleep });
+export const scripted = (clock: Clock = testClock()) => makeAgent("mock", { env: {}, script: SCRIPT, sleep: clock.sleep });
 
 export function emptyDir(): string {
   return mkdtempSync(join(tmpdir(), "underpaint-"));

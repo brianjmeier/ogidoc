@@ -31,9 +31,8 @@ out({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", 
 out({ type: "assistant", message: { content: [{ type: "text", text: "partial" }] } });
 out({ type: "result", subtype: "success", result: ${JSON.stringify(REPLY)} });
 `);
-  process.env.CLAUDECODE = "1";
   const activity: string[] = [];
-  const agent = makeAgent("claude", { bin, args: ["--model", "sonnet"] });
+  const agent = makeAgent("claude", { env: { CLAUDECODE: "1", PATH: process.env.PATH }, bin, args: ["--model", "sonnet"] });
   const out = await agent.run({ prompt: "PROMPT TEXT", cwd: dir, onActivity: (a) => activity.push(a) });
   assert.equal(parseReply(out).plan[0].text, "hello");
   assert.deepEqual(activity, ["editing src/a.js", "running npm test"]);
@@ -58,7 +57,7 @@ out({ type: "message_end", message: msg });
 out({ type: "agent_end", messages: [{ role: "user", content: "p" }, msg] });
 `);
   const activity: string[] = [];
-  const out = await makeAgent("pi", { bin }).run({ prompt: "PROMPT TEXT", cwd: dir, onActivity: (a) => activity.push(a) });
+  const out = await makeAgent("pi", { env: { PATH: process.env.PATH }, bin }).run({ prompt: "PROMPT TEXT", cwd: dir, onActivity: (a) => activity.push(a) });
   assert.equal(parseReply(out).summary, "ok");
   assert.deepEqual(activity, ["reading weekly.plan", "running node --test"]);
   const argv = JSON.parse(readFileSync(bin + ".args", "utf8"));
@@ -68,7 +67,7 @@ out({ type: "agent_end", messages: [{ role: "user", content: "p" }, msg] });
 
 test("an agent that exits without a reply is an error", async () => {
   const { bin, dir } = fake("pi", `process.stderr.write("No API key found"); process.exit(1);`);
-  await assert.rejects(makeAgent("pi", { bin }).run({ prompt: "p", cwd: dir, onActivity() {} }), /No API key found/);
+  await assert.rejects(makeAgent("pi", { env: { PATH: process.env.PATH }, bin }).run({ prompt: "p", cwd: dir, onActivity() {} }), /No API key found/);
 });
 
 test("a model error inside pi's event stream is reported as such", async () => {
@@ -78,5 +77,5 @@ const msg = { role: "assistant", content: [], stopReason: "error", errorMessage:
 out({ type: "message_end", message: msg });
 out({ type: "agent_end", messages: [msg] });
 `);
-  await assert.rejects(makeAgent("pi", { bin }).run({ prompt: "p", cwd: dir, onActivity() {} }), /security token included in the request is invalid/);
+  await assert.rejects(makeAgent("pi", { env: { PATH: process.env.PATH }, bin }).run({ prompt: "p", cwd: dir, onActivity() {} }), /security token included in the request is invalid/);
 });

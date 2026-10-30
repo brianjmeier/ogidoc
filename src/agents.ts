@@ -1,10 +1,28 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Agent } from "./types.ts";
+import type { Choices } from "./types.ts";
 import type { Clock } from "./clock.ts";
 
+export interface Agent {
+  name: string;
+  choices: Choices;
+  run(opts: {
+    prompt: string;
+    cwd: string;
+    model?: string;
+    effort?: string;
+    onActivity: (a: string) => void;
+    signal?: AbortSignal;
+  }): Promise<string>;
+}
+
+type Env = Record<string, string | undefined>;
+
 interface AgentOpts {
+  // The environment the agent CLI runs in; UNDERPAINT_CLAUDE and UNDERPAINT_PI there
+  // point at a different executable.
+  env: Env;
   bin?: string;
   args?: string[];
   script?: string;
@@ -24,7 +42,7 @@ interface Acc {
 // `choices` lists the models and efforts the browser offers; an empty model or
 // effort leaves the CLI's own default in place.
 
-export function makeAgent(name: string, opts: AgentOpts = {}): Agent {
+export function makeAgent(name: string, opts: AgentOpts): Agent {
   if (name === "claude") return claudeAgent(opts);
   if (name === "pi") return piAgent(opts);
   if (name === "mock") {
@@ -35,14 +53,11 @@ export function makeAgent(name: string, opts: AgentOpts = {}): Agent {
   throw new Error(`Unknown agent "${name}". Use claude, pi or mock.`);
 }
 
-export function defaultAgent(): string {
-  for (const name of ["claude", "pi"]) {
-    if (spawnSync(process.platform === "win32" ? "where" : "which", [name]).status === 0) return name;
-  }
-  return "claude";
-}
+export const AGENTS = ["claude", "pi"];
 
-function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
+function claudeAgent({ env, bin = env.UNDERPAINT_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
+  // Claude Code refuses to start inside another Claude Code session unless told otherwise.
+  const { CLAUDECODE: _, ...childEnv } = env;
   return {
     name: "claude",
     choices: { models: ["fable", "opus", "sonnet", "haiku"], efforts: ["low", "medium", "high", "xhigh", "max"] },
@@ -57,7 +72,7 @@ function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [
         "--allowedTools", "Read,Edit,Write,Bash,Glob,Grep",
         ...args,
       ];
-      return runJsonLines(bin, argv, { cwd, stdin: prompt, signal }, (ev, acc) => {
+      return runJsonLines(bin, argv, { cwd, env: childEnv, stdin: prompt, signal }, (ev, acc) => {
         if (ev.type === "assistant") {
           for (const c of ev.message?.content || []) {
             if (c.type === "tool_use") onActivity(describeTool(c.name, c.input));
@@ -73,7 +88,7 @@ function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [
   };
 }
 
-function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }: AgentOpts): Agent {
+function piAgent({ env, bin = env.UNDERPAINT_PI || "pi", args = [] }: AgentOpts): Agent {
   return {
     name: "pi",
     choices: { models: [], efforts: ["off", "minimal", "low", "medium", "high", "xhigh", "max"] },
@@ -84,7 +99,7 @@ function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }: AgentOp
         ...(effort ? ["--thinking", effort] : []),
         ...args, prompt,
       ];
-      return runJsonLines(bin, argv, { cwd, signal }, (ev, acc) => {
+      return runJsonLines(bin, argv, { cwd, env, signal }, (ev, acc) => {
         if (ev.type === "tool_execution_start") onActivity(describeTool(ev.toolName, ev.args));
         if (ev.type === "message_end" && ev.message?.role === "assistant") {
           if (ev.message.stopReason === "error") acc.error = ev.message.errorMessage || "the model call failed";
@@ -110,13 +125,10 @@ function textOf(message: any): string {
 function runJsonLines(
   bin: string,
   argv: string[],
-  { cwd, stdin, signal }: { cwd: string; stdin?: string; signal?: AbortSignal },
+  { cwd, env, stdin, signal }: { cwd: string; env: Env; stdin?: string; signal?: AbortSignal },
   onEvent: (ev: any, acc: Acc) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env };
-    // Claude Code refuses to start inside another Claude Code session unless told otherwise.
-    delete env.CLAUDECODE;
     const child = spawn(bin, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     const acc: Acc = { text: "", final: "", error: "" };
     let buf = "";
