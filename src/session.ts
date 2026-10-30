@@ -33,6 +33,8 @@ export class Session extends EventEmitter {
   clock: Clock;
   log: TurnLog;
   working = false;
+  // The plan was done and the person removed it; the code stays.
+  finished = false;
   activity: string[] = [];
   private s: SessionState;
 
@@ -52,6 +54,7 @@ export class Session extends EventEmitter {
   }
 
   save() {
+    if (this.finished) return;
     this.store.save(this.s, this.log.saved());
   }
 
@@ -68,6 +71,7 @@ export class Session extends EventEmitter {
       working: this.working,
       activity: this.activity.slice(-6),
       done: plan.isDone(this.plan, s.last),
+      finished: this.finished,
       canUndo: history.length > 0 && !this.working,
     };
   }
@@ -83,6 +87,7 @@ export class Session extends EventEmitter {
 
   // The person's changes are refused during the agent's turn.
   private guard() {
+    if (this.finished) throw new Error("This plan is built and removed.");
     if (this.working) throw new Error("It's the agent's turn.");
   }
 
@@ -143,9 +148,22 @@ export class Session extends EventEmitter {
     this.changed();
   }
 
+  // A done plan has served its purpose: remove it and its files in one commit. The code
+  // it built stays.
+  finish() {
+    this.guard();
+    if (!plan.isDone(this.plan, this.s.last)) throw new Error("The plan isn't done yet: something is open or not built.");
+    const mark = this.log.begin();
+    this.store.remove();
+    this.finished = true;
+    this.log.record(mark, `underpaint: remove the built plan ${this.name}`, { ownFiles: true });
+    this.emit("change", {});
+  }
+
   // ---------- the agent's turn ----------
 
   async pass({ text, boxes, accepted }: EditInput = {}) {
+    if (this.finished) throw new Error("This plan is built and removed.");
     if (this.working) throw new Error("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     const s = this.s;

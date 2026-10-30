@@ -313,3 +313,26 @@ test("only models and efforts the agent knows are accepted", () => {
   s.setSettings({ model: "" });
   assert.equal(view().settings.model, "", "empty means the CLI's own default");
 });
+
+test("a done plan can be removed in one commit; the code stays and the session is closed", async () => {
+  const { dir, log, git } = repo();
+  const reply = { plan: [{ text: "say hi", status: "built" }], checks: [{ name: "node --test", ok: true }], summary: "built" };
+  const agent = fakeAgent("fake", async ({ cwd }) => {
+    writeFileSync(join(cwd, "hi.js"), "export const hi = () => 'hi';\n");
+    return "```json\n" + JSON.stringify(reply) + "\n```";
+  });
+  const { session: s, view } = open(dir, { agent });
+  s.edit({ text: "say hi\nand more" });
+  assert.throws(() => s.finish(), /isn't done/);
+  await s.pass({ text: "say hi" });
+  assert.equal(view().done, true);
+  s.finish();
+  assert.equal(view().finished, true);
+  assert.ok(!existsSync(join(dir, "weekly.plan")) && !existsSync(join(dir, ".underpaint/weekly")), "the plan and its files are gone");
+  assert.ok(existsSync(join(dir, ".underpaint/rules.md")), "the house rules stay for the next plan");
+  assert.ok(existsSync(join(dir, "hi.js")), "the code stays");
+  assert.equal(log()[0], "underpaint: remove the built plan weekly");
+  assert.equal(git("status", "--porcelain").trim(), "", "nothing is left uncommitted");
+  assert.throws(() => s.edit({ text: "again" }), /built and removed/);
+  await assert.rejects(s.pass(), /built and removed/);
+});

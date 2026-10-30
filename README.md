@@ -73,7 +73,8 @@ tool and how to start it.
 - **Autocomplete.** On your turn the agent's guesses about your next lines show as
   ghost text. Tab accepts.
 - **Done means done.** No open comments or options, every line and box built, checks
-  green.
+  green. Then **Delete the plan** removes the plan and its files in one commit; the
+  code stays.
 - **One commit per agent turn**, code and plan together. "Undo agent turn" reverts it.
   Code you change outside a turn is yours: the agent builds on it.
 

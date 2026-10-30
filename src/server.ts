@@ -43,6 +43,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
     "/api/settle": (b) => session.settle(b),
     "/api/settings": (b) => session.setSettings(b),
     "/api/undo": () => session.undo(),
+    "/api/finish": () => session.finish(),
   };
   const clients = new Set<ServerResponse>();
   session.on("change", (extra) => {

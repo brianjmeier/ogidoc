@@ -134,5 +134,7 @@ export interface Snapshot {
   suggestions: string[];
   last: LastTurn | null;
   done: boolean;
+  // The plan was done and the person removed it.
+  finished: boolean;
   canUndo: boolean;
 }

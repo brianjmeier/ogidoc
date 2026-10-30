@@ -125,5 +125,12 @@ export function planStore(cwd: string, planFile: string) {
     },
 
     rules: () => readFileSync(rulesPath, "utf8"),
+
+    // The plan file and everything the editor kept for it. The house rules stay, for the
+    // next plan.
+    remove() {
+      rmSync(planPath, { force: true });
+      rmSync(dir, { recursive: true, force: true });
+    },
   };
 }

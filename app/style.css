@@ -86,6 +86,10 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
   .text-pane { border-right: 0; border-bottom: 1px solid var(--line); }
 }
 
+.finished { flex: 1; display: grid; place-content: center; gap: 10px; padding: 24px 16px; text-align: center; font-size: 15px; }
+.finished .brand { font-size: 28px; }
+.finished .muted { color: var(--muted); }
+
 /* ---------- editor ---------- */
 /* Each row is a gutter cell and a text cell. The textarea lies over the text column
    and wraps exactly like the text cells, so the rows stay under the lines they copy.

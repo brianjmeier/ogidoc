@@ -210,6 +210,10 @@ try {
   await page.waitForTimeout(1300);
   assert.equal(await page.$$eval(".canvas .box.built", (b) => b.length), 4);
   await shot("12-done");
+  await page.click('button:has-text("Delete the plan")');
+  await page.waitForSelector('button:has-text("Delete it? Click again")');
+  await page.waitForSelector('button:has-text("Delete the plan")', { timeout: 5000 });
+  assert.ok(readFileSync(join(dir, "weekly.plan"), "utf8").length, "one click alone doesn't delete it");
 
   step("one commit per agent turn, code and plan together");
   const log = g("log", "--format=%s").trim().split("\n");

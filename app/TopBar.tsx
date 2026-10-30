@@ -14,19 +14,8 @@ interface Props {
 }
 
 export function TopBar(props: Props) {
-  const [undoArmed, setUndoArmed] = createSignal(false);
-  let disarm: ReturnType<typeof setTimeout> | undefined;
-
-  async function undo() {
-    if (!undoArmed()) {
-      setUndoArmed(true);
-      disarm = setTimeout(() => setUndoArmed(false), 3000);
-      return;
-    }
-    clearTimeout(disarm);
-    setUndoArmed(false);
-    await post("/api/undo");
-  }
+  const undo = confirmed(() => post("/api/undo"));
+  const remove = confirmed(() => post("/api/finish"));
 
   return (
     <header class="top">
@@ -40,7 +29,10 @@ export function TopBar(props: Props) {
         <Effort state={props.state} />
       </Show>
       <Show when={props.state.canUndo}>
-        <Button class="btn ghost-btn" onClick={undo}>{undoArmed() ? "Undo it? Click again" : "Undo agent turn"}</Button>
+        <Button class="btn ghost-btn" onClick={undo.click}>{undo.armed() ? "Undo it? Click again" : "Undo agent turn"}</Button>
+      </Show>
+      <Show when={props.turn.cls === "done"}>
+        <Button class="btn ghost-btn" onClick={remove.click}>{remove.armed() ? "Delete it? Click again" : "Delete the plan"}</Button>
       </Show>
       <span class={`turn ${props.turn.cls}`} classList={{ passing: props.passing }}>
         <i class="dot" />
@@ -51,6 +43,25 @@ export function TopBar(props: Props) {
       </Button>
     </header>
   );
+}
+
+// An action that is hard to take back runs on the second click within 3 seconds.
+function confirmed(run: () => unknown) {
+  const [armed, setArmed] = createSignal(false);
+  let disarm: ReturnType<typeof setTimeout> | undefined;
+  return {
+    armed,
+    click() {
+      clearTimeout(disarm);
+      if (!armed()) {
+        setArmed(true);
+        disarm = setTimeout(() => setArmed(false), 3000);
+        return;
+      }
+      setArmed(false);
+      run();
+    },
+  };
 }
 
 const LABEL: Record<string, string> = { xhigh: "Extra high" };

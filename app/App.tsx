@@ -106,7 +106,7 @@ export function App() {
   return (
     <Show when={state()}>
       {(s) => (
-        <>
+        <Show when={!s().finished} fallback={<Finished state={s()} />}>
           <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
@@ -144,9 +144,20 @@ export function App() {
               </section>
             </Show>
           </main>
-        </>
+        </Show>
       )}
     </Show>
+  );
+}
+
+// What's left once the person removed the built plan: the code, in their repository.
+function Finished(props: { state: Snapshot }) {
+  return (
+    <main class="finished">
+      <span class="brand">Underpaint</span>
+      <p>{props.state.planPath} was built and is removed. The code it built stays in your repository.</p>
+      <p class="muted">You can close this tab.</p>
+    </main>
   );
 }
 
