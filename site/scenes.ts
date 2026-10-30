@@ -93,7 +93,7 @@ export const promptWithCode = {
       agent: { plan: builtReply([...game, click]) },
       last: {
         summary: "Clicking a cell puts the current mark there and passes the turn",
-        steps: [{ kind: "red-green", what: "X then O fill two cells" }],
+        steps: [{ kind: "red-green", what: "X then O fill two cells" }, { kind: "refactor", what: "one mark helper" }],
         files: [
           { op: "+", path: "src/game.ts", why: "click(board, cell)" },
           { op: "+", path: "test/game.test.ts", why: "X then O fill two cells" },
@@ -145,7 +145,7 @@ export const choices = {
       },
       last: {
         summary: "Restart clears the board and X starts; the loser starting is the other way",
-        steps: [{ kind: "red-green", what: "restart empties every cell" }],
+        steps: [{ kind: "red-green", what: "restart empties every cell" }, { kind: "refactor", what: "restart reuses newGame" }],
         files: [{ op: "~", path: "src/game.ts", why: "restart(game)" }],
         checks: [{ name: "npm test", ok: true }],
       },
@@ -155,7 +155,7 @@ export const choices = {
       agent: { plan: builtReply([...played, "  restart()", "    clear board, loser goes first"]) },
       last: {
         summary: "After a restart, whoever lost goes first",
-        steps: [{ kind: "red-green", what: "O starts after X wins" }],
+        steps: [{ kind: "red-green", what: "O starts after X wins" }, { kind: "refactor", what: "restart reuses newGame" }],
         files: [{ op: "~", path: "src/game.ts", why: "restart remembers the loser" }],
         checks: [{ name: "npm test", ok: true }],
       },
@@ -174,7 +174,7 @@ function inStyle(start: string[], typed: string[], done: string[]) {
         agent: { plan: builtReply(done) },
         last: {
           summary: "Clicking a taken cell does nothing",
-          steps: [{ kind: "red-green", what: "a taken cell keeps its mark" }],
+          steps: [{ kind: "red-green", what: "a taken cell keeps its mark" }, { kind: "refactor", what: "one guard for taken cells" }],
           files: [{ op: "~", path: "src/game.ts", why: "click ignores taken cells" }],
           checks: [{ name: "npm test", ok: true }],
         },

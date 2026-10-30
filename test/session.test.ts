@@ -241,6 +241,19 @@ test("closing braces and blank lines don't wait to be built: a fully built plan 
   assert.equal(view().done, true);
 });
 
+test("a red-green with no refactor after it goes back to the agent", async () => {
+  const { dir } = repo();
+  const steps = (s: string[]) => s.map((kind) => ({ kind, what: kind }));
+  let n = 0;
+  const agent = fakeAgent("no-refactor", async () =>
+    "```json\n" + JSON.stringify({ plan: [{ text: "say hi", status: "built" }], steps: steps(n++ === 0 ? ["red-green"] : ["red-green", "refactor"]), summary: "hi" }) + "\n```");
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "say hi" });
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /no refactor step after it/);
+  assert.equal(view().last!.error, undefined);
+});
+
 test("an agent that keeps not ending its turn fails it after a few tries", async () => {
   const { dir } = repo();
   const agent = fakeAgent("stuck", async () => '```json\n{"plan":[{"text":"hello","status":"stale"}],"summary":"nothing"}\n```');

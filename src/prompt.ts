@@ -94,7 +94,7 @@ export const notATurn = (problem: string) => `# Your turn isn't over
 Your last reply didn't end the turn. ${problem}
 
 Whatever you changed in the code is still there. Carry on from where you are and keep
-building, test first, until every line is built. End sooner only on something the
+building, test first, with a refactor after every green, until every line is built. End sooner only on something the
 person needs to see in the plan: a decision worth offering as a choice, settled lines
 folded into a box, an answer to their comment, or a stop on what only they can give
 you. Then end with the reply described above.`;

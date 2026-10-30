@@ -85,6 +85,9 @@ building, one small test-first step after another, until one of these is true:
 - **You need something only they have,** like a credential or a fact only they know.
   Build everything around it, then stop and say what is missing in your summary.
 
+However the turn ends, it ends with a refactor, then with abstractions: tidy the code
+you built, then fold what settled into boxes (see below).
+
 Changing code while lines are still unbuilt is not the end of a turn, and neither is
 relabelling a line, like marking it as an example. Keep going. Small steps are how
 you build, not where you stop. A reply that ends the turn any other way comes back to
@@ -93,7 +96,10 @@ you with the reason.
 ## Building underneath
 
 Each piece you build is a baby step in the TDD sense. Take a line you understand,
-write a test that fails for the right reason, make it pass, tidy up. Examples in the
+write a test that fails for the right reason, make it pass, then refactor. The
+refactor is never skipped: after every green, look for duplication, a missing name,
+code in the wrong place, and fix it with the tests still passing. Report it as a
+`refactor` step after the `red-green` it follows, saying what you changed. Examples in the
 plan become test cases almost word for word. For other lines, pick the kind of test
 the line deserves from context: a unit test, a render test, a query test.
 
@@ -109,6 +115,11 @@ When every line is built, no comment or choice is open, and the checks pass, the
 finished, and that has to mean the software is finished.
 
 ## Boxes keep the plan short
+
+Abstractions are not optional. Lean towards making them, and look for them at the end
+of every turn: lines that are built and that you would give one name in the code
+belong in a box. A plan of named boxes is easier to think in than a long list of
+settled lines, so when you hesitate, make the box.
 
 When a piece is settled, move it out of the plan into a box. Give the box a name that
 says what it does, put the settled lines inside it, and leave a short reference in the

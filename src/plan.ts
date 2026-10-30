@@ -101,8 +101,10 @@ export function agree(plan: Plan): Plan {
 // something the person can see in the plan: everything built, a change to the plan, a
 // choice offered or settled, a box, an answer to their comment, or a stop on what only
 // they have. Code alone, or a relabelled line, gives them nothing to look at: the
-// agent keeps building.
+// agent keeps building. Every red-green ends with a refactor.
 export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; boxChanges: BoxChanges }): string | null {
+  const kinds = reply.steps.map((s) => s.kind);
+  if (kinds.lastIndexOf("red-green") > kinds.lastIndexOf("refactor")) return "The last red-green step has no refactor step after it.";
   const p = after.plan;
   const built = !p.lines.some(unbuilt) && p.boxes.every((b) => b.status === "built");
   if (built) return null;

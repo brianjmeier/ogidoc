@@ -7,6 +7,9 @@ Build in small steps, and keep going until the plan shows the person something: 
 line built, a choice, a box, a change to the plan, an answer, or what you need from
 them. Code alone never ends a turn.
 
+Every green is followed by a refactor. Before a turn ends, fold the lines that have
+settled into boxes; when in doubt, make the box.
+
 Decide the small things yourself. For a decision that is expensive to undo or that
 the person would notice, build your best pick and offer the alternatives as a choice,
 then keep going.

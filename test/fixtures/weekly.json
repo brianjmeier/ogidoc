@@ -22,7 +22,8 @@
       "suggestions": ["      prev = the 7 days before"],
       "steps": [
         { "kind": "red-green", "what": "the week window, in the browser's timezone" },
-        { "kind": "red-green", "what": "top families, from your example" }
+        { "kind": "red-green", "what": "top families, from your example" },
+        { "kind": "refactor", "what": "one window helper for both" }
       ],
       "files": [
         { "op": "+", "path": "src/summarize.js", "why": "topFamilies" },
@@ -98,6 +99,7 @@
       "suggestions": [],
       "steps": [
         { "kind": "red-green", "what": "top 2 families instead of 3" },
+        { "kind": "refactor", "what": "the family count reads its limit from the box" },
         { "kind": "done", "what": "every line built, nothing open" }
       ],
       "files": [
