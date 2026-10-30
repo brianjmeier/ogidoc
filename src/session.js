@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { carryMeta, diffLines } from "./shared/diff.js";
 import { buildPrompt, parseReply, readAgentFile, AGENT_DIR } from "./prompt.js";
@@ -14,7 +14,7 @@ import * as git from "./git.js";
 export class Session extends EventEmitter {
   constructor({ cwd, planFile, agent, commit = true }) {
     super();
-    this.cwd = resolve(cwd);
+    this.cwd = realpathSync(resolve(cwd));
     this.planPath = resolve(this.cwd, planFile);
     this.name = basename(this.planPath).replace(/\.[^.]+$/, "");
     this.dir = join(dirname(this.planPath), ".underpaint", this.name);
