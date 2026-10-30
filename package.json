@@ -2,13 +2,22 @@
   "name": "ogidoc",
   "version": "0.1.0",
   "description": "Build software by taking turns with an agent on one pseudocode file. The real code is built underneath.",
+  "homepage": "https://ogidoc.brianmeier.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brianjmeier/ogidoc.git"
+  },
+  "bugs": "https://github.com/brianjmeier/ogidoc/issues",
   "type": "module",
   "bin": {
     "ogidoc": "dist/bin/ogidoc.js"
   },
   "files": [
-    "dist",
+    "dist/bin",
+    "dist/src",
+    "dist/web",
     "agent",
+    "demo",
     "README.md",
     "LICENSE"
   ],
@@ -23,11 +32,12 @@
     "build:site": "vite build -c vite.site.config.ts",
     "prepare": "npm run build",
     "typecheck": "tsc -p . && tsc -p app && tsc -p site",
-    "demo": "node bin/ogidoc.ts demo.plan --agent mock --script test/fixtures/weekly.json --no-commit",
+    "demo": "node bin/ogidoc.ts --demo",
     "test": "node --test test/*.test.ts",
     "test:e2e": "node test/e2e.ts",
     "test:site": "node test/site-e2e.ts",
-    "test:real": "node test/real-agent.ts"
+    "test:real": "node test/real-agent.ts",
+    "record": "node scripts/record-demo.ts"
   },
   "license": "MIT",
   "keywords": [
@@ -38,13 +48,11 @@
     "tdd",
     "pair-programming"
   ],
-  "dependencies": {
-    "@kobalte/core": "0.13.14",
-    "solid-js": "1.9.17"
-  },
   "devDependencies": {
+    "@kobalte/core": "0.13.14",
     "@types/node": "22.20.5",
     "playwright": "1.63.0",
+    "solid-js": "1.9.17",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vite-plugin-solid": "2.11.14"

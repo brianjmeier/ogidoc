@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, openSync, readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
+import { copyFileSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { AGENTS, makeAgent } from "../src/agents.ts";
-import { AGENT_DIR } from "../src/paths.ts";
+import { AGENT_DIR, DEMO_DIR } from "../src/paths.ts";
 import { systemClock } from "../src/clock.ts";
 import { openSession } from "../src/session.ts";
 import { startServer } from "../src/server.ts";
@@ -25,6 +25,7 @@ Usage
   ogidoc wait [name]           wait until the agent's turn ends, then say how it went
   ogidoc stop [name]           stop a session
   ogidoc install-skill [claude|pi|both]
+  ogidoc --demo                try it with a scripted agent, in a throwaway folder, no API key
 
 Options
   --detach                   run in the background and give the terminal back
@@ -48,6 +49,7 @@ const { values, positionals } = parseArgs({
     open: { type: "boolean" },
     detach: { type: "boolean" },
     json: { type: "boolean" },
+    demo: { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -55,6 +57,17 @@ const { values, positionals } = parseArgs({
 if (values.help) {
   process.stdout.write(HELP);
   process.exit(0);
+}
+
+// The demo runs in a folder of its own, on a plan that is already written, with a
+// scripted agent, so it needs no project and no API key.
+if (values.demo) {
+  const dir = mkdtempSync(join(tmpdir(), "ogidoc-demo-"));
+  copyFileSync(join(DEMO_DIR, "demo.plan"), join(dir, "demo.plan"));
+  process.chdir(dir);
+  positionals.splice(0, positionals.length, "demo");
+  Object.assign(values, { agent: "mock", script: join(DEMO_DIR, "weekly.json"), open: !values.detach || values.open });
+  console.log("This is a demo: a scripted agent plays three turns on a plan that is already written. Hand over with ⌘↵ (Ctrl+↵).");
 }
 
 const cwd = realpathSync(process.cwd());

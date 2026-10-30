@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { emptyDir, repo } from "./support/index.ts";
 
 const BIN = new URL("../bin/ogidoc.ts", import.meta.url).pathname;
-const SCRIPT = new URL("./fixtures/weekly.json", import.meta.url).pathname;
+const SCRIPT = new URL("../demo/weekly.json", import.meta.url).pathname;
 
 test("a detached session gives the terminal back, and list, status, wait and stop read it", async () => {
   const { dir } = repo();
@@ -66,5 +66,29 @@ test("install-skill gives the chat its own skill, not the plan agent's", () => {
     const skill = readFileSync(`${home}/${dir}/SKILL.md`, "utf8");
     assert.match(skill, /# Ogidoc, from the chat/);
     assert.match(skill, /never post to the session's server/i);
+  }
+});
+
+test("the demo needs no project and no API key: a scripted agent plays on a written plan", async () => {
+  const env = { ...process.env, OGIDOC_HOME: emptyDir() };
+  const ogidoc = (...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { cwd: emptyDir(), env, encoding: "utf8" });
+  const started = ogidoc("--demo", "--detach", "--port", "0");
+  assert.equal(started.status, 0, started.stderr);
+  const url = started.stdout.match(/Ogidoc session demo is open at (http:\/\/\S+)/)?.[1];
+  assert.ok(url, started.stdout);
+  try {
+    const state = await (await fetch(`${url}/api/state`)).json();
+    assert.equal(state.agent, "mock");
+    assert.equal(state.lines[0].text, "weekly reflection");
+    const waiting = spawn(process.execPath, [BIN, "wait", "demo", "--json"], { env });
+    let out = "";
+    waiting.stdout.on("data", (d) => (out += d));
+    const waited = new Promise<number | null>((r) => waiting.on("exit", r));
+    await new Promise((r) => waiting.stderr.on("data", (d) => String(d).includes("Waiting") && r(null)));
+    await fetch(`${url}/api/pass`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    assert.equal(await waited, 0);
+    assert.equal(JSON.parse(out).turn, 2);
+  } finally {
+    ogidoc("stop", "demo");
   }
 });

@@ -34,6 +34,8 @@ try {
     assert.doesNotMatch((await page.textContent("body")) ?? "", /underpaint|paint/i, `${colorScheme}: nothing on the page still uses the old name or the painting idea`);
 
     const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);
+    // A scene plays once it is on screen; the clip under the hero comes first.
+    await page.$eval(scene(1), (s) => s.scrollIntoView({ block: "center" }));
     await count(`${scene(1)} .ln`, 4);
     assert.deepEqual(await marks(1), ["built", "built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
     assert.equal(await page.$(`${scene(1)} .under-slot > .under`), null, `${colorScheme}: no code before the turn`);

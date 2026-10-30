@@ -26,7 +26,7 @@ writeFileSync(join(dir, "README.md"), "journal\n");
 g("add", ".");
 g("commit", "-qm", "init");
 
-const server = spawn("node", [join(ROOT, "bin/ogidoc.ts"), "weekly", "--agent", "mock", "--script", join(ROOT, "test/fixtures/weekly.json"), "--port", "0"], { cwd: dir, env: { ...process.env, OGIDOC_HOME: mkdtempSync(join(tmpdir(), "ogidoc-home-")) } });
+const server = spawn("node", [join(ROOT, "bin/ogidoc.ts"), "weekly", "--agent", "mock", "--script", join(ROOT, "demo/weekly.json"), "--port", "0"], { cwd: dir, env: { ...process.env, OGIDOC_HOME: mkdtempSync(join(tmpdir(), "ogidoc-home-")) } });
 const url = await new Promise<string>((resolve, reject) => {
   server.stdout.on("data", (d) => { const m = String(d).match(/http:\/\/[\d.:]+/); if (m) resolve(m[0]); });
   server.stderr.on("data", (d) => process.stderr.write(d));

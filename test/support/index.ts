@@ -2,7 +2,7 @@
 // way to open a session, so how a session is put together is written here once.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeAgent } from "../../src/agents.ts";
@@ -10,8 +10,8 @@ import { openSession } from "../../src/session.ts";
 import type { Agent } from "../../src/agents.ts";
 import type { Clock } from "../../src/clock.ts";
 
-export const SCRIPT = new URL("../fixtures/weekly.json", import.meta.url).pathname;
-export const PLAN = "weekly reflection\n  every sunday\n    look at my week\n    tell me what i felt most";
+export const SCRIPT = new URL("../../demo/weekly.json", import.meta.url).pathname;
+export const PLAN = readFileSync(new URL("../../demo/demo.plan", import.meta.url), "utf8").trimEnd();
 
 // A clock the test moves by hand; sleeping costs no real time.
 export function testClock(start = 0): Clock & { advance(ms: number): void } {
