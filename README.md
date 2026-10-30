@@ -53,7 +53,7 @@ tool and how to start it.
   are the whole message; passing without edits means "go on". Code never changes on
   your turn.
 - **No syntax.** Write any pseudocode. The agent follows your style and tells the
-  editor what each line is: a proposal (accept ✓ or reject ✕ in the margin), an
+  editor what each line is: a proposal (Accept `⌥↵` or Reject `⌥⌫` at its end), an
   example (it becomes a test), or a real name from the codebase (underlined).
 - **Options, not questions.** The agent decides the small things itself. Where a
   decision is expensive to undo or you'd notice it (a dependency, a data model, a
@@ -61,21 +61,25 @@ tool and how to start it.
   same lines. A bracket beside them switches between the ways in place (`‹ 1 of 2 ›`,
   or `⌥[` / `⌥]` with the caret in them), and **Use this** (`⌥↵`) locks one in.
   Hand over on another way and the agent builds that one.
-- **Comments are yours.** Click a line number to comment on a line. The agent answers
+- **Comments are yours.** Click a line number, or press `⌘⌥M` (`Ctrl+Alt+M`), to
+  comment on a line. `⌥⌘↓` (`Alt+↓`) takes you to the next thing waiting on you:
+  a choice, a proposal, or a comment the agent answered. The agent answers
   in the thread (`⌘↵` sends and hands over), folds the answer into the plan and
   resolves it.
 - **Building underneath.** The agent builds what it understands in TDD baby steps.
   Margin marks say what's built, what needs a build, and what waits on a comment. The Underneath drawer lists the steps, files
   and checks of the last turn.
 - **Boxes.** When a piece is settled, the agent moves it into a named box on the
-  canvas and leaves a reference in the plan, so the plan stays short. Click a box to
-  edit it; that's how you disagree with an abstraction.
+  canvas and leaves a reference in the plan, so the plan stays short. Click a box, or
+  Tab to it and press Enter, to edit it; that's how you disagree with an abstraction.
+  In the plan Tab indents; press Esc first and Tab moves on.
 - **Autocomplete.** On your turn the agent's guesses about your next lines show as
   ghost text. Tab accepts.
 - **Done means done.** No open comments or options, every line and box built, checks
   green. Then **Delete the plan** removes the plan and its files in one commit; the
   code stays.
-- **One commit per agent turn**, code and plan together. "Undo agent turn" reverts it.
+- **One commit per agent turn**, code and plan together. "Undo agent turn" reverts it,
+  or `⌘Z` twice before you type anything.
   Code you change outside a turn is yours: the agent builds on it.
 
 ## Files
