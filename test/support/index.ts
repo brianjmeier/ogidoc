@@ -8,9 +8,18 @@ import { join } from "node:path";
 import { makeAgent } from "../../src/agents.ts";
 import { Session } from "../../src/session.ts";
 import type { Agent } from "../../src/types.ts";
+import type { Clock } from "../../src/clock.ts";
 
 export const SCRIPT = new URL("../fixtures/weekly.json", import.meta.url).pathname;
 export const PLAN = "weekly reflection\n  every sunday\n    look at my week\n    tell me what i felt most";
+
+// A clock the test moves by hand; sleeping costs no real time.
+export function testClock(start = 0): Clock & { advance(ms: number): void } {
+  let t = start;
+  return { now: () => t, sleep: async (ms) => { t += ms; }, advance: (ms) => { t += ms; } };
+}
+
+export const scripted = (clock: Clock = testClock()) => makeAgent("mock", { script: SCRIPT, sleep: clock.sleep });
 
 export function emptyDir(): string {
   return mkdtempSync(join(tmpdir(), "underpaint-"));
@@ -34,9 +43,9 @@ export function recording(agent: Agent): Agent & { prompts: string[] } {
   return { ...agent, prompts, run: (o) => { prompts.push(o.prompt); return agent.run(o); } };
 }
 
-export function open(dir: string, { planFile = "weekly.plan", agent = makeAgent("mock", { script: SCRIPT }), commit = true }: { planFile?: string; agent?: Agent; commit?: boolean } = {}) {
+export function open(dir: string, { planFile = "weekly.plan", clock = testClock(), agent = scripted(clock), commit = true }: { planFile?: string; clock?: Clock; agent?: Agent; commit?: boolean } = {}) {
   const a = recording(agent);
-  const session = new Session({ cwd: dir, planFile, agent: a, commit });
+  const session = new Session({ cwd: dir, planFile, agent: a, clock, commit });
   return { session, view: () => session.snapshot(), prompts: a.prompts };
 }
 

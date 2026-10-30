@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AnimationOp } from "../src/types.ts";
-import { PLAN, emptyDir, open, repo, texts } from "./support/index.ts";
+import { PLAN, emptyDir, open, repo, testClock, texts } from "./support/index.ts";
 
 test("a full session: ask, build, move into boxes, disagree in a box, done, undo", async () => {
   const { dir, log } = repo();
@@ -161,4 +161,19 @@ test("undo history survives a restart", async () => {
   s.undo();
   assert.equal(view().turn, 1);
   assert.match(log()[0], /undo turn 1/);
+});
+
+test("a turn reports how long the agent took", async () => {
+  const clock = testClock(1_000_000);
+  const agent = {
+    name: "slow",
+    choices: { models: [], efforts: [] },
+    run: async () => {
+      clock.advance(7_400);
+      return '```json\n{"plan":[{"text":"hello"}],"summary":"ok"}\n```';
+    },
+  };
+  const { session: s, view } = open(emptyDir(), { planFile: "p.plan", clock, agent });
+  await s.pass({ text: "hello" });
+  assert.equal(view().last!.seconds, 7);
 });

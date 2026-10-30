@@ -10,6 +10,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { makeAgent } from "../src/agents.ts";
 import { Session } from "../src/session.ts";
+import { systemClock } from "../src/clock.ts";
 
 const name = process.argv[2] || "claude";
 const dir = mkdtempSync(join(tmpdir(), `underpaint-real-${name}-`));
@@ -21,7 +22,7 @@ writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "demo", type: "m
 g("add", ".");
 g("commit", "-qm", "init");
 
-const s = new Session({ cwd: dir, planFile: "slug.plan", agent: makeAgent(name) });
+const s = new Session({ cwd: dir, planFile: "slug.plan", agent: makeAgent(name), clock: systemClock });
 s.on("change", () => { if (s.working && s.activity.length) console.log(`  … ${s.activity.at(-1)}`); });
 const plan = [
   "slugify(title) for blog urls",

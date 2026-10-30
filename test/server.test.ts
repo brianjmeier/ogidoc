@@ -5,11 +5,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import { makeAgent } from "../src/agents.ts";
-import { Session } from "../src/session.ts";
 import { startServer } from "../src/server.ts";
-
-const SCRIPT = new URL("./fixtures/weekly.json", import.meta.url).pathname;
+import { open } from "./support/index.ts";
 
 function send(port: number, method: string, path: string, headers: Record<string, string>, body = ""): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -21,7 +18,7 @@ function send(port: number, method: string, path: string, headers: Record<string
 
 test("only the editor's own page on this machine can drive the session", async () => {
   const dir = mkdtempSync(join(tmpdir(), "underpaint-server-"));
-  const session = new Session({ cwd: dir, planFile: "p.plan", agent: makeAgent("mock", { script: SCRIPT }), commit: false });
+  const { session } = open(dir, { planFile: "p.plan", commit: false });
   const { server } = await startServer(session, { port: 0 });
   const port = (server.address() as AddressInfo).port;
   const self = `127.0.0.1:${port}`;

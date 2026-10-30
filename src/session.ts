@@ -5,6 +5,7 @@ import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, mapIndices, 
 import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
 import { AGENT_DIR } from "./paths.ts";
 import * as git from "./git.ts";
+import type { Clock } from "./clock.ts";
 import type { Agent, AnimationOp, Box, HumanDiff, LastTurn, Line, Reply, Settings, Snapshot, Symbol, Thread } from "./types.ts";
 
 interface EditInput {
@@ -40,6 +41,7 @@ export class Session extends EventEmitter {
   dir: string;
   rulesPath: string;
   agent: Agent;
+  clock: Clock;
   root: string | null;
   commit: boolean;
   working: boolean;
@@ -60,7 +62,7 @@ export class Session extends EventEmitter {
   // editor writes these itself, so they are never the agent's drift.
   ownPaths: string[];
 
-  constructor({ cwd, planFile, agent, commit = true }: { cwd: string; planFile: string; agent: Agent; commit?: boolean }) {
+  constructor({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }) {
     super();
     this.cwd = realpathSync(resolve(cwd));
     this.planPath = resolve(this.cwd, planFile);
@@ -68,6 +70,7 @@ export class Session extends EventEmitter {
     this.dir = join(dirname(this.planPath), ".underpaint", this.name);
     this.rulesPath = join(dirname(this.planPath), ".underpaint", "rules.md");
     this.agent = agent;
+    this.clock = clock;
     this.root = git.repoRoot(this.cwd);
     this.commit = commit && !!this.root;
     this.ownPaths = this.root ? [relative(this.root, this.planPath), relative(this.root, dirname(this.dir))] : [];
@@ -300,7 +303,7 @@ export class Session extends EventEmitter {
     this.working = true;
     this.activity = [];
     this.emit("change", {});
-    const started = Date.now();
+    const started = this.clock.now();
     let reply: Reply | null = null;
     let animation: AnimationOp[] = [];
     let error: string | null = null;
@@ -341,7 +344,7 @@ export class Session extends EventEmitter {
       this.history = this.history.slice(-20);
     }
     if (reply) {
-      this.last = { summary: reply.summary, steps: reply.steps, files: reply.files, checks: reply.checks, seconds: Math.round((Date.now() - started) / 1000) };
+      this.last = { summary: reply.summary, steps: reply.steps, files: reply.files, checks: reply.checks, seconds: Math.round((this.clock.now() - started) / 1000) };
       this.turn += 1;
     }
     if (error) this.last = { ...(this.last || {}), error };

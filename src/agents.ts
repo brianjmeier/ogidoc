@@ -2,11 +2,14 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Agent } from "./types.ts";
+import type { Clock } from "./clock.ts";
 
 interface AgentOpts {
   bin?: string;
   args?: string[];
   script?: string;
+  // Paces the mock agent's activity.
+  sleep?: Clock["sleep"];
 }
 
 // What a CLI's event stream has told us so far.
@@ -26,7 +29,8 @@ export function makeAgent(name: string, opts: AgentOpts = {}): Agent {
   if (name === "pi") return piAgent(opts);
   if (name === "mock") {
     if (!opts.script) throw new Error("The mock agent needs --script.");
-    return mockAgent({ script: opts.script });
+    if (!opts.sleep) throw new Error("The mock agent needs a clock to pace its turns.");
+    return mockAgent({ script: opts.script, sleep: opts.sleep });
   }
   throw new Error(`Unknown agent "${name}". Use claude, pi or mock.`);
 }
@@ -160,7 +164,7 @@ interface MockTurn {
   delay?: number;
 }
 
-function mockAgent({ script }: { script: string }): Agent {
+function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] }): Agent {
   const turns: MockTurn[] = JSON.parse(readFileSync(script, "utf8"));
   let i = 0;
   return {
@@ -182,4 +186,3 @@ function mockAgent({ script }: { script: string }): Agent {
   };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

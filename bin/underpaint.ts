@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { makeAgent, defaultAgent } from "../src/agents.ts";
 import { AGENT_DIR } from "../src/paths.ts";
+import { systemClock } from "../src/clock.ts";
 import { Session } from "../src/session.ts";
 import { startServer } from "../src/server.ts";
 
@@ -58,8 +59,8 @@ if (positionals[0] === "install-skill") {
 }
 
 const agentName = values.agent || defaultAgent();
-const agent = makeAgent(agentName, { args: values["agent-arg"] || [], script: values.script && resolve(values.script) });
-const session = new Session({ cwd: process.cwd(), planFile: positionals[0] || "underpaint.plan", agent, commit: !values["no-commit"] });
+const agent = makeAgent(agentName, { args: values["agent-arg"] || [], script: values.script && resolve(values.script), sleep: systemClock.sleep });
+const session = new Session({ cwd: process.cwd(), planFile: positionals[0] || "underpaint.plan", agent, clock: systemClock, commit: !values["no-commit"] });
 session.save();
 const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
 console.log(`Underpaint is open at ${url}`);
