@@ -92,7 +92,8 @@ try {
   await page.waitForFunction(() => !document.querySelector(".rows .a-add"), null, { timeout: 5000 });
   const t1 = await planText();
   assert.ok(t1.some((t) => t.includes("7-day strip") && t.includes("AcceptReject")), "a proposal offers Accept and Reject on its line");
-  assert.ok(t1.some((t) => t.includes("becomes a test")));
+  assert.ok(await page.$(".rows .ln.k-example"), "an example line is set apart as one");
+  assert.ok(!t1.some((t) => t.includes("becomes a test")), "with no tag explaining it");
   assert.ok(await page.$(".rows .sym"), "a real codebase name is highlighted");
   assert.ok((await page.$$(".rows .m-built")).length >= 3, "built lines are marked");
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent doesn't ask in comments");

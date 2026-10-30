@@ -399,7 +399,6 @@ export function Editor(props: Props) {
               const indent = () => indentOf(l().text);
               const body = () => l().text.slice(indent().length);
               const st = () => (l().text.trim() ? l().status : null);
-              const chip = () => (l().kind === "example" ? "becomes a test" : "");
               const deciding = () => isOpenProposal(l()) && props.editable && !anim() && n() !== null;
               return (
                 <div
@@ -429,7 +428,6 @@ export function Editor(props: Props) {
                       <Show when={tabLeaves() && keysOn(n())}>
                         <span class="tabkey">Tab leaves the plan</span>
                       </Show>
-                      <Show when={body() && chip()}><span class="chip">{chip()}</span></Show>
                       <Show when={deciding()}>
                         <span class="decide">
                           <button type="button" tabIndex={-1} title="Keep it as a plain line of the plan" onMouseDown={keepFocus} onClick={() => accept(n()!)}>
