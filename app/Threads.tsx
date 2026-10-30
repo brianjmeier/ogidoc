@@ -49,11 +49,14 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
               <Show when={props.thread}>
                 <Button class="btn ghost-btn" onClick={() => resolve(props.thread!.id)}>Resolve</Button>
               </Show>
+              {/* Handing over sends what is typed here first. */}
+              <Button class="btn ghost-btn" onClick={props.onPass}>
+                Hand over <kbd>{passKey} ↵</kbd>
+              </Button>
               <Button class="btn primary" disabled={!draft(key()).trim()} onClick={() => send(key(), props.thread)}>
-                {props.thread ? "Reply" : "Comment"}
+                {props.thread ? "Reply" : "Comment"} <kbd>↵</kbd>
               </Button>
             </div>
-            <div class="keys">Enter sends · {passKey} Enter sends and hands over</div>
           </Show>
         </Popover.Content>
       </Popover.Portal>

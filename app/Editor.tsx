@@ -3,9 +3,9 @@ import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines }
 import { choose, follow } from "../src/choices.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
-import { STATUS_LABEL, STATUS_MARK, altKey, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, STATUS_MARK, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
-import { draftLine, openId, startThread } from "./threads.ts";
+import { draftLine, openId, setOpenId, startThread } from "./threads.ts";
 
 // The plan editor. A transparent textarea sits on top of a rendered copy of the same
 // text, so typing stays native while the copy carries color, marks, comment pins and
@@ -65,6 +65,8 @@ export function Editor(props: Props) {
   const [anim, setAnim] = createSignal<Row[] | null>(null);
   const accepted = new Set<number>();
   const [fresh, setFresh] = createSignal(true);
+  // Keys show on the controls they trigger only while typing goes to the plan.
+  const [active, setActive] = createSignal(false);
   const symRe = createMemo(() => symbolPattern(symbols()));
 
   // The agent's suggestions are whole lines it expects you to write. Offer the rest of
@@ -84,6 +86,9 @@ export function Editor(props: Props) {
   });
   const written = createMemo(() => new Set(lines().map((l) => l.text.trim())));
 
+  // Whether a line's or a choice's keys work right now.
+  const keysOn = (n: number | null) => props.editable && active() && n === caret().line;
+  const inChoice = (c: Choice) => props.editable && active() && choiceAt().get(caret().line) === c;
   const rows = (): Row[] => anim() ?? lines().map((line, n) => ({ line, n }));
   // Which choice each line belongs to.
   const choiceAt = createMemo(() => {
@@ -165,15 +170,29 @@ export function Editor(props: Props) {
     }
     // The caret may have moved without a click or a key, from a script or a drop.
     readCaret();
-    const c = choiceAt().get(caret().line);
-    if (c && e.altKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+    const n = caret().line;
+    if (keys.comment.is(e)) {
       e.preventDefault();
-      cycle(c, e.code === "BracketRight" ? 1 : -1);
+      const t = openOn().get(n)?.[0];
+      if (t) setOpenId(t.id);
+      else startThread(n);
       return;
     }
-    if (c && e.altKey && e.key === "Enter") {
+    const c = choiceAt().get(n);
+    if (c && (keys.prev.is(e) || keys.next.is(e))) {
+      e.preventDefault();
+      cycle(c, keys.next.is(e) ? 1 : -1);
+      return;
+    }
+    if (c && keys.keep.is(e)) {
       e.preventDefault();
       settle(c);
+      return;
+    }
+    if (proposalAt(n) && (keys.keep.is(e) || keys.reject.is(e))) {
+      e.preventDefault();
+      if (keys.keep.is(e)) accept(n);
+      else reject(n);
       return;
     }
     if (e.key === "Tab" && !e.shiftKey) {
@@ -189,20 +208,38 @@ export function Editor(props: Props) {
     }
   }
 
+  // Put the caret on a line, at a column or the line's end, and bring it into view.
+  function place(line: number, col: number) {
+    const texts = splitLines(ta.value);
+    const l = Math.max(0, Math.min(line, texts.length - 1));
+    let at = Math.min(col, texts[l].length);
+    for (let i = 0; i < l; i++) at += texts[i].length + 1;
+    ta.setSelectionRange(at, at);
+    readCaret();
+  }
+
   // ---------- proposals ----------
+
+  const proposalAt = (n: number) => lines()[n]?.kind === "proposal" && !!lines()[n].text.trim();
 
   function accept(n: number) {
     setLines((ls) => ls.map((l, i) => (i === n ? acceptProposal(l, built()) : l)));
     accepted.add(n);
     setFresh(false);
     props.onEdit();
+    ta.focus({ preventScroll: true });
   }
 
+  // The caret goes to the start of the line that takes the rejected one's place, or to
+  // the end of the plan when it was the last line.
   function reject(n: number) {
     const texts = lines().map((l) => l.text);
     texts.splice(n, 1);
     ta.value = texts.join("\n");
     onInput();
+    ta.focus({ preventScroll: true });
+    if (n < texts.length) place(n, texts[n].match(/^\s*/)![0].length);
+    else place(n, Infinity);
   }
 
   // ---------- choices ----------
@@ -226,6 +263,7 @@ export function Editor(props: Props) {
     setChoices((cs) => cs.filter((x) => x.id !== c.id));
     setFresh(false);
     props.onSettle(c.id, ta.value);
+    ta.focus({ preventScroll: true });
   }
 
   // ---------- the agent's turn, animated ----------
@@ -265,8 +303,10 @@ export function Editor(props: Props) {
     const text = joinLines(next.lines);
     if (ta.value === text) return;
     const focused = document.activeElement === ta;
+    const { line, col } = caret();
     setCopy((k) => k + 1);
     ta.value = text;
+    place(line, col);
     if (focused) ta.focus({ preventScroll: true });
   }
 
@@ -302,7 +342,7 @@ export function Editor(props: Props) {
                   <div class="g">
                     <span class="bar" />
                     <Show when={n() !== null} fallback={<span />}>
-                      <button type="button" class="no" title="Comment on this line" disabled={!props.editable} onClick={() => startThread(n()!)}>
+                      <button type="button" class="no" tabIndex={-1} title={`Comment on this line · ${keys.comment.label}`} disabled={!props.editable} onClick={() => startThread(n()!)}>
                         {n()! + 1}
                       </button>
                     </Show>
@@ -321,8 +361,12 @@ export function Editor(props: Props) {
                       <Show when={body() && chip()}><span class="chip">{chip()}</span></Show>
                       <Show when={body() && deciding()}>
                         <span class="decide">
-                          <button type="button" title="Keep it as a plain line of the plan" onClick={() => accept(n()!)}>Accept</button>
-                          <button type="button" title="Delete it" onClick={() => reject(n()!)}>Reject</button>
+                          <button type="button" tabIndex={-1} title="Keep it as a plain line of the plan" onClick={() => accept(n()!)}>
+                            Accept<Show when={keysOn(n())}> <kbd>{keys.keep.label}</kbd></Show>
+                          </button>
+                          <button type="button" tabIndex={-1} title="Delete it" onClick={() => reject(n()!)}>
+                            Reject<Show when={keysOn(n())}> <kbd>{keys.reject.label}</kbd></Show>
+                          </button>
                         </span>
                       </Show>
                       <Show when={r().to}><span class="chip">→ {r().to}</span></Show>
@@ -347,13 +391,15 @@ export function Editor(props: Props) {
             {(w) => (
               <div class="ways" style={{ top: `${w().top}px`, height: `${w().height}px` }}>
                 <div class="ways-row">
-                  <button type="button" aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, -1)}>‹</button>
+                  <button type="button" tabIndex={-1} aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, -1)}>‹</button>
                   <span>{w().choice.current + 1} of {w().choice.options.length}</span>
-                  <button type="button" aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, 1)}>›</button>
-                  <button type="button" class="use" title="Keep this way and drop the others" disabled={!props.editable} onClick={() => settle(w().choice)}>Use this</button>
+                  <button type="button" tabIndex={-1} aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, 1)}>›</button>
+                  <button type="button" tabIndex={-1} class="use" title="Keep this way and drop the others" disabled={!props.editable} onClick={() => settle(w().choice)}>
+                    Use this<Show when={inChoice(w().choice)}> <kbd>{keys.keep.label}</kbd></Show>
+                  </button>
                 </div>
-                <Show when={props.editable && choiceAt().get(caret().line) === w().choice}>
-                  <div class="ways-keys"><kbd>{altKey}[</kbd> <kbd>{altKey}]</kbd> switch · <kbd>{altKey}↵</kbd> use this</div>
+                <Show when={inChoice(w().choice)}>
+                  <div class="ways-keys"><kbd>{keys.alt}[</kbd> <kbd>{keys.alt}]</kbd></div>
                 </Show>
               </div>
             )}
@@ -375,6 +421,8 @@ export function Editor(props: Props) {
               onInput={onInput}
               onKeyDown={onKeyDown}
               onKeyUp={readCaret}
+              onFocus={() => setActive(true)}
+              onBlur={() => setActive(false)}
               onClick={readCaret}
               onSelect={readCaret}
             />

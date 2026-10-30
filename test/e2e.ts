@@ -48,6 +48,13 @@ const planText = () =>
     c.querySelectorAll(".pin-btn").forEach((p) => p.remove());
     return c.textContent ?? "";
   }));
+// Put the plan's caret at the start of the first line that has `text`.
+const caretOn = (text: string) => page.$eval(TA, (el, t) => {
+  const ta = el as HTMLTextAreaElement;
+  const at = ta.value.indexOf(t);
+  ta.focus();
+  ta.setSelectionRange(at, at);
+}, text);
 // Where typing goes right now, by the focused element's label.
 const focused = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName);
 const typingInPlan = async (why: string) => { await page.waitForTimeout(50); assert.equal(await focused(), "Plan text", why); };
@@ -116,7 +123,11 @@ try {
     ta.setSelectionRange(at, at);
   });
   await page.waitForSelector(".ways-keys");
-  assert.match((await page.textContent(".ways-keys")) ?? "", /\[.*\].*switch.*↵.*use this/, "with the caret in a choice, its keys show");
+  assert.match((await page.textContent(".ways-keys")) ?? "", /\[.*\]/, "with the caret in a choice, its keys show under its arrows");
+  assert.match((await page.textContent(".ways .use")) ?? "", /Use this .↵/, "and on Use this");
+  await page.keyboard.press("Shift+Tab");
+  assert.notEqual(await page.evaluate(() => document.activeElement?.closest(".code") ? "in the plan" : "out"), "in the plan", "Shift+Tab leaves the plan without stopping at every row");
+  await caretOn("in the browser's timezone");
   await page.keyboard.press("Alt+BracketRight");
   assert.equal((await planText())[row].trim(), "in a timezone you set once");
   assert.equal(await page.textContent(".ways span"), "2 of 2");
@@ -162,9 +173,13 @@ try {
   await page.keyboard.press("Tab");
   assert.ok((await page.inputValue(TA)).includes("      prev = the 7 days before"), await page.inputValue(TA));
 
-  step("accepting the agent's proposal");
-  await page.click('.decide button:has-text("Accept")');
+  step("accepting the agent's proposal from the keyboard");
+  await caretOn("maybe also a 7-day strip");
+  await page.waitForSelector(".decide kbd");
+  assert.match((await page.textContent(".decide")) ?? "", /Accept .↵.*Reject .⌫/, "with the caret on a proposal, its keys show on its buttons");
+  await page.keyboard.press("Alt+Enter");
   assert.ok(!(await planText()).some((t) => t.includes("Accept")));
+  assert.ok((await page.inputValue(TA)).includes("maybe also a 7-day strip"), "accepting keeps the line");
   await page.waitForTimeout(600);
 
   step("the person replaces the whole plan in one go, which the browser's undo remembers");
@@ -173,9 +188,13 @@ try {
   await page.keyboard.insertText(await page.inputValue(TA));
   await page.waitForTimeout(600);
 
-  step("the person asks about a line and hands over from the comment");
-  await page.click(".rows .row:first-child .no");
-  await page.fill(".card textarea", "does this fit on a phone?");
+  step("the person asks about a line from the keyboard and hands over from the comment");
+  await caretOn("weekly reflection");
+  await page.keyboard.press("ControlOrMeta+Alt+KeyM");
+  await page.waitForSelector(".card textarea");
+  await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(() => !!document.activeElement?.closest(".card")), true, "the comment key opens a card on the caret's line, ready to type");
+  await page.keyboard.type("does this fit on a phone?");
   await page.keyboard.press("Control+Enter");
   await waitTurn(/agent's turn/);
   await page.waitForSelector(".rows .a-move", { timeout: 15000 });
@@ -226,8 +245,10 @@ try {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => document.querySelector('.canvas .box[data-name="summarizeWeek"]')?.classList.contains("stale"), null, { timeout: 5000 });
   assert.match(await page.textContent('.canvas .box[data-name="summarizeWeek"]') ?? "", /keep 2/, "Esc keeps what was typed in the box");
-  await page.click('.decide button:has-text("Reject")');
+  await caretOn("maybe a dismiss button");
+  await page.keyboard.press("Alt+Backspace");
   assert.equal((await planText()).length, 2);
+  assert.equal(await page.$eval(TA, (el) => (el as HTMLTextAreaElement).selectionStart), (await page.inputValue(TA)).length, "the caret stays where the rejected line was");
   await page.waitForTimeout(600);
   await shot("11-disagree-in-box");
 
