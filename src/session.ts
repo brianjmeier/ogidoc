@@ -1,9 +1,7 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, mapIndices, splitLines, type DiffOp } from "./shared/diff.ts";
 import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
-import { AGENT_DIR } from "./paths.ts";
+import { planStore, type Base, type HistoryEntry, type Loaded, type PlanStore } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent, AnimationOp, Box, HumanDiff, LastTurn, Line, Reply, Settings, Snapshot, Symbol, Thread } from "./types.ts";
@@ -16,97 +14,66 @@ interface EditInput {
 
 // What an agent turn can take back: the session as it was just before the turn.
 const TURN_STATE = ["lines", "boxes", "threads", "base", "last", "symbols", "suggestions", "turn"] as const;
-type TurnState = Pick<Session, (typeof TURN_STATE)[number]>;
-interface HistoryEntry extends TurnState {
-  commit: string | null;
-}
+type TurnState = Omit<HistoryEntry, "commit">;
 
-// The text the agent last saw, to tell it what the person changed since.
-interface Base {
-  lines: string[];
-  boxes: Record<string, string[]>;
+// Put a session together from where its plan lives, the agent, and the clock.
+export function openSession({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
+  const store = planStore(cwd, planFile);
+  const saved = store.load();
+  const log = turnLog({ cwd: store.cwd, ownFiles: store.ownFiles, commit, saved: saved.log });
+  return new Session({ store, saved, log, agent, clock });
 }
 
 // One plan file and its boxes, shared by a person and an agent who take turns.
-//
-// On disk everything stays plain text: the plan file itself, one file per box, and a
-// small state file that remembers what the editor knows about each line (who wrote
-// it, what kind of line it is, whether it is built). Conversation lives beside the
-// plan, not in it: comment threads pinned to plan lines, in comments.json.
+// Conversation lives beside the plan, not in it: comment threads pinned to plan lines.
 
 export class Session extends EventEmitter {
-  cwd: string;
-  planPath: string;
-  name: string;
-  dir: string;
-  rulesPath: string;
+  store: PlanStore;
   agent: Agent;
   clock: Clock;
-  log!: TurnLog;
-  working: boolean;
-  activity: string[];
-  turn!: number;
-  lines!: Line[];
-  boxes!: Box[];
-  threads!: Thread[];
-  symbols!: Symbol[];
-  suggestions!: string[];
-  last!: LastTurn | null;
-  base!: Base;
-  history!: HistoryEntry[];
-  settings!: Settings;
+  log: TurnLog;
+  working = false;
+  activity: string[] = [];
+  turn: number;
+  lines: Line[];
+  boxes: Box[];
+  threads: Thread[];
+  symbols: Symbol[];
+  suggestions: string[];
+  last: LastTurn | null;
+  base: Base;
+  history: HistoryEntry[];
+  settings: Settings;
 
-  constructor({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }) {
+  constructor({ store, saved, log, agent, clock }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; clock: Clock }) {
     super();
-    this.cwd = realpathSync(resolve(cwd));
-    this.planPath = resolve(this.cwd, planFile);
-    this.name = basename(this.planPath).replace(/\.[^.]+$/, "");
-    this.dir = join(dirname(this.planPath), ".underpaint", this.name);
-    this.rulesPath = join(dirname(this.planPath), ".underpaint", "rules.md");
+    this.store = store;
+    this.log = log;
     this.agent = agent;
     this.clock = clock;
-    this.working = false;
-    this.activity = [];
-    this.load(commit);
-  }
-
-  // ---------- disk ----------
-
-  load(commit: boolean) {
-    mkdirSync(join(this.dir, "boxes"), { recursive: true });
-    // The plan and boxes are shared in git; the editor's bookkeeping stays local.
-    const ignore = join(this.dir, ".gitignore");
-    if (!existsSync(ignore)) writeFileSync(ignore, "state.json\n");
-    if (!existsSync(this.rulesPath)) copyFileSync(join(AGENT_DIR, "rules.md"), this.rulesPath);
-    const statePath = join(this.dir, "state.json");
-    const s = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {};
-    this.turn = s.turn || 1;
-    this.lines = s.lines || [];
-    this.boxes = s.boxes || [];
-    this.symbols = s.symbols || [];
-    this.suggestions = s.suggestions || [];
-    this.last = s.last || null;
-    this.base = s.base || { lines: [], boxes: {} };
-    this.history = s.history || [];
-    this.settings = { model: "", effort: "", ...s.settings };
-    const commentsPath = join(this.dir, "comments.json");
-    this.threads = existsSync(commentsPath) ? JSON.parse(readFileSync(commentsPath, "utf8")) : [];
-    // The plan file and the folder beside it are the editor's own files.
-    this.log = turnLog({ cwd: this.cwd, ownFiles: [this.planPath, dirname(this.dir)], commit, saved: { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase } });
+    this.turn = saved.turn;
+    this.lines = saved.lines;
+    this.boxes = saved.boxes;
+    this.threads = saved.threads;
+    this.symbols = saved.symbols;
+    this.suggestions = saved.suggestions;
+    this.last = saved.last;
+    this.base = saved.base;
+    this.history = saved.history;
+    this.settings = saved.settings;
 
     // The files are the source of truth for text. Someone may have edited them in
     // another editor; carry what we know across that edit.
-    const text = existsSync(this.planPath) ? readFileSync(this.planPath, "utf8") : "";
-    this.applyText(text.replace(/\n$/, ""));
-    const onDisk: Record<string, string> = {};
-    for (const f of readdirSync(join(this.dir, "boxes"))) {
-      if (f.endsWith(".plan")) onDisk[f.slice(0, -5)] = readFileSync(join(this.dir, "boxes", f), "utf8").replace(/\n$/, "");
-    }
-    this.boxes = this.boxes.filter((b) => b.name in onDisk);
-    for (const [name, body] of Object.entries(onDisk)) {
+    this.applyText(saved.planText);
+    this.boxes = this.boxes.filter((b) => b.name in saved.boxTexts);
+    for (const name of Object.keys(saved.boxTexts)) {
       if (!this.boxes.find((b) => b.name === name)) this.boxes.push({ name, lines: [], status: "stale", uses: [] });
     }
-    this.applyBoxes(onDisk);
+    this.applyBoxes(saved.boxTexts);
+  }
+
+  get name() {
+    return this.store.name;
   }
 
   addThread(line: number, by: Thread["by"], text: string): Thread {
@@ -117,16 +84,8 @@ export class Session extends EventEmitter {
   }
 
   save() {
-    mkdirSync(join(this.dir, "boxes"), { recursive: true });
-    writeFileSync(this.planPath, joinLines(this.lines) + "\n");
-    const boxDir = join(this.dir, "boxes");
-    const keep = new Set(this.boxes.map((b) => `${b.name}.plan`));
-    for (const f of readdirSync(boxDir)) if (!keep.has(f)) rmSync(join(boxDir, f));
-    for (const b of this.boxes) writeFileSync(join(boxDir, `${b.name}.plan`), joinLines(b.lines) + "\n");
-    const { turn, lines, boxes, symbols, suggestions, last, base, history, settings } = this;
-    const { baseCommit, dirtyBase } = this.log.saved();
-    writeFileSync(join(this.dir, "state.json"), JSON.stringify({ turn, lines, boxes, symbols, suggestions, last, base, baseCommit, history, dirtyBase, settings }, null, 1));
-    writeFileSync(join(this.dir, "comments.json"), JSON.stringify(this.threads, null, 1) + "\n");
+    const { turn, lines, boxes, threads, symbols, suggestions, last, base, history, settings } = this;
+    this.store.save({ turn, lines, boxes, threads, symbols, suggestions, last, base, history, settings, log: this.log.saved() });
   }
 
   // ---------- what the browser sees ----------
@@ -134,7 +93,7 @@ export class Session extends EventEmitter {
   snapshot(): Snapshot {
     return {
       name: this.name,
-      planPath: relative(this.cwd, this.planPath),
+      planPath: this.store.displayPath,
       agent: this.agent.name,
       choices: this.agent.choices || { models: [], efforts: [] },
       settings: this.settings,
@@ -270,10 +229,10 @@ export class Session extends EventEmitter {
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     const prompt = buildPrompt({
       skill: readAgentFile("SKILL.md"),
-      rules: readFileSync(this.rulesPath, "utf8"),
+      rules: this.store.rules(),
       turn: this.turn,
-      planPath: relative(this.cwd, this.planPath),
-      cwd: this.cwd,
+      planPath: this.store.displayPath,
+      cwd: this.store.cwd,
       lines: this.lines,
       boxes: this.boxes,
       threads: this.threads,
@@ -293,7 +252,7 @@ export class Session extends EventEmitter {
     try {
       const out = await this.agent.run({
         prompt,
-        cwd: this.cwd,
+        cwd: this.store.cwd,
         ...this.settings,
         onActivity: (a: string) => {
           this.activity.push(a);

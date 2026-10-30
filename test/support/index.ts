@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeAgent } from "../../src/agents.ts";
-import { Session } from "../../src/session.ts";
+import { openSession } from "../../src/session.ts";
 import type { Agent } from "../../src/types.ts";
 import type { Clock } from "../../src/clock.ts";
 
@@ -45,7 +45,7 @@ export function recording(agent: Agent): Agent & { prompts: string[] } {
 
 export function open(dir: string, { planFile = "weekly.plan", clock = testClock(), agent = scripted(clock), commit = true }: { planFile?: string; clock?: Clock; agent?: Agent; commit?: boolean } = {}) {
   const a = recording(agent);
-  const session = new Session({ cwd: dir, planFile, agent: a, clock, commit });
+  const session = openSession({ cwd: dir, planFile, agent: a, clock, commit });
   return { session, view: () => session.snapshot(), prompts: a.prompts };
 }
 

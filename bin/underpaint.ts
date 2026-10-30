@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { makeAgent, defaultAgent } from "../src/agents.ts";
 import { AGENT_DIR } from "../src/paths.ts";
 import { systemClock } from "../src/clock.ts";
-import { Session } from "../src/session.ts";
+import { openSession } from "../src/session.ts";
 import { startServer } from "../src/server.ts";
 
 const HELP = `underpaint: build software by taking turns on one pseudocode file
@@ -60,11 +60,11 @@ if (positionals[0] === "install-skill") {
 
 const agentName = values.agent || defaultAgent();
 const agent = makeAgent(agentName, { args: values["agent-arg"] || [], script: values.script && resolve(values.script), sleep: systemClock.sleep });
-const session = new Session({ cwd: process.cwd(), planFile: positionals[0] || "underpaint.plan", agent, clock: systemClock, commit: !values["no-commit"] });
+const session = openSession({ cwd: process.cwd(), planFile: positionals[0] || "underpaint.plan", agent, clock: systemClock, commit: !values["no-commit"] });
 session.save();
 const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
 console.log(`Underpaint is open at ${url}`);
-console.log(`Plan: ${session.planPath}  Agent: ${agent.name}${session.log.commits ? "  Commits: one per agent turn" : ""}`);
+console.log(`Plan: ${session.store.planPath}  Agent: ${agent.name}${session.log.commits ? "  Commits: one per agent turn" : ""}`);
 if (values.open) {
   const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   spawn(opener, [url], { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
