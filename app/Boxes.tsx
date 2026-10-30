@@ -187,7 +187,8 @@ export function Boxes(props: Props) {
                 onBlur={() => finish(b.name)}
                 onKeyDown={(e) => {
                   if (isPassKey(e)) { e.preventDefault(); props.onPass(); }
-                  if (e.key === "Escape") setEditing(null);
+                  // Esc leaves the box like clicking away does, keeping what was typed.
+                  if (e.key === "Escape") finish(b.name);
                 }}
               />
             </Show>

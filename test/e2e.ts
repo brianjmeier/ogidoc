@@ -174,6 +174,12 @@ try {
   await shot("08-moving-into-boxes");
   await waitTurn(/your turn/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-move"), null, { timeout: 5000 });
+  const afterTurn = await page.inputValue(TA);
+  await page.focus(TA);
+  await page.keyboard.press("ControlOrMeta+z");
+  await page.waitForTimeout(600);
+  assert.equal(await page.inputValue(TA), afterTurn, "the browser's undo doesn't reach back into the agent's turn");
+  assert.equal((await page.evaluate(() => fetch("/api/state").then((r) => r.json()))).lines.length, afterTurn.split("\n").length);
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
   const thread = JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"))[0];
   assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["h", "a"], "the comment reached the agent and it answered");
@@ -197,8 +203,10 @@ try {
   await page.click('.canvas .box[data-name="summarizeWeek"] .bb');
   const boxTa = await page.waitForSelector(".canvas textarea.box-edit");
   await boxTa.evaluate((el) => { const ta = el as HTMLTextAreaElement; ta.value = ta.value.replace("keep 3", "keep 2"); });
-  await page.click('.decide button:has-text("Reject")');
+  await page.keyboard.press("Escape");
   await page.waitForFunction(() => document.querySelector('.canvas .box[data-name="summarizeWeek"]')?.classList.contains("stale"), null, { timeout: 5000 });
+  assert.match(await page.textContent('.canvas .box[data-name="summarizeWeek"]') ?? "", /keep 2/, "Esc keeps what was typed in the box");
+  await page.click('.decide button:has-text("Reject")');
   assert.equal((await planText()).length, 2);
   await page.waitForTimeout(600);
   await shot("11-disagree-in-box");

@@ -237,12 +237,19 @@ export function Editor(props: Props) {
     return new Promise((resolve) => setTimeout(() => { setAnim(null); resolve(); }, k * step + 1150));
   }
 
+  // Text that comes from the server starts a fresh textarea: the browser's own undo
+  // would otherwise take the person back into the agent's turn and send that as an edit.
+  const [copy, setCopy] = createSignal(1);
   function adopt(next: Shown) {
     setLines(next.lines);
     setChoices(next.choices ?? []);
     accepted.clear();
     const text = joinLines(next.lines);
-    if (ta.value !== text) ta.value = text;
+    if (ta.value === text) return;
+    const focused = document.activeElement === ta;
+    setCopy((k) => k + 1);
+    ta.value = text;
+    if (focused) ta.focus({ preventScroll: true });
   }
 
   props.ref({
@@ -333,23 +340,27 @@ export function Editor(props: Props) {
             )}
           </Index>
         </div>
-        <textarea
-          ref={ta}
-          spellcheck={false}
-          autocapitalize="off"
-          autocomplete="off"
-          aria-label="Plan text"
-          data-gramm="false"
-          data-gramm_editor="false"
-          data-enable-grammarly="false"
-          readOnly={!props.editable}
-          style={{ visibility: anim() ? "hidden" : "visible" }}
-          onInput={onInput}
-          onKeyDown={onKeyDown}
-          onKeyUp={readCaret}
-          onClick={readCaret}
-          onSelect={readCaret}
-        />
+        <Show when={copy()} keyed>
+          {(_copy) => (
+            <textarea
+              ref={ta}
+              spellcheck={false}
+              autocapitalize="off"
+              autocomplete="off"
+              aria-label="Plan text"
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
+              readOnly={!props.editable}
+              style={{ visibility: anim() ? "hidden" : "visible" }}
+              onInput={onInput}
+              onKeyDown={onKeyDown}
+              onKeyUp={readCaret}
+              onClick={readCaret}
+              onSelect={readCaret}
+            />
+          )}
+        </Show>
       </div>
     </div>
   );
