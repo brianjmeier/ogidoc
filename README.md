@@ -35,8 +35,10 @@ To see it without an agent: `npm run demo` (a scripted agent plays four turns).
 
 `underpaint install-skill [claude|pi|both]` copies the skill into `~/.claude/skills`
 or `~/.pi/agent/skills`, so an agent in a normal session knows the tool and how to start
-it. In this monorepo it is already linked from `.claude/skills/underpaint` and
-`pi/agent/skills/underpaint`.
+it.
+
+Underpaint currently lives in the michiadas monorepo and is built to move out on its
+own; see [PORTING.md](PORTING.md).
 
 ## How a session goes
 
@@ -102,6 +104,7 @@ design/               the design walkthrough this was built from
 ## Tests
 
 ```bash
+npm ci                # only installs Playwright, for the browser test
 npm test              # unit tests: diff, prompt, session with git, both adapters
 npm run test:e2e      # the editor in Chromium against the scripted agent
 npm run test:real     # one real Claude Code turn in a temp repo (needs `claude`)

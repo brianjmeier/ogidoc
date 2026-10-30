@@ -6,7 +6,14 @@
   "bin": {
     "underpaint": "bin/underpaint.js"
   },
-  "files": ["bin", "src", "web", "agent"],
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "agent",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -17,5 +24,16 @@
     "test:e2e": "node test/e2e.mjs",
     "test:real": "node test/real-agent.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "agent",
+    "claude-code",
+    "pi",
+    "pseudocode",
+    "tdd",
+    "pair-programming"
+  ],
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
 }
