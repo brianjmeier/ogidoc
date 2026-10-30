@@ -4,7 +4,7 @@ import { joinLines } from "./shared/diff.ts";
 import { AGENT_DIR } from "./paths.ts";
 import type { LogState } from "./turn-log.ts";
 import type { Base } from "./plan.ts";
-import type { Box, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
+import type { Box, Choice, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
 
 // Where a plan lives on disk and how it is saved. Everything stays plain text beside the
 // code: the plan file itself, one file per box, comment threads in comments.json, and
@@ -24,6 +24,7 @@ export interface SessionState {
   lines: Line[];
   boxes: Box[];
   threads: Thread[];
+  choices: Choice[];
   symbols: Symbol[];
   suggestions: string[];
   last: LastTurn | null;
@@ -90,12 +91,14 @@ export function planStore(cwd: string, planFile: string) {
         lines: s.lines || [],
         boxes: s.boxes || [],
         threads: readJson("comments.json") ?? [],
+        choices: s.choices || [],
         symbols: s.symbols || [],
         suggestions: s.suggestions || [],
         last: s.last || null,
         base: s.base || { lines: [], boxes: {} },
-        // Sessions saved before history had its own file kept it in state.json.
-        history: readJson("history.json") ?? s.history ?? [],
+        // Sessions saved before history had its own file kept it in state.json, and turns
+        // saved before choices existed had none.
+        history: (readJson("history.json") ?? s.history ?? []).map((h: Omit<HistoryEntry, "choices"> & Partial<HistoryEntry>) => ({ ...h, choices: h.choices ?? [] })),
         settings: { model: "", effort: "", ...s.settings },
       };
       return {

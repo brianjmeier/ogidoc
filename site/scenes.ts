@@ -15,7 +15,7 @@ export type Frame =
   | { kind: "type"; plan: Plan }
   | { kind: "turn"; plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges; last: LastTurn };
 
-const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], comments: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
+const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], choices: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
 
 export function frames(start: Plan, beats: Beat[]): Frame[] {
   const out: Frame[] = [];
@@ -67,7 +67,7 @@ const built = (text: string): Line => ({ text, by: "h", kind: null, status: "bui
 
 // if (coding is slow but fun): you can prompt with code.
 export const promptWithCode = {
-  start: { lines: [built("weekly reflection"), built("  every sunday")], boxes: [], threads: [] } satisfies Plan,
+  start: { lines: [built("weekly reflection"), built("  every sunday")], boxes: [], threads: [], choices: [] } satisfies Plan,
   beats: [
     { person: "weekly reflection\n  every sunday\n    look at my week, tell me what i felt most" },
     {

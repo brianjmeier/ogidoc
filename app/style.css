@@ -132,6 +132,17 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .row.h .ln { color: var(--human); }
 .ln.k-example .tx { font-style: italic; }
 .chip { font: 500 10.5px/1 var(--font-ui); padding: 3px 6px; border-radius: 4px; margin-left: 10px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; font-style: normal; font-weight: 500; }
+/* A choice: a block of lines with other ways is bracketed, and its first line switches
+   between them, above the textarea. */
+.row.in-choice:not(.choice-first.choice-last) .ln::before { content: ""; position: absolute; left: 2px; top: 0; bottom: 0; border-left: 2px solid var(--agent); opacity: 0.55; }
+.row.choice-first .ln::before { top: 4px; border-top: 2px solid var(--agent); width: 4px; border-top-left-radius: 3px; }
+.row.choice-last .ln::before { bottom: 4px; border-bottom: 2px solid var(--agent); width: 4px; border-bottom-left-radius: 3px; }
+.ways { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 2px; margin-left: 12px; vertical-align: top; height: var(--lh); font: 500 11.5px/1 var(--font-ui); color: var(--muted); font-style: normal; }
+.ways button { all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--agent); font-size: 14px; }
+.ways button:hover:not(:disabled) { background: var(--agent-tint); border-color: var(--agent); }
+.ways button:disabled { cursor: default; opacity: 0.5; }
+.ways button:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
+.ways span { padding: 0 5px; }
 /* Accept or reject the agent's proposal, at the end of its line, above the textarea. */
 .decide { position: relative; z-index: 2; display: inline-flex; gap: 4px; margin-left: 12px; vertical-align: top; height: var(--lh); align-items: center; }
 .decide button { all: unset; cursor: pointer; font: 500 11.5px/1 var(--font-ui); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }

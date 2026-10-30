@@ -2,8 +2,8 @@
 
 Build software with an agent by taking turns on one pseudocode file. There is no
 chat. You write the idea the way it sits in your head; the agent edits the same file
-in place, pins its questions to the line they're about as comments, and builds the real
-code underneath, test first, in small steps. Each line shows whether it is built, so
+in place, builds its best pick where a decision matters and shows the other ways right
+there, and builds the real code underneath, test first, in small steps. Each line shows whether it is built, so
 when the plan looks done, the software is done.
 
 Painters block in a rough layer called the underpainting and keep painting until it
@@ -55,22 +55,26 @@ tool and how to start it.
 - **No syntax.** Write any pseudocode. The agent follows your style and tells the
   editor what each line is: a proposal (accept ✓ or reject ✕ in the margin), an
   example (it becomes a test), or a real name from the codebase (underlined).
-- **Comments, not chat.** When the agent can't go on without you, it pins a comment
-  to the line it's about and the thread opens when the pen comes back. Reply in the
-  thread (`⌘↵` replies and passes the pen); the agent folds the answer into the plan
-  and resolves it. Click a line number to comment on a line yourself.
-- **Building underneath.** The agent builds what it understands in TDD baby steps and
-  stops to ask where it would have to guess. Margin marks say what's built, what needs
-  a build, and what waits on a comment. The Underneath drawer lists the steps, files
+- **Options, not questions.** The agent decides the small things itself. Where a
+  decision is expensive to undo or you'd notice it (a dependency, a data model, a
+  public interface, behavior), it builds its pick and offers the other ways on the
+  same lines: `‹ 1 of 2 ›` at the end of the line, or `⌥[` / `⌥]` with the caret in
+  it, swaps them in place. Pass the pen on another way and the agent builds that one.
+- **Comments are yours.** Click a line number to comment on a line. The agent answers
+  in the thread (`⌘↵` sends and passes the pen), folds the answer into the plan and
+  resolves it.
+- **Building underneath.** The agent builds what it understands in TDD baby steps.
+  Margin marks say what's built, what needs a build, and what waits on a comment. The Underneath drawer lists the steps, files
   and checks of the last turn.
 - **Boxes.** When a piece is settled, the agent moves it into a named box on the
   canvas and leaves a reference in the plan, so the plan stays short. Click a box to
   edit it; that's how you disagree with an abstraction.
 - **Autocomplete.** On your turn the agent's guesses about your next lines show as
   ghost text. Tab accepts.
-- **Done means done.** No open comments, every line and box built, checks green.
+- **Done means done.** No open comments or options, every line and box built, checks
+  green.
 - **One commit per agent turn**, code and plan together. "Undo agent turn" reverts it.
-  If code changes outside a turn, the agent asks about it instead of overwriting.
+  Code you change outside a turn is yours: the agent builds on it.
 
 ## Files
 
@@ -89,9 +93,9 @@ feature.plan                         the plan
 - `agent/SKILL.md` teaches the agent what Underpaint is: the shared plan, the pen,
   building underneath, boxes, honest build status.
 - `agent/rules.md` is the default for `.underpaint/rules.md`: how big turns are, what
-  to do at a gap, what earns a built mark.
+  to decide alone and what to offer as options, what earns a built mark.
 - `agent/turn.md` is the prompt for one turn: the skill, the rules, the plan, the open
-  comment threads, what the person changed, drift, and the JSON reply the editor
+  comment threads and options, what the person changed, drift, and the JSON reply the editor
   expects.
 
 Claude Code runs as `claude -p --output-format stream-json` with edit and shell tools
@@ -103,10 +107,15 @@ activity.
 
 ```
 bin/underpaint.ts     the CLI
-src/session.ts        turns, line metadata, boxes, comment threads, commits, drift, undo
+src/session.ts        one session: the person's actions, the agent's turn, undo
+src/plan.ts           the plan's lines, boxes, threads and choices through each edit
+src/threads.ts        comment threads pinned to plan lines
+src/choices.ts        the other ways the agent offered, cycled in place
+src/plan-store.ts     where a plan lives on disk and how it is saved
+src/turn-log.ts       one commit per turn, drift, revert (git, or nothing)
 src/agents.ts         Claude Code, pi and mock adapters
 src/prompt.ts         builds the turn prompt, parses the reply
-src/git.ts            the few git operations a turn needs
+src/server.ts         the local HTTP server and its event stream
 src/types.ts          shapes shared by the server and the editor
 src/shared/diff.ts    line diff used by server and browser
 app/                  the editor (Solid + Kobalte, built by Vite into dist/web)

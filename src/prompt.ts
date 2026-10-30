@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./paths.ts";
-import type { Box, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
+import type { Box, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
 
 export function readAgentFile(name: string): string {
   return readFileSync(join(AGENT_DIR, name), "utf8");
@@ -16,12 +16,13 @@ interface PromptInput {
   lines: Line[];
   boxes: Box[];
   threads: Thread[];
+  choices: Choice[];
   humanDiff: HumanDiff;
   drift: string[];
   last: LastTurn | null;
 }
 
-export function buildPrompt({ skill, rules, turn, planPath, cwd, lines, boxes, threads, humanDiff, drift, last }: PromptInput): string {
+export function buildPrompt({ skill, rules, turn, planPath, cwd, lines, boxes, threads, choices, humanDiff, drift, last }: PromptInput): string {
   const vars: Record<string, string> = {
     skill: skill.replace(/^---[\s\S]*?---\n/, "").trim(),
     rules: rules.trim(),
@@ -33,6 +34,7 @@ export function buildPrompt({ skill, rules, turn, planPath, cwd, lines, boxes, t
       ? jsonLines(boxes.map(({ name, lines: body, status, uses }) => ({ name, lines: body.map((l) => l.text), status, uses })))
       : "None yet.",
     comments: describeThreads(threads, lines),
+    choices: describeChoices(choices),
     humanDiff: describeHumanDiff(humanDiff, turn),
     drift: drift.length
       ? `# Code that changed outside a turn\n\nThese files changed since your last turn, and you didn't change them:\n\n${drift.map((f) => `- ${f}`).join("\n")}`
@@ -60,6 +62,16 @@ function describeThreads(threads: Thread[], lines: Line[]): string {
   if (open.length) out.push("```\n" + open.map(show).join("\n\n") + "\n```");
   if (closed.length) out.push(`The person resolved ${closed.map((t) => t.id).join(", ")}:\n\n` + "```\n" + closed.map(show).join("\n\n") + "\n```");
   return out.join("\n\n");
+}
+
+// The choices still open, each option's lines, and which one the plan shows now.
+function describeChoices(choices: Choice[]): string {
+  if (!choices.length) return "None open.";
+  const show = (c: Choice) => [
+    `${c.id} on line ${c.line}: ${c.current ? `the person switched to option ${c.current + 1}` : "the person kept your pick"}`,
+    ...c.options.map((o, k) => `  option ${k + 1}${k === c.current ? ", in the plan now" : ""}: ${JSON.stringify(o.map((l) => l.text))}`),
+  ].join("\n");
+  return "```\n" + choices.map(show).join("\n\n") + "\n```";
 }
 
 function describeHumanDiff(d: HumanDiff, turn: number): string {
@@ -120,9 +132,13 @@ function normalize(o: any): Reply {
         status: STATUSES.has(b.status) ? b.status : "stale",
         uses: arr(b.uses).filter((u) => typeof u === "string"),
       })),
-    comments: arr(o.comments)
-      .filter((c) => c && Number.isInteger(c.line) && str(c.text).trim())
-      .map((c) => ({ line: c.line, text: str(c.text).trim() })),
+    choices: arr(o.choices)
+      .filter((c) => c && Number.isInteger(c.line) && Array.isArray(c.options))
+      .map((c) => ({
+        ...(str(c.id) && { id: str(c.id) }),
+        line: c.line,
+        options: arr(c.options).map((opt) => arr(opt).map((l) => str(l).replace(/\s+$/, ""))),
+      })),
     replies: arr(o.replies)
       .filter((r) => r && str(r.thread))
       .map((r) => ({ thread: str(r.thread), text: str(r.text).trim(), resolve: r.resolve === true })),

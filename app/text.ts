@@ -8,6 +8,7 @@ export const STATUS_MARK: Record<Status, string> = { built: "✓", stale: "◌",
 
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const passKey = isMac ? "⌘" : "Ctrl";
+export const altKey = isMac ? "⌥" : "Alt+";
 // ⌘/Ctrl Enter passes the pen from anywhere.
 export const isPassKey = (e: KeyboardEvent) => e.key === "Enter" && (e.metaKey || e.ctrlKey);
 

@@ -28,6 +28,17 @@ export function App() {
     return post("/api/edit", { text: editor.text(), accepted: editor.takeAccepted() });
   }
 
+  // An edit still waiting to be sent goes first, as it was before the switch, so the
+  // server swaps the same lines the person saw.
+  async function choose(choice: string, option: number, before: string) {
+    if (editTimer) {
+      clearTimeout(editTimer);
+      editTimer = undefined;
+      await post("/api/edit", { text: before, accepted: editor.takeAccepted() });
+    }
+    await post("/api/choose", { choice, option });
+  }
+
   async function pass() {
     const s = state();
     if (!s || s.working) return;
@@ -59,7 +70,7 @@ export function App() {
       // when the turn moved (an undo) or an agent turn ended without changes (an error).
       editor.adopt(next);
     }
-    // A question from the agent opens by itself when the pen comes back.
+    // The agent's answer in a thread it left open shows by itself when the pen comes back.
     if (agentFinished && !next.last?.error) {
       const first = next.threads.find(waitingOnYou);
       if (first) setOpenId(first.id);
@@ -106,6 +117,7 @@ export function App() {
                   working={s().working}
                   threads={s().threads}
                   onEdit={() => { clearTimeout(editTimer); editTimer = setTimeout(sendEdit, 400); }}
+                  onChoose={choose}
                   onPass={pass}
                   onHint={setHint}
                 />

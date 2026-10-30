@@ -33,10 +33,10 @@ export function TopBar(props: Props) {
       <span class="brand">Underpaint</span>
       <span class="file">{props.state.planPath} · {props.state.agent}</span>
       <span class="spacer" />
-      <Show when={props.state.choices.models.length}>
+      <Show when={props.state.settingOptions.models.length}>
         <Model state={props.state} />
       </Show>
-      <Show when={props.state.choices.efforts.length}>
+      <Show when={props.state.settingOptions.efforts.length}>
         <Effort state={props.state} />
       </Show>
       <Show when={props.state.canUndo}>
@@ -60,13 +60,13 @@ const label = (v: string) => LABEL[v] ?? v.charAt(0).toUpperCase() + v.slice(1);
 // model name set elsewhere still shows, so picking never loses it.
 function Model(props: { state: Snapshot }) {
   const current = () => props.state.settings.model;
-  const options = createMemo(() => [...new Set([DEFAULT, ...props.state.choices.models, ...(current() ? [current()] : [])])]);
+  const options = createMemo(() => [...new Set([DEFAULT, ...props.state.settingOptions.models, ...(current() ? [current()] : [])])]);
   return <Picker name="model" state={props.state} options={options()} value={current()} />;
 }
 
 // How hard the next turn thinks, in the agent CLI's own levels.
 function Effort(props: { state: Snapshot }) {
-  const efforts = createMemo(() => [DEFAULT, ...props.state.choices.efforts]);
+  const efforts = createMemo(() => [DEFAULT, ...props.state.settingOptions.efforts]);
   return <Picker name="effort" state={props.state} options={efforts()} value={props.state.settings.effort} />;
 }
 

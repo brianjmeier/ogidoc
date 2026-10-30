@@ -38,7 +38,7 @@ export function repo() {
 }
 
 // An agent for one test: it answers each turn with `run`.
-export const fakeAgent = (name: string, run: Agent["run"]): Agent => ({ name, choices: { models: [], efforts: [] }, acceptsModel: () => true, run });
+export const fakeAgent = (name: string, run: Agent["run"]): Agent => ({ name, settingOptions: { models: [], efforts: [] }, acceptsModel: () => true, run });
 
 // An agent that remembers every prompt it was given.
 export function recording(agent: Agent): Agent & { prompts: string[] } {

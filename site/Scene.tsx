@@ -69,7 +69,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
         <span class={`pen ${pen()}`}><i class="dot" />{pen() === "a" ? "agent's pen · writing" : "your pen"}</span>
       </div>
       <div class="editor">
-        <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onPass={() => {}} onHint={() => {}} />
+        <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onPass={() => {}} onHint={() => {}} />
       </div>
       <div class="under-slot">
         <Show when={last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>

@@ -6,7 +6,7 @@ import type { AnimationOp } from "../src/types.ts";
 import { makeAgent } from "../src/agents.ts";
 import { PLAN, emptyDir, fakeAgent, open, repo, testClock, texts } from "./support/index.ts";
 
-test("a full session: ask, build, move into boxes, disagree in a box, done, undo", async () => {
+test("a full session: build with a choice, comment, move into boxes, disagree in a box, done, undo", async () => {
   const { dir, log } = repo();
   const { session: s, view, prompts } = open(dir);
   const events: { animation?: AnimationOp[] }[] = [];
@@ -14,26 +14,30 @@ test("a full session: ask, build, move into boxes, disagree in a box, done, undo
 
   await s.pass({ text: PLAN });
   assert.equal(view().turn, 2);
-  const [q] = view().threads;
-  assert.equal(q.by, "a");
-  assert.equal(view().lines[q.line].text, "  every sunday", "the question is pinned to the line it is about");
-  assert.ok(!texts(view().lines).some((t) => t.includes("whose timezone")), "the question is not in the plan");
+  assert.deepEqual(view().threads, [], "the agent doesn't start threads");
+  const [c] = view().choices;
+  assert.equal(view().lines[c.line].text, "    in the browser's timezone", "the agent's pick is in the plan");
+  assert.equal(view().lines[c.line].status, "built");
+  assert.deepEqual(c.options.map(texts), [["    in the browser's timezone"], ["    in a timezone you set once"]]);
+  assert.ok(!view().lines.some((l) => l.status === "blocked"), "a choice doesn't hold anything up");
   assert.equal(view().lines[0].by, "h");
   assert.ok(existsSync(join(dir, "src/summarize.js")), "the agent's code is on disk");
-  assert.match(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"), /sunday in whose timezone/);
   assert.equal(log()[0], "underpaint: turn 1 on weekly");
   assert.equal(view().done, false);
   const anim = events.find((e) => e.animation)!.animation!;
   assert.ok(anim.some((o) => o.op === "add"));
 
-  // The person replies in the thread, accepts the proposal, and passes.
-  s.reply({ thread: q.id, text: "browser timezone is fine, it's only a card" });
+  // The person keeps the pick, asks about a line, accepts the proposal, and passes.
+  const card = s.comment({ line: 0, text: "does this fit on a phone?" });
   const text = texts(view().lines);
   const proposal = text.findIndex((t) => t.includes("7-day strip"));
   await s.pass({ text: text.join("\n"), accepted: [proposal] });
-  assert.match(prompts[1], /person: browser timezone is fine/, "the agent reads the reply");
-  assert.equal(view().threads[0].resolved, true, "the agent resolved the thread once it built the answer");
-  assert.equal(view().threads[0].messages.at(-1)!.by, "a");
+  assert.match(prompts[1], /c1 on line 2: the person kept your pick/, "the agent hears the choice was kept");
+  assert.match(prompts[1], /person: does this fit on a phone\?/, "the agent reads the comment");
+  const thread = view().threads.find((t) => t.id === card.id)!;
+  assert.equal(thread.resolved, true, "the agent answered and resolved it");
+  assert.equal(thread.messages.at(-1)!.by, "a");
+  assert.deepEqual(view().choices, [], "a kept choice is settled");
   assert.equal(view().boxes.length, 4);
   const moved = events.at(-1)!.animation!.filter((o) => o.op === "move");
   assert.ok(moved.length >= 6, `expected moved lines, got ${moved.length}`);
@@ -51,11 +55,61 @@ test("a full session: ask, build, move into boxes, disagree in a box, done, undo
 
   s.undo();
   s.undo();
-  assert.equal(view().threads[0].resolved, false, "undo brings back the open thread");
-  assert.equal(view().threads[0].messages.length, 2, "and the person's reply, which came before that turn");
+  assert.equal(view().choices.length, 1, "undo brings back the open choice");
+  assert.equal(view().threads[0].resolved, false, "and the open thread");
+  assert.equal(view().threads[0].messages.length, 1, "with the person's comment, which came before that turn");
   assert.equal(view().turn, 2);
   assert.equal(view().done, false);
   assert.match(log()[0], /undo turn 2/);
+});
+
+test("switching a choice swaps its lines, needs a build, and tells the agent; switching back is built again", async () => {
+  const { dir } = repo();
+  const { session: s, view, prompts } = open(dir);
+  await s.pass({ text: PLAN });
+  const [c] = view().choices;
+  s.choose({ choice: c.id, option: 1 });
+  assert.equal(view().lines[c.line].text, "    in a timezone you set once");
+  assert.equal(view().lines[c.line].status, "stale");
+  assert.equal(view().choices[0].current, 1);
+  assert.equal(view().done, false);
+  s.choose({ choice: c.id, option: 0 });
+  assert.equal(view().lines[c.line].status, "built", "the agent's pick keeps its built mark");
+  s.choose({ choice: c.id, option: 1 });
+  assert.throws(() => s.choose({ choice: c.id, option: 2 }), /no option 2/);
+  await s.pass();
+  assert.match(prompts[1], /c1 on line 2: the person switched to option 2\n  option 1: \["    in the browser's timezone"\]\n  option 2, in the plan now: \["    in a timezone you set once"\]/);
+});
+
+test("editing inside a choice updates that option; adding or deleting lines in it drops the choice", async () => {
+  const { dir } = repo();
+  const { session: s, view } = open(dir);
+  await s.pass({ text: PLAN });
+  const at = view().choices[0].line;
+  const edited = texts(view().lines).map((t, i) => (i === at ? "    in the browser's own timezone" : t));
+  s.edit({ text: ["a new first line", ...edited].join("\n") });
+  const [c] = view().choices;
+  assert.equal(c.line, at + 1, "the choice follows its lines");
+  assert.deepEqual(texts(c.options[0]), ["    in the browser's own timezone"]);
+  s.choose({ choice: c.id, option: 1 });
+  s.choose({ choice: c.id, option: 0 });
+  assert.equal(view().lines[c.line].text, "    in the browser's own timezone", "the person's edit is kept as that option");
+  s.edit({ text: texts(view().lines).filter((_, i) => i !== c.line).join("\n") });
+  assert.deepEqual(view().choices, []);
+});
+
+test("an agent can't start a comment thread, and a choice that doesn't match the plan is dropped", async () => {
+  const { dir } = repo();
+  const reply = {
+    plan: [{ text: "weekly reflection", status: "built" }, { text: "  every sunday", status: "built" }],
+    comments: [{ line: 0, text: "a question" }],
+    choices: [{ line: 1, options: [["  every monday"], ["  every friday"]] }, { line: 1, options: [["  every sunday"], ["  every saturday"]] }],
+    summary: "built",
+  };
+  const { session: s, view } = open(dir, { agent: fakeAgent("fake", async () => "```json\n" + JSON.stringify(reply) + "\n```") });
+  await s.pass({ text: "weekly reflection\n  every sunday" });
+  assert.deepEqual(view().threads, []);
+  assert.deepEqual(view().choices.map((c) => texts(c.options[1])), [["  every saturday"]]);
 });
 
 test("drift: code changed outside a turn reaches the next prompt", async () => {
@@ -87,7 +141,7 @@ test("a thread stays on its line while the person edits around it, and keeps the
   const { dir } = repo();
   const { session: s, view } = open(dir);
   await s.pass({ text: PLAN });
-  const [q] = view().threads;
+  const q = s.comment({ line: 1, text: "every sunday, or the first day of the week where I live?" });
   const lineOf = (id: string) => view().lines[view().threads.find((t) => t.id === id)!.line].text;
   s.edit({ text: ["a new first line", ...texts(view().lines)].join("\n") });
   assert.equal(lineOf(q.id), "  every sunday");

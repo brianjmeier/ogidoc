@@ -22,9 +22,13 @@ The boxes:
 
 {{boxes}}
 
-Comments on the plan. Line numbers count from 0 in the plan above:
+Comments the person left on the plan. Line numbers count from 0 in the plan above:
 
 {{comments}}
+
+Choices you offered that are still open. Line numbers count from 0 in the plan above:
+
+{{choices}}
 
 What the person changed since your last turn:
 
@@ -42,7 +46,7 @@ Nothing in it is optional. Use empty arrays when there is nothing to say.
 ```json
 {
   "plan": [{ "text": "the line, with its indentation", "kind": "proposal | example | null", "status": "built | stale | blocked | null" }],
-  "comments": [{ "line": 3, "text": "a question pinned to line 3 of the plan you return" }],
+  "choices": [{ "id": "c1", "line": 3, "options": [["your pick, as it is in the plan"], ["another way", "  can be a block"]] }],
   "replies": [{ "thread": "t1", "text": "your reply in that thread, or empty", "resolve": true }],
   "boxes": [{ "name": "summarizeWeek", "lines": ["settled line", "another"], "status": "built | stale | blocked", "uses": ["otherBoxName"] }],
   "symbols": [{ "name": "a real name from the codebase used in the plan", "where": "path/to/file.ts:12" }],
@@ -58,9 +62,13 @@ Nothing in it is optional. Use empty arrays when there is nothing to say.
 with an empty `text`. `boxes` is every box after your turn, not only the ones you
 touched. `status` is `null` for blank lines and proposals.
 
-`comments` start new threads; `line` counts from 0 in the `plan` you return. Reply in
-an open thread with `replies`, and set `resolve` when the thread is settled, which is
-usually once you have folded the answer into the plan. A thread you leave open stays
-pinned where it is.
+`choices` is every choice still open after your turn. `line` counts from 0 in the
+`plan` you return, and the first option is exactly the lines the plan has there, one
+string per line with its indentation. Keep an open choice's `id`; leave `id` out for a
+new one. A choice you leave out is settled.
+
+Reply in the person's threads with `replies`, and set `resolve` when the thread is
+settled, which is usually once you have folded the answer into the plan. A thread you
+leave open stays pinned where it is.
 `suggestions` power the person's autocomplete, so offer them only when you have a good
 guess about what comes next.

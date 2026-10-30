@@ -1,13 +1,16 @@
-import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "./shared/diff.ts";
+import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
-import type { AnimationOp, Box, BoxChanges, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
+import * as choices from "./choices.ts";
+import type { AnimationOp, Box, BoxChanges, Choice, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
-// the comment threads pinned to its lines. Every change returns a new plan.
+// the comment threads pinned to its lines, and the choices offered on them. Every change
+// returns a new plan.
 export interface Plan {
   lines: Line[];
   boxes: Box[];
   threads: Thread[];
+  choices: Choice[];
 }
 
 // The text the agent last saw, to tell it what the person changed since.
@@ -19,16 +22,17 @@ export interface Base {
 // The person's edits: new plan text, proposals they accepted, box bodies they changed.
 export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; accepted?: number[]; boxes?: Record<string, string> }): Plan {
   let { lines, threads: ts } = plan;
+  let ops: DiffOp[] = lines.map((_, i) => ({ op: "eq", a: i, b: i }));
   if (typeof text === "string") {
     const texts = splitLines(text);
-    const ops = diffLines(lines.map((l) => l.text), texts);
+    ops = diffLines(lines.map((l) => l.text), texts);
     ts = threads.move(ts, ops, lines.length);
     lines = carryMeta(lines, texts, { anyBuilt: anyBuilt(lines, plan.boxes), ops });
   }
   const take = new Set((accepted ?? []).filter((i) => lines[i]?.kind === "proposal"));
   const built = anyBuilt(lines, plan.boxes);
   if (take.size) lines = lines.map((l, i) => (take.has(i) ? acceptProposal(l, built) : l));
-  return { lines, threads: ts, boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
+  return { lines, threads: ts, choices: choices.follow(plan.choices, ops, lines), boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
 }
 
 // Box files are plain text, edited in the box pane or anywhere else.
@@ -65,25 +69,26 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
   return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes };
 }
 
-// Done is read off the plan: no open comment or proposal, every line built, checks green.
+// Done is read off the plan: no open comment, choice or proposal, every line built,
+// checks green.
 export function isDone(plan: Plan, last: LastTurn | null): boolean {
   if (!last || last.error) return false;
   const content = plan.lines.filter((l) => l.text.trim());
   if (!content.length) return false;
-  if (plan.threads.some((t) => !t.resolved)) return false;
+  if (plan.threads.some((t) => !t.resolved) || plan.choices.length) return false;
   if (plan.lines.some((l) => l.kind === "proposal")) return false;
   if (content.some((l) => l.status !== "built")) return false;
   if (plan.boxes.some((b) => b.status !== "built")) return false;
   return (last.checks || []).every((c) => c.ok);
 }
 
-// Take the agent's reply apart into lines, boxes and threads, keeping authorship, and
+// Take the agent's reply apart into lines, boxes, threads and choices, keeping authorship, and
 // describe the change so the browser can animate it.
 export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges } {
   const oldLines = plan.lines;
   const newTexts = reply.plan.map((l) => l.text);
   const ops = diffLines(oldLines.map((l) => l.text), newTexts);
-  const ts = threads.fromAgent(threads.move(plan.threads, ops, oldLines.length), reply, newTexts.length, turn);
+  const ts = threads.fromAgent(threads.move(plan.threads, ops, oldLines.length), reply, turn);
 
   const oldBoxes = new Map(plan.boxes.map((b) => [b.name, b]));
   const boxChanges: BoxChanges = {};
@@ -122,7 +127,7 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
       animation.push(o.op === "mod" ? { op: "mod", b: o.b, old: oldLines[o.a].text } : { op: "add", b: o.b });
     }
   }
-  return { plan: { lines, boxes, threads: ts }, animation, boxChanges };
+  return { plan: { lines, boxes, threads: ts, choices: choices.fromAgent(plan.choices, reply.choices, lines) }, animation, boxChanges };
 }
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");

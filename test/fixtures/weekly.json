@@ -1,17 +1,15 @@
 [
   {
     "delay": 900,
-    "activity": ["reading weekly.plan", "searching the code", "editing src/summarize.js", "running node --test"],
-    "writes": {
-      "src/summarize.js": "export function topFamilies(entries, keep = 3) {\n  const counts = new Map();\n  for (const e of entries) counts.set(e.family, (counts.get(e.family) || 0) + 1);\n  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, keep).map(([f]) => f);\n}\n",
-      "src/summarize.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert';\nimport { topFamilies } from './summarize.js';\ntest('ansiedad, ansiedad, alegria', () => {\n  assert.deepEqual(topFamilies([{ family: 'tristeza' }, { family: 'tristeza' }, { family: 'alegria' }]), ['tristeza', 'alegria']);\n});\n"
-    },
+    "activity": ["reading weekly.plan", "editing src/week.js", "editing src/summarize.js", "running node --test"],
+    "writes": { "src/summarize.js": "export function topFamilies(entries, keep = 3) {\n  const counts = new Map();\n  for (const e of entries) counts.set(e.family, (counts.get(e.family) || 0) + 1);\n  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, keep).map(([f]) => f);\n}\n", "src/summarize.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert';\nimport { topFamilies } from './summarize.js';\ntest('ansiedad, ansiedad, alegria', () => {\n  assert.deepEqual(topFamilies([{ family: 'tristeza' }, { family: 'tristeza' }, { family: 'alegria' }]), ['tristeza', 'alegria']);\n});\n", "src/week.js": "export function weekWindow(now, tz = Intl.DateTimeFormat().resolvedOptions().timeZone) {\n  return { start: now, end: now, prevStart: now, tz };\n}\n" },
     "reply": {
       "plan": [
         { "text": "weekly reflection", "kind": null, "status": null },
-        { "text": "  every sunday", "kind": null, "status": "blocked" },
-        { "text": "    look at my week", "kind": null, "status": "blocked" },
-        { "text": "      entries = journal_entries from the last 7 days", "kind": null, "status": "blocked" },
+        { "text": "  every sunday", "kind": null, "status": "built" },
+        { "text": "    in the browser's timezone", "kind": null, "status": "built" },
+        { "text": "    look at my week", "kind": null, "status": "built" },
+        { "text": "      entries = journal_entries from the last 7 days", "kind": null, "status": "built" },
         { "text": "    tell me what i felt most", "kind": null, "status": "built" },
         { "text": "      top = count entries per family, keep 3", "kind": null, "status": "built" },
         { "text": "      ansiedad, ansiedad, alegría → tristeza, alegría", "kind": "example", "status": "built" },
@@ -23,30 +21,28 @@
       ],
       "suggestions": ["      prev = the 7 days before"],
       "steps": [
-        { "kind": "red-green", "what": "top families, from your example" },
-        { "kind": "stop", "what": "loading the week needs the timezone" }
+        { "kind": "red-green", "what": "the week window, in the browser's timezone" },
+        { "kind": "red-green", "what": "top families, from your example" }
       ],
       "files": [
         { "op": "+", "path": "src/summarize.js", "why": "topFamilies" },
-        { "op": "+", "path": "src/summarize.test.js", "why": "your example as a test" }
+        { "op": "+", "path": "src/summarize.test.js", "why": "your example as a test" },
+        { "op": "+", "path": "src/week.js", "why": "weekWindow" }
       ],
       "checks": [
         { "name": "node --test", "ok": true }
       ],
-      "summary": "Built the family count from your example. Loading the week waits on the timezone.",
-      "comments": [
-        { "line": 1, "text": "sunday in whose timezone, yours or a fixed one?" }
-      ],
-      "replies": []
+      "summary": "Built the week window and the family count from your example. Sunday is in the browser's timezone; a timezone you set once is the other option.",
+      "replies": [],
+      "choices": [
+        { "line": 2, "options": [["    in the browser's timezone"], ["    in a timezone you set once"]] }
+      ]
     }
   },
   {
     "delay": 900,
-    "activity": ["reading weekly.plan", "editing src/week.js", "editing src/card.js", "running node --test"],
-    "writes": {
-      "src/week.js": "export function weekWindow(now, tz) {\n  return { start: now, end: now, prevStart: now, tz };\n}\n",
-      "src/card.js": "export const WeeklyCard = (summary) => `<section>${summary.top.join(', ')}</section>`;\n"
-    },
+    "activity": ["reading weekly.plan", "editing src/card.js", "running node --test"],
+    "writes": { "src/card.js": "export const WeeklyCard = (summary) => `<section>${summary.top.join(', ')}</section>`;\n" },
     "reply": {
       "plan": [
         { "text": "weekly reflection", "kind": null, "status": "built" },
@@ -54,7 +50,7 @@
         { "text": "  maybe a dismiss button that hides the card until next sunday", "kind": "proposal", "status": null }
       ],
       "boxes": [
-        { "name": "weekWindow", "lines": ["every sunday", "browser timezone is fine, it's only a card", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
+        { "name": "weekWindow", "lines": ["every sunday", "in the browser's timezone", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
         { "name": "loadWeek", "lines": ["look at my week", "entries = journal_entries from the last 7 days", "prev = the 7 days before"], "status": "built", "uses": ["weekWindow"] },
         { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 3", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
         { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
@@ -64,37 +60,34 @@
       ],
       "suggestions": [],
       "steps": [
-        { "kind": "red-green", "what": "weekWindow in the browser time zone" },
         { "kind": "red-green", "what": "loadWeek" },
+        { "kind": "red-green", "what": "WeeklyCard" },
         { "kind": "refactor", "what": "moved settled pieces into four boxes" }
       ],
       "files": [
-        { "op": "+", "path": "src/week.js", "why": "weekWindow" },
         { "op": "+", "path": "src/card.js", "why": "WeeklyCard" }
       ],
       "checks": [
         { "name": "node --test", "ok": true }
       ],
-      "summary": "Built the week window and loading, and moved four settled pieces into boxes.",
-      "comments": [],
+      "summary": "Built loading and the card, and moved four settled pieces into boxes.",
       "replies": [
-        { "thread": "t1", "text": "browser timezone it is; it's in weekWindow now.", "resolve": true }
-      ]
+        { "thread": "t1", "text": "Yes: the card is one column, so it fits a phone.", "resolve": true }
+      ],
+      "choices": []
     }
   },
   {
     "delay": 700,
     "activity": ["reading the summarizeWeek box", "editing src/summarize.js", "running node --test"],
-    "writes": {
-      "src/summarize.js": "export function topFamilies(entries, keep = 2) {\n  const counts = new Map();\n  for (const e of entries) counts.set(e.family, (counts.get(e.family) || 0) + 1);\n  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, keep).map(([f]) => f);\n}\n"
-    },
+    "writes": { "src/summarize.js": "export function topFamilies(entries, keep = 2) {\n  const counts = new Map();\n  for (const e of entries) counts.set(e.family, (counts.get(e.family) || 0) + 1);\n  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, keep).map(([f]) => f);\n}\n" },
     "reply": {
       "plan": [
         { "text": "weekly reflection", "kind": null, "status": "built" },
         { "text": "  WeeklyCard(summarizeWeek(loadWeek(weekWindow(now, browser tz))))", "kind": null, "status": "built" }
       ],
       "boxes": [
-        { "name": "weekWindow", "lines": ["every sunday", "browser timezone is fine, it's only a card", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
+        { "name": "weekWindow", "lines": ["every sunday", "in the browser's timezone", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
         { "name": "loadWeek", "lines": ["look at my week", "entries = journal_entries from the last 7 days", "prev = the 7 days before"], "status": "built", "uses": ["weekWindow"] },
         { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 2", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
         { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
@@ -114,8 +107,8 @@
         { "name": "node --test", "ok": true }
       ],
       "summary": "Rebuilt summarizeWeek with two families. Everything is built.",
-      "comments": [],
-      "replies": []
+      "replies": [],
+      "choices": []
     }
   }
 ]

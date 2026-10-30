@@ -1,8 +1,8 @@
 /// <reference lib="dom" />
 // Drives the real editor in Chromium against the scripted mock agent:
-// write a plan, pass the pen, answer the agent's comment in its thread, autocomplete,
-// accept a proposal, watch pieces move into boxes, comment on a line, disagree inside a
-// box, reach done, undo.
+// write a plan, pass the pen, cycle through the ways the agent offered, autocomplete,
+// accept a proposal, ask about a line and pass from the comment, watch pieces move into
+// boxes, comment on a line, disagree inside a box, reach done, undo.
 //
 //   npm run build && node test/e2e.ts      (screenshots go to $UNDERPAINT_SHOTS or the temp dir)
 
@@ -41,11 +41,11 @@ page.on("pageerror", (e) => errors.push(e.message));
 const shot = (name: string) => page.screenshot({ path: join(SHOTS, `${name}.png`) });
 const pen = async () => (await page.textContent(".pen")) ?? "";
 const waitPen = (re: RegExp) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector(".pen")?.textContent ?? ""), re.source, { timeout: 15000 });
-// Each line as it reads, without the comment pins drawn at its end.
+// Each line as it reads, without the comment pins or the ways control drawn at its end.
 const planText = () =>
   page.$$eval(".rows .ln", (els) => els.map((e) => {
     const c = e.cloneNode(true) as HTMLElement;
-    c.querySelectorAll(".pin-btn").forEach((p) => p.remove());
+    c.querySelectorAll(".pin-btn, .ways").forEach((p) => p.remove());
     return c.textContent ?? "";
   }));
 const passPen = () => page.keyboard.press("Control+Enter");
@@ -78,24 +78,46 @@ try {
   await waitPen(/your pen/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-add"), null, { timeout: 5000 });
   const t1 = await planText();
-  assert.ok(!t1.some((t) => t.includes("sunday in whose timezone")), "the agent's question is not a line of the plan");
   assert.ok(t1.some((t) => t.includes("7-day strip") && t.includes("AcceptReject")), "a proposal offers Accept and Reject on its line");
   assert.ok(t1.some((t) => t.includes("becomes a test")));
   assert.ok(await page.$(".rows .sym"), "a real codebase name is highlighted");
   assert.ok((await page.$$(".rows .m-built")).length >= 3, "built lines are marked");
-  assert.ok((await page.$$(".rows .m-blocked")).length >= 2, "blocked lines are marked");
-  assert.match(await pen(), /1 comment waiting on you/);
-
-  step("the agent's question opens as a comment on the line it is about");
-  const pinRow = await page.$$eval(".rows .row", (rows) => rows.findIndex((r) => r.querySelector('.pin-btn[aria-label="Comment from Agent"]')));
-  assert.equal((await planText())[pinRow].trim(), "every sunday", "pinned to its line");
-  await page.waitForSelector(".card");
-  assert.match((await page.textContent(".card")) ?? "", /sunday in whose timezone, yours or a fixed one\?/);
-  assert.deepEqual(new Set(await page.$$eval(".rows .row", (r) => r.map((x) => (x as HTMLElement).offsetHeight))), new Set([24]), "a pin doesn't make its line taller");
-  await shot("05-comment-open");
+  assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent doesn't ask in comments");
+  assert.equal((await page.$$(".rows .m-blocked")).length, 0, "nothing waits on the person");
+  assert.match(await pen(), /your pen$/);
   await page.click(".under summary");
   assert.match((await page.textContent(".under-body")) ?? "", /src\/summarize\.js/);
   await page.click(".under summary");
+
+  step("the agent built one way and shows the other in place");
+  const choiceRow = () => page.$$eval(".rows .row", (rows) => rows.findIndex((r) => r.querySelector(".ways")));
+  const row = await choiceRow();
+  assert.equal((await planText())[row].trim(), "in the browser's timezone", "the agent's pick is in the plan");
+  assert.equal(await page.textContent(".ways span"), "1 of 2");
+  assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-built`));
+  assert.deepEqual(new Set(await page.$$eval(".rows .row", (r) => r.map((x) => (x as HTMLElement).offsetHeight))), new Set([24]), "the control doesn't make its line taller");
+  await shot("05-choice");
+
+  step("Alt+] switches to the other way, which needs a build");
+  await page.$eval(TA, (el) => {
+    const ta = el as HTMLTextAreaElement;
+    const at = ta.value.indexOf("in the browser's timezone");
+    ta.focus();
+    ta.setSelectionRange(at, at);
+  });
+  await page.keyboard.press("Alt+BracketRight");
+  assert.equal((await planText())[row].trim(), "in a timezone you set once");
+  assert.equal(await page.textContent(".ways span"), "2 of 2");
+  assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-stale`), "the switched-in way needs a build");
+  await page.waitForTimeout(300);
+  await shot("06-switched");
+  await page.waitForFunction(() => fetch("/api/state").then((r) => r.json()).then((s) => s.choices[0]?.current === 1), null, { timeout: 5000 });
+
+  step("switching back brings the built mark back");
+  await page.click('.ways button[aria-label="Previous way"]');
+  assert.equal((await planText())[row].trim(), "in the browser's timezone");
+  assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-built`));
+  await page.waitForFunction(() => fetch("/api/state").then((r) => r.json()).then((s) => s.choices[0]?.current === 0), null, { timeout: 5000 });
 
   step("autocomplete offers the line the agent expects next");
   await page.click(".brand");
@@ -109,33 +131,34 @@ try {
   await page.keyboard.type("pre");
   await page.waitForSelector(".rows .ghost");
   assert.equal(await page.textContent(".rows .ghost"), "v = the 7 days before");
-  await shot("06-ghost");
+  await shot("07-ghost");
   await page.keyboard.press("Tab");
-  assert.ok((await page.inputValue(TA)).includes("      prev = the 7 days before"));
+  assert.ok((await page.inputValue(TA)).includes("      prev = the 7 days before"), await page.inputValue(TA));
 
   step("accepting the agent's proposal");
   await page.click('.decide button:has-text("Accept")');
   assert.ok(!(await planText()).some((t) => t.includes("Accept")));
   await page.waitForTimeout(600);
 
-  step("the person replies in the thread and passes the pen from the reply box");
-  await page.click('.pin-btn[aria-label="Comment from Agent"]');
-  await page.fill(".card textarea", "browser timezone is fine, it's only a card");
+  step("the person asks about a line and passes the pen from the comment");
+  await page.click(".rows .row:first-child .no");
+  await page.fill(".card textarea", "does this fit on a phone?");
   await page.keyboard.press("Control+Enter");
   await waitPen(/agent's pen/);
   await page.waitForSelector(".rows .a-move", { timeout: 15000 });
   assert.ok(await page.$(".canvas .box.pop-in"), "boxes the agent added pop in");
   await page.waitForTimeout(350);
-  await shot("07-moving-into-boxes");
+  await shot("08-moving-into-boxes");
   await waitPen(/your pen/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-move"), null, { timeout: 5000 });
-  assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent resolved the thread once it built the answer");
+  assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
+  assert.equal(await page.$$(".ways").then((w) => w.length), 0, "the kept choice is settled");
   const thread = JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"))[0];
-  assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["a", "h", "a"], "the reply reached the agent and it answered");
+  assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["h", "a"], "the comment reached the agent and it answered");
   assert.equal(await page.$$eval(".canvas .box", (b) => b.length), 4);
   assert.equal((await planText()).length, 3, "the plan got shorter");
   assert.equal(await page.$$eval(".canvas svg path[marker-end]", (p) => p.length), 3, "boxes are connected by what they use");
-  await shot("08-boxes");
+  await shot("09-boxes");
 
   step("the person comments on a line, then resolves it");
   await page.click(".rows .row:first-child .no");
@@ -143,7 +166,7 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForSelector('.pin-btn[aria-label="Comment from You"]');
   assert.match(await pen(), /your pen$/, "the person's own comment isn't waiting on them");
-  await shot("09-own-comment");
+  await shot("10-own-comment");
   await page.click('.pin-btn[aria-label="Comment from You"]');
   await page.click('.card button:has-text("Resolve")');
   await page.waitForFunction(() => !document.querySelector(".pin-btn"), null, { timeout: 5000 });
@@ -156,7 +179,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.canvas .box[data-name="summarizeWeek"]')?.classList.contains("stale"), null, { timeout: 5000 });
   assert.equal((await planText()).length, 2);
   await page.waitForTimeout(600);
-  await shot("10-disagree-in-box");
+  await shot("11-disagree-in-box");
 
   step("done means done");
   await page.click(".brand");
@@ -164,13 +187,13 @@ try {
   await waitPen(/done · every line built/);
   await page.waitForTimeout(1300);
   assert.equal(await page.$$eval(".canvas .box.built", (b) => b.length), 4);
-  await shot("11-done");
+  await shot("12-done");
 
   step("one commit per agent turn, code and plan together");
   const log = g("log", "--format=%s").trim().split("\n");
   assert.deepEqual(log.slice(0, 3), ["underpaint: turn 3 on weekly", "underpaint: turn 2 on weekly", "underpaint: turn 1 on weekly"]);
   const files = g("show", "--name-only", "--format=", "HEAD~1").trim().split("\n");
-  assert.ok(files.includes("src/week.js") && files.includes("weekly.plan") && files.includes(".underpaint/weekly/boxes/weekWindow.plan"), files.join(", "));
+  assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".underpaint/weekly/boxes/weekWindow.plan"), files.join(", "));
   assert.ok(files.includes(".underpaint/weekly/comments.json"), "the thread is committed with the turn");
 
   step("undo the last agent turn");
@@ -184,7 +207,7 @@ try {
   await page.setViewportSize({ width: 420, height: 860 });
   await page.waitForTimeout(200);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways page scroll");
-  await shot("12-phone");
+  await shot("13-phone");
 
   assert.deepEqual(errors, [], "no page errors");
   console.log(`\nAll e2e checks passed. Screenshots in ${SHOTS}`);

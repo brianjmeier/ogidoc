@@ -25,6 +25,15 @@ export interface Message {
   turn: number;
 }
 
+// Other ways to do one thing the agent built: the plan holds the current option's lines
+// from `line` on, and every option keeps its own lines. Option 0 is the agent's pick.
+export interface Choice {
+  id: string;
+  line: number;
+  current: number;
+  options: Line[][];
+}
+
 // A conversation pinned to one plan line. `line` is an index into the plan.
 export interface Thread {
   id: string;
@@ -70,7 +79,7 @@ export interface LastTurn {
 export interface Reply {
   plan: { text: string; kind: Kind | null; status: Status | null }[];
   boxes: { name: string; lines: string[]; status: Status; uses: string[] }[];
-  comments: { line: number; text: string }[];
+  choices: { id?: string; line: number; options: string[][] }[];
   replies: { thread: string; text: string; resolve: boolean }[];
   symbols: Symbol[];
   suggestions: string[];
@@ -103,7 +112,7 @@ export interface Settings {
   effort: string;
 }
 
-export interface Choices {
+export interface SettingOptions {
   models: string[];
   efforts: string[];
 }
@@ -112,7 +121,7 @@ export interface Snapshot {
   name: string;
   planPath: string;
   agent: string;
-  choices: Choices;
+  settingOptions: SettingOptions;
   settings: Settings;
   turn: number;
   working: boolean;
@@ -120,6 +129,7 @@ export interface Snapshot {
   lines: Line[];
   boxes: Box[];
   threads: Thread[];
+  choices: Choice[];
   symbols: Symbol[];
   suggestions: string[];
   last: LastTurn | null;

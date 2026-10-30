@@ -33,15 +33,14 @@ export function move(threads: Thread[], ops: DiffOp[], oldLength: number): Threa
   return threads.map((t) => (map[t.line] === t.line ? t : { ...t, line: map[t.line] ?? 0 }));
 }
 
-// What the agent said in its reply: answers in open threads and new comments, with
-// `lineCount` lines in the plan it returned.
-export function fromAgent(threads: Thread[], { comments, replies }: Pick<Reply, "comments" | "replies">, lineCount: number, turn: number): Thread[] {
+// The agent's answers in the threads the person opened. It can't start one: it offers
+// choices in the plan instead.
+export function fromAgent(threads: Thread[], { replies }: Pick<Reply, "replies">, turn: number): Thread[] {
   let out = threads.map((t) => (t.resolved && !t.seen ? { ...t, seen: true } : t));
   for (const r of replies) {
     if (!out.some((t) => t.id === r.thread)) continue;
     if (r.text) out = reply(out, r.thread, { by: "a", text: r.text, turn });
     if (r.resolve) out = resolve(out, r.thread, "a");
   }
-  for (const c of comments) out = add(out, { line: Math.min(Math.max(0, c.line), Math.max(0, lineCount - 1)), by: "a", text: c.text, turn });
   return out;
 }

@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import * as plan from "./plan.ts";
 import type { Plan } from "./plan.ts";
 import * as threads from "./threads.ts";
+import * as choices from "./choices.ts";
 import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
 import { planStore, type Loaded, type PlanStore, type SessionState } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
@@ -63,7 +64,7 @@ export class Session extends EventEmitter {
       name: this.name,
       planPath: this.store.displayPath,
       agent: this.agent.name,
-      choices: this.agent.choices,
+      settingOptions: this.agent.settingOptions,
       working: this.working,
       activity: this.activity.slice(-6),
       done: plan.isDone(this.plan, s.last),
@@ -75,7 +76,7 @@ export class Session extends EventEmitter {
   setSettings({ model, effort }: Partial<Settings> = {}) {
     const name = model === undefined ? undefined : String(model).trim();
     if (name && !this.agent.acceptsModel(name)) throw new Error(`${this.agent.name} has no model "${name}".`);
-    if (effort && !this.agent.choices.efforts.includes(effort)) throw new Error(`${this.agent.name} has no effort "${effort}".`);
+    if (effort && !this.agent.settingOptions.efforts.includes(effort)) throw new Error(`${this.agent.name} has no effort "${effort}".`);
     this.s.settings = { ...this.s.settings, ...(name !== undefined && { model: name }), ...(effort !== undefined && { effort }) };
     this.changed();
   }
@@ -91,7 +92,7 @@ export class Session extends EventEmitter {
   }
 
   private get plan(): Plan {
-    return { lines: this.s.lines, boxes: this.s.boxes, threads: this.s.threads };
+    return { lines: this.s.lines, boxes: this.s.boxes, threads: this.s.threads, choices: this.s.choices };
   }
 
   private setPlan(p: Plan) {
@@ -122,6 +123,13 @@ export class Session extends EventEmitter {
     this.changed();
   }
 
+  // Switch a choice the agent offered to another of its options.
+  choose({ choice, option }: { choice: string; option: number }) {
+    this.guard();
+    this.s = { ...this.s, ...choices.choose(this.s.lines, this.s.choices, choice, option) };
+    this.changed();
+  }
+
   edit(input: EditInput) {
     this.guard();
     this.setPlan(plan.edit(this.plan, input));
@@ -143,6 +151,7 @@ export class Session extends EventEmitter {
       lines: s.lines,
       boxes: s.boxes,
       threads: s.threads,
+      choices: s.choices,
       humanDiff: plan.humanDiff(s.base, this.plan),
       drift: this.log.drift(),
       last: s.last,

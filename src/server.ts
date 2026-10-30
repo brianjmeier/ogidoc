@@ -39,6 +39,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
     "/api/comment": (b) => session.comment(b),
     "/api/reply": (b) => session.reply(b),
     "/api/resolve": (b) => session.resolve(b),
+    "/api/choose": (b) => session.choose(b),
     "/api/settings": (b) => session.setSettings(b),
     "/api/undo": () => session.undo(),
   };
