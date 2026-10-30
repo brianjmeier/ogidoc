@@ -12,7 +12,8 @@ section h2 { font: 600 20px/1.35 var(--font-ui); margin: 0 0 18px; }
 .scene { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.06); }
 .scene-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
 .scene-top .brand { font-size: 17px; }
-.scene .editor { height: 132px; }
+.scene-body.split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+.scene-body.split .box-pane { border-left: 1px solid var(--line); }
 .scene .rows { padding-bottom: 14px; }
 .scene .code > textarea { padding-bottom: 14px; pointer-events: none; }
 .scene .under summary { pointer-events: none; }

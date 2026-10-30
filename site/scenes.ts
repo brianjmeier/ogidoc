@@ -1,4 +1,5 @@
 import { diffLines, splitLines } from "../src/shared/diff.ts";
+import { choose } from "../src/choices.ts";
 import { edit, fromReply, type Plan } from "../src/plan.ts";
 import type { AnimationOp, BoxChanges, LastTurn, Line, Reply } from "../src/types.ts";
 
@@ -6,9 +7,11 @@ import type { AnimationOp, BoxChanges, LastTurn, Line, Reply } from "../src/type
 // editor runs: the person's typing goes through `edit`, the agent's reply through
 // `fromReply`, so marks, authorship and the turn animation are the real ones.
 
-// The person rewrites the plan to `person`, or the agent replies with `agent`.
+// The person rewrites the plan to `person` or switches the first open choice to `pick`,
+// or the agent replies with `agent`.
 export type Beat =
   | { person: string }
+  | { pick: number }
   | { agent: Partial<Reply> & Pick<Reply, "plan">; last: LastTurn };
 
 export type Frame =
@@ -27,6 +30,9 @@ export function frames(start: Plan, beats: Beat[]): Frame[] {
         plan = edit(plan, { text });
         out.push({ kind: "type", plan });
       }
+    } else if ("pick" in beat) {
+      plan = { ...plan, ...choose(plan.lines, plan.choices, plan.choices[0].id, beat.pick) };
+      out.push({ kind: "type", plan });
     } else {
       const r = fromReply(plan, { ...NO_REPLY, ...beat.agent }, turn++);
       plan = r.plan;
@@ -64,6 +70,7 @@ function commonPrefix(a: string, b: string): number {
 }
 
 const built = (text: string): Line => ({ text, by: "h", kind: null, status: "built" });
+const builtReply = (lines: string[]) => lines.map((text) => ({ text, kind: null, status: "built" as const }));
 
 // if (coding is slow but fun): you can prompt with code.
 export const promptWithCode = {
@@ -85,6 +92,68 @@ export const promptWithCode = {
           { op: "+", path: "src/reflect.ts", why: "topFeeling(week)" },
           { op: "+", path: "test/reflect.test.ts", why: "three calm days beat two tense ones" },
         ],
+        checks: [{ name: "npm test", ok: true }],
+      },
+    },
+  ] satisfies Beat[],
+};
+
+const reflection = [
+  "weekly reflection",
+  "  every sunday",
+  "    look at my week, tell me what i felt most",
+];
+
+// When code gets complicated: three settled lines fold into a named box and leave a
+// one-line reference behind.
+export const abstractions = {
+  start: { lines: [...reflection, "      skip days i wrote nothing", "      count a feeling once per day", "      ties go to the most recent day"].map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+  beats: [
+    { person: [...reflection, "      skip days i wrote nothing", "      count a feeling once per day", "      ties go to the most recent day", "  send me a short note"].join("\n") },
+    {
+      agent: {
+        plan: builtReply([reflection[0], reflection[1], "    my top feeling, see topFeeling", "  send me a short note"]),
+        boxes: [{ name: "topFeeling", lines: ["skip days i wrote nothing", "count a feeling once per day", "ties go to the most recent day"], status: "built", uses: [] }],
+      },
+      last: {
+        summary: "Sends the note, and moved the settled counting rules into topFeeling",
+        steps: [{ kind: "red-green", what: "the note says the top feeling" }, { kind: "refactor", what: "topFeeling holds the counting rules" }],
+        files: [
+          { op: "+", path: "src/note.ts", why: "shortNote(week)" },
+          { op: "~", path: "src/reflect.ts", why: "topFeeling owns the rules" },
+          { op: "+", path: "test/note.test.ts", why: "a calm week gets a calm note" },
+        ],
+        checks: [{ name: "npm test", ok: true }],
+      },
+    },
+  ] satisfies Beat[],
+};
+
+// When agents have questions: the agent builds its pick, shows the other way in place,
+// and the person switches to it and passes the pen.
+export const choices = {
+  start: { lines: reflection.map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+  beats: [
+    { person: [...reflection, "  keep every note"].join("\n") },
+    {
+      agent: {
+        plan: builtReply([...reflection, "  keep every note", "    one markdown file per week"]),
+        choices: [{ line: 4, options: [["    one markdown file per week"], ["    one table in a local database"]] }],
+      },
+      last: {
+        summary: "Keeps each week's note as a markdown file; a database is the other way",
+        steps: [{ kind: "red-green", what: "a week's note is saved and read back" }],
+        files: [{ op: "+", path: "src/notes.ts", why: "saveNote, readNotes" }],
+        checks: [{ name: "npm test", ok: true }],
+      },
+    },
+    { pick: 1 },
+    {
+      agent: { plan: builtReply([...reflection, "  keep every note", "    one table in a local database"]) },
+      last: {
+        summary: "Notes now live in one local database table",
+        steps: [{ kind: "red-green", what: "a week's note is saved and read back" }],
+        files: [{ op: "~", path: "src/notes.ts", why: "one notes table" }],
         checks: [{ name: "npm test", ok: true }],
       },
     },

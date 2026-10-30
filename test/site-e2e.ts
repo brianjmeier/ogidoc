@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-// Plays the website's scenes in Chromium, in light and dark: the typed line needs a
-// build, the agent's turn marks it built, and the code lands underneath.
+// Plays the website's three scenes in Chromium, in light and dark: a line gets built,
+// settled lines fold into a box, and a choice is offered, picked and built.
 //
 //   npm run build:site && node test/site-e2e.ts
 
@@ -21,17 +21,30 @@ try {
     const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, colorScheme });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const marks = () => page.$$eval(".scene .mk .m", (els) => els.map((e) => e.className.replace("m m-", "")));
+    const scene = (n: number) => `section:nth-of-type(${n}) .scene`;
+    const marks = (n: number) => page.$$eval(`${scene(n)} .mk .m`, (els) => els.map((e) => e.className.replace("m m-", "")));
+    const count = (sel: string, n: number) => page.waitForFunction(([s, k]) => document.querySelectorAll(s as string).length === k, [sel, n] as const, { timeout: 20000 });
     await page.goto(url);
 
-    await page.waitForFunction(() => document.querySelectorAll(".scene .ln").length === 3);
-    assert.deepEqual(await marks(), ["built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
-    assert.equal(await page.$(".scene .under"), null, `${colorScheme}: no code before the turn`);
-
-    await page.waitForFunction(() => document.querySelectorAll(".scene .m-built").length === 3, null, { timeout: 15000 });
-    assert.match((await page.textContent(".scene .under")) ?? "", /src\/reflect\.ts/, `${colorScheme}: code lands underneath`);
-    assert.deepEqual(errors, []);
+    await count(`${scene(1)} .ln`, 3);
+    assert.deepEqual(await marks(1), ["built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
+    assert.equal(await page.$(`${scene(1)} .under`), null, `${colorScheme}: no code before the turn`);
+    await count(`${scene(1)} .m-built`, 3);
+    assert.match((await page.textContent(`${scene(1)} .under`)) ?? "", /src\/reflect\.ts/, `${colorScheme}: code lands underneath`);
     console.log(`· ${colorScheme}: a line types itself, gets built, code lands underneath`);
+
+    await page.locator(scene(2)).scrollIntoViewIfNeeded();
+    await count(`${scene(2)} .box[data-name="topFeeling"]`, 1);
+    await count(`${scene(2)} .row:not(.a-move) .ln`, 4);
+    assert.match((await page.textContent(`${scene(2)} .box`)) ?? "", /ties go to the most recent day/, `${colorScheme}: the settled lines are in the box`);
+    console.log(`· ${colorScheme}: three settled lines fold into a box`);
+
+    await page.locator(scene(3)).scrollIntoViewIfNeeded();
+    await count(`${scene(3)} .ways`, 1);
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("one table in a local database"), `${scene(3)} .rows`, { timeout: 20000 });
+    await count(`${scene(3)} .ways`, 0);
+    console.log(`· ${colorScheme}: the agent offers another way, the person picks it, the agent builds it`);
+    assert.deepEqual(errors, []);
     await page.close();
   }
   console.log("\nAll site checks passed.");

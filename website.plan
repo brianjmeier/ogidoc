@@ -1,9 +1,4 @@
 show with animations:
-   lives at underpaint.brianmeier.dev: a solid page in site/, built by npm run build:site, published with vercel once the three scenes play
-   each animation is the real Editor, read-only, playing a scripted session when you scroll to it and pausing when you scroll away
-   it imports app/style.css, so colours, margin marks and light or dark are the editor's own
-   scenes reuse what the editor already has (Editor, Underneath, edit, fromReply), nothing copied
-
    if (coding is slow but fun):
        you can prompt with code
        a pseudocode line types itself, the margin mark goes from needs-a-build to built, and real code slides in underneath
@@ -12,5 +7,5 @@ show with animations:
       abstractions get created for you
       three settled lines fold into a named box and leave a one-line reference behind
    when agents have questions:
-      they ask
-      a question appears right under the line it is about, the person types an answer, the waiting-on-a-question mark clears
+      they build their best guess and show you the other way
+      the other way appears right on the line, the person switches to it and passes, the agent builds that one

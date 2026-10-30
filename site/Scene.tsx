@@ -1,7 +1,8 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
-import type { LastTurn } from "../src/types.ts";
+import type { Box, LastTurn } from "../src/types.ts";
 import type { Plan } from "../src/plan.ts";
 import type { Frame } from "./scenes.ts";
 
@@ -16,6 +17,10 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
   let editor!: EditorApi;
   const [pen, setPen] = createSignal<"h" | "a">("h");
   const [last, setLast] = createSignal<LastTurn | null>(null);
+  const [boxes, setBoxes] = createSignal<Box[]>([]);
+  const [boxAnim, setBoxAnim] = createSignal<BoxAnimation | null>(null);
+  // Tall enough for the longest plan the scene reaches, so the page doesn't jump.
+  const rows = Math.max(props.start.lines.length, ...props.frames.map((f) => f.plan.lines.length));
   const [visible, setVisible] = createSignal(false);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let stopped = false;
@@ -30,6 +35,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
   async function play() {
     while (!stopped) {
       editor.adopt(props.start);
+      setBoxes(props.start.boxes);
       setLast(null);
       setPen("h");
       for (const [i, f] of props.frames.entries()) {
@@ -42,7 +48,12 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
           await wait(BEFORE_PASS_MS);
           setPen("a");
           const old = editor.lines();
+          const pulse: Record<string, number> = {};
+          f.animation.forEach((o, k) => { if (o.op === "move") pulse[o.to] ??= 500 + k * 40; });
+          setBoxAnim({ delay: 250, pulse, changes: f.boxChanges });
+          setBoxes(f.plan.boxes);
           await editor.animate(f.animation, old, f.plan);
+          setBoxAnim(null);
           setLast(f.last);
           setPen("h");
           await wait(HOLD_MS);
@@ -68,8 +79,15 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
         <span class="spacer" />
         <span class={`pen ${pen()}`}><i class="dot" />{pen() === "a" ? "agent's pen · writing" : "your pen"}</span>
       </div>
-      <div class="editor">
-        <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onPass={() => {}} onHint={() => {}} />
+      <div class="scene-body" classList={{ split: boxes().length > 0 }}>
+        <div class="editor" style={{ height: `${rows * 24 + 28}px` }}>
+          <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onPass={() => {}} onHint={() => {}} />
+        </div>
+        <Show when={boxes().length}>
+          <div class="box-pane">
+            <Boxes ref={() => {}} boxes={boxes()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
+          </div>
+        </Show>
       </div>
       <div class="under-slot">
         <Show when={last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>
