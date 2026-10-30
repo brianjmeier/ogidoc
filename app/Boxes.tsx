@@ -48,6 +48,8 @@ export function Boxes(props: Props) {
     props.onEdit(name, text);
   }
 
+  const body = (name: string) => canvas.querySelector<HTMLElement>(`.box[data-name="${CSS.escape(name)}"] .bb`);
+
   props.ref({
     take: () => {
       const name = editing();
@@ -170,7 +172,20 @@ export function Boxes(props: Props) {
             <Show
               when={editing() === b.name}
               fallback={
-                <div class="bb" title={props.editable ? "Click to edit" : ""} onClick={() => props.editable && !editing() && setEditing(b.name)}>
+                <div
+                  class="bb"
+                  role={props.editable ? "button" : undefined}
+                  tabIndex={props.editable ? 0 : -1}
+                  aria-label={props.editable ? `Edit ${b.name}` : undefined}
+                  title={props.editable ? "Click or press Enter to edit" : ""}
+                  onClick={() => props.editable && !editing() && setEditing(b.name)}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === " ") {
+                      e.preventDefault();
+                      if (props.editable && !editing()) setEditing(b.name);
+                    }
+                  }}
+                >
                   <For each={b.lines}>
                     {(l) => <span class={l.chg ? `chg ${l.by}` : ""} innerHTML={decorate(l.text, symRe()) || " "} />}
                   </For>
@@ -187,8 +202,12 @@ export function Boxes(props: Props) {
                 onBlur={() => finish(b.name)}
                 onKeyDown={(e) => {
                   if (isPassKey(e)) { e.preventDefault(); props.onPass(); }
-                  // Esc leaves the box like clicking away does, keeping what was typed.
-                  if (e.key === "Escape") finish(b.name);
+                  // Esc leaves the box like clicking away does, keeping what was typed, and
+                  // the keyboard stays on the box.
+                  if (e.key === "Escape") {
+                    finish(b.name);
+                    body(b.name)?.focus();
+                  }
                 }}
               />
             </Show>

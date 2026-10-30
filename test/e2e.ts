@@ -255,6 +255,26 @@ try {
   await page.waitForFunction(() => !document.querySelector(".pin-btn"), null, { timeout: 5000 });
   await typingInPlan("resolving gives the keyboard back to the plan");
 
+  step("Esc then Tab leaves the plan, and a box opens and closes from the keyboard");
+  await caretOn("weekly reflection");
+  await page.keyboard.press("Escape");
+  assert.match((await page.textContent(".rows .row:first-child .aside")) ?? "", /Tab leaves the plan/, "the caret's line says what Tab does now");
+  await page.keyboard.press("Tab");
+  assert.equal(await page.evaluate(() => document.activeElement?.tagName), "SUMMARY", "Tab went on to the Underneath drawer");
+  await page.keyboard.press("Tab");
+  assert.equal(await focused(), "Edit weekWindow", "then to the first box");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".canvas textarea.box-edit");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(50);
+  assert.equal(await focused(), "Edit weekWindow", "Esc closes the box and keeps the keyboard on it");
+  await caretOn("weekly reflection");
+  await page.keyboard.press("Tab");
+  assert.ok((await page.inputValue(TA)).startsWith("  weekly reflection"), "without the Esc, Tab still indents");
+  await page.$eval(TA, (el) => (el as HTMLTextAreaElement).setSelectionRange(0, 2));
+  await page.keyboard.press("Backspace");
+  assert.ok((await page.inputValue(TA)).startsWith("weekly reflection"));
+
   step("the person disagrees inside a box and rejects a proposal");
   await page.click('.canvas .box[data-name="summarizeWeek"] .bb');
   const boxTa = await page.waitForSelector(".canvas textarea.box-edit");

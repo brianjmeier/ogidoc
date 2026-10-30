@@ -71,6 +71,8 @@ export function Editor(props: Props) {
   const [fresh, setFresh] = createSignal(true);
   // Keys show on the controls they trigger only while typing goes to the plan.
   const [active, setActive] = createSignal(false);
+  // After an Esc with nothing to dismiss, the next Tab moves focus on instead of indenting.
+  const [tabLeaves, setTabLeaves] = createSignal(false);
   const symRe = createMemo(() => symbolPattern(symbols()));
 
   // The agent's suggestions are whole lines it expects you to write. Offer the rest of
@@ -167,6 +169,8 @@ export function Editor(props: Props) {
       return;
     }
     if (!props.editable) return;
+    const leaving = tabLeaves();
+    if (!["Shift", "Meta", "Control", "Alt"].includes(e.key)) setTabLeaves(false);
     if (keys.undo.is(e) && fresh() && props.onUndo) {
       e.preventDefault();
       props.onUndo();
@@ -206,10 +210,12 @@ export function Editor(props: Props) {
       return;
     }
     if (e.key === "Tab" && !e.shiftKey) {
+      if (leaving) return;
       e.preventDefault();
       insert(ghost() || "  ");
-    } else if (e.key === "Escape" && ghost()) {
-      setGhostOff(true);
+    } else if (e.key === "Escape") {
+      if (ghost()) setGhostOff(true);
+      else setTabLeaves(true);
     } else if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
       // Keep the indentation of the line above.
       const indent = (lines()[caret().line]?.text.match(/^\s*/) || [""])[0];
@@ -383,6 +389,9 @@ export function Editor(props: Props) {
                         <span class="ghost">{ghost()}</span>
                         <span class="tabkey">Tab</span>
                       </Show>
+                      <Show when={tabLeaves() && keysOn(n())}>
+                        <span class="tabkey">Tab leaves the plan</span>
+                      </Show>
                       <Show when={body() && chip()}><span class="chip">{chip()}</span></Show>
                       <Show when={body() && deciding()}>
                         <span class="decide">
@@ -447,7 +456,7 @@ export function Editor(props: Props) {
               onKeyDown={onKeyDown}
               onKeyUp={readCaret}
               onFocus={() => setActive(true)}
-              onBlur={() => setActive(false)}
+              onBlur={() => { setActive(false); setTabLeaves(false); }}
               onClick={readCaret}
               onSelect={readCaret}
             />

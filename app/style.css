@@ -258,6 +258,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .box.blocked .st { color: var(--gone); }
 .box .bb { color: var(--muted); display: grid; gap: 1px; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; border-radius: 4px; }
 .box .bb:hover { background: var(--surface-2); }
+.box .bb:focus-visible { outline: 2px solid var(--human); outline-offset: 2px; }
 .box .bb .chg { color: var(--human); background: var(--human-tint); border-radius: 3px; }
 .box .bb .chg.a { color: var(--agent); background: var(--agent-tint); }
 .box textarea.box-edit { border: 0; resize: vertical; outline-offset: 0; color: var(--ink); caret-color: var(--ink); background: var(--surface-2); border-radius: 4px; padding: 4px 6px; font: 12px/1.55 var(--font-mono); white-space: pre; overflow: auto; min-height: 60px; width: 100%; outline: 1px solid var(--human); }
