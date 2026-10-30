@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "../src/shared/diff.ts";
 import { choose, follow } from "../src/choices.ts";
 import { nextStop, stops } from "../src/shared/stops.ts";
@@ -339,6 +339,20 @@ export function Editor(props: Props) {
     if (focused) ta.focus({ preventScroll: true });
   }
 
+  // What a screen reader hears about the caret's line: the rows under the textarea carry
+  // the suggestion, the choice and the proposal, and the textarea alone can't say them.
+  const describeId = createUniqueId();
+  const described = createMemo(() => {
+    if (!props.editable || !active() || anim()) return "";
+    const n = caret().line;
+    const c = choiceAt().get(n);
+    if (ghost()) return `Suggestion: ${ghost()}. Tab accepts.`;
+    if (tabLeaves()) return "Tab leaves the plan.";
+    if (c) return `A choice, way ${c.current + 1} of ${c.options.length}. ${keys.alt}[ and ${keys.alt}] switch, ${keys.keep.label} uses this way.`;
+    if (proposalAt(n)) return `A proposal. ${keys.keep.label} accepts, ${keys.reject.label} rejects.`;
+    return "";
+  });
+
   props.ref({
     adopt,
     animate,
@@ -439,6 +453,7 @@ export function Editor(props: Props) {
             )}
           </Index>
         </div>
+        <div id={describeId} class="sr-only" role="status">{described()}</div>
         <Show when={copy()} keyed>
           {(_copy) => (
             <textarea
@@ -447,6 +462,7 @@ export function Editor(props: Props) {
               autocapitalize="off"
               autocomplete="off"
               aria-label="Plan text"
+              aria-describedby={describeId}
               data-gramm="false"
               data-gramm_editor="false"
               data-enable-grammarly="false"

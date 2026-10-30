@@ -55,6 +55,8 @@ const caretOn = (text: string) => page.$eval(TA, (el, t) => {
   ta.focus();
   ta.setSelectionRange(at, at);
 }, text);
+// What a screen reader hears about the caret's line.
+const heard = () => page.$eval(TA, (el) => document.getElementById(el.getAttribute("aria-describedby")!)?.textContent ?? "");
 // Where typing goes right now, by the focused element's label.
 const focused = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName);
 const typingInPlan = async (why: string) => { await page.waitForTimeout(50); assert.equal(await focused(), "Plan text", why); };
@@ -100,6 +102,8 @@ try {
   assert.match((await page.textContent(".under-body")) ?? "", /src\/summarize\.js/);
   await page.click(".under summary");
 
+  assert.equal(await page.textContent('.sr-only[role="status"]:not([id])'), "your turn", "the turn change is said once");
+
   step("the jump key walks the lines that wait on the person");
   const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
   const jump = (dir: "Down" | "Up") => page.keyboard.press(`${mac ? "Alt+Meta" : "Alt"}+Arrow${dir}`);
@@ -142,6 +146,7 @@ try {
   await page.waitForSelector(".ways-keys");
   assert.match((await page.textContent(".ways-keys")) ?? "", /\[.*\]/, "with the caret in a choice, its keys show under its arrows");
   assert.match((await page.textContent(".ways .use")) ?? "", /Use this .↵/, "and on Use this");
+  assert.match(await heard(), /choice, way 1 of 2/, "a screen reader hears the choice the caret is in");
   await page.keyboard.press("Shift+Tab");
   assert.notEqual(await page.evaluate(() => document.activeElement?.closest(".code") ? "in the plan" : "out"), "in the plan", "Shift+Tab leaves the plan without stopping at every row");
   await caretOn("in the browser's timezone");
@@ -194,6 +199,7 @@ try {
   await caretOn("maybe also a 7-day strip");
   await page.waitForSelector(".decide kbd");
   assert.match((await page.textContent(".decide")) ?? "", /Accept .↵.*Reject .⌫/, "with the caret on a proposal, its keys show on its buttons");
+  assert.match(await heard(), /A proposal/, "and a screen reader hears it");
   await page.keyboard.press("Alt+Enter");
   assert.ok(!(await planText()).some((t) => t.includes("Accept")));
   assert.ok((await page.inputValue(TA)).includes("maybe also a 7-day strip"), "accepting keeps the line");

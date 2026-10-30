@@ -109,10 +109,14 @@ export function App() {
     return { cls: "h", label: `your turn${waiting ? ` · ${waiting} comment${waiting > 1 ? "s" : ""} waiting on you` : ""}` };
   };
 
+  // Turn changes, said once to a screen reader; the seconds counting up are left out.
+  const heard = () => (state() ? whoseTurn().label.replace(/ · working \d+s$/, " · working") : "");
+
   return (
     <Show when={state()}>
       {(s) => (
         <Show when={!s().finished} fallback={<Finished state={s()} />}>
+          <div class="sr-only" role="status">{heard()}</div>
           <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={ready() && editable() && editor.fresh()} onNext={ready() && editable() && editor.stops().length ? () => editor.jump(1) : undefined} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
