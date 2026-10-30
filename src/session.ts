@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, mapIndices, splitLines, type DiffOp } from "./shared/diff.ts";
 import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
 import { AGENT_DIR } from "./paths.ts";
-import * as git from "./git.ts";
+import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent, AnimationOp, Box, HumanDiff, LastTurn, Line, Reply, Settings, Snapshot, Symbol, Thread } from "./types.ts";
 
@@ -42,8 +42,7 @@ export class Session extends EventEmitter {
   rulesPath: string;
   agent: Agent;
   clock: Clock;
-  root: string | null;
-  commit: boolean;
+  log!: TurnLog;
   working: boolean;
   activity: string[];
   turn!: number;
@@ -54,13 +53,8 @@ export class Session extends EventEmitter {
   suggestions!: string[];
   last!: LastTurn | null;
   base!: Base;
-  baseCommit!: string | null;
   history!: HistoryEntry[];
   settings!: Settings;
-  dirtyBase!: Record<string, string>;
-  // The plan file and the folder beside it, relative to the repository root: the
-  // editor writes these itself, so they are never the agent's drift.
-  ownPaths: string[];
 
   constructor({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }) {
     super();
@@ -71,17 +65,14 @@ export class Session extends EventEmitter {
     this.rulesPath = join(dirname(this.planPath), ".underpaint", "rules.md");
     this.agent = agent;
     this.clock = clock;
-    this.root = git.repoRoot(this.cwd);
-    this.commit = commit && !!this.root;
-    this.ownPaths = this.root ? [relative(this.root, this.planPath), relative(this.root, dirname(this.dir))] : [];
     this.working = false;
     this.activity = [];
-    this.load();
+    this.load(commit);
   }
 
   // ---------- disk ----------
 
-  load() {
+  load(commit: boolean) {
     mkdirSync(join(this.dir, "boxes"), { recursive: true });
     // The plan and boxes are shared in git; the editor's bookkeeping stays local.
     const ignore = join(this.dir, ".gitignore");
@@ -96,13 +87,12 @@ export class Session extends EventEmitter {
     this.suggestions = s.suggestions || [];
     this.last = s.last || null;
     this.base = s.base || { lines: [], boxes: {} };
-    this.baseCommit = s.baseCommit || (this.root ? git.head(this.root) : null);
     this.history = s.history || [];
     this.settings = { model: "", effort: "", ...s.settings };
     const commentsPath = join(this.dir, "comments.json");
     this.threads = existsSync(commentsPath) ? JSON.parse(readFileSync(commentsPath, "utf8")) : [];
-    // Work already in progress when we start isn't drift; only what changes after.
-    this.dirtyBase = s.dirtyBase || (this.root ? Object.fromEntries(git.dirtyFiles(this.root)) : {});
+    // The plan file and the folder beside it are the editor's own files.
+    this.log = turnLog({ cwd: this.cwd, ownFiles: [this.planPath, dirname(this.dir)], commit, saved: { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase } });
 
     // The files are the source of truth for text. Someone may have edited them in
     // another editor; carry what we know across that edit.
@@ -133,7 +123,8 @@ export class Session extends EventEmitter {
     const keep = new Set(this.boxes.map((b) => `${b.name}.plan`));
     for (const f of readdirSync(boxDir)) if (!keep.has(f)) rmSync(join(boxDir, f));
     for (const b of this.boxes) writeFileSync(join(boxDir, `${b.name}.plan`), joinLines(b.lines) + "\n");
-    const { turn, lines, boxes, symbols, suggestions, last, base, baseCommit, history, dirtyBase, settings } = this;
+    const { turn, lines, boxes, symbols, suggestions, last, base, history, settings } = this;
+    const { baseCommit, dirtyBase } = this.log.saved();
     writeFileSync(join(this.dir, "state.json"), JSON.stringify({ turn, lines, boxes, symbols, suggestions, last, base, baseCommit, history, dirtyBase, settings }, null, 1));
     writeFileSync(join(this.dir, "comments.json"), JSON.stringify(this.threads, null, 1) + "\n");
   }
@@ -274,14 +265,6 @@ export class Session extends EventEmitter {
     return { lines: lineChanges(this.base.lines, this.lines.map((l) => l.text)), boxes };
   }
 
-  drift(): string[] {
-    if (!this.commit || !this.root) return [];
-    const ours = (p: string) => this.ownPaths.some((o) => p === o || p.startsWith(`${o}/`));
-    const committed = git.filesInCommits(this.root, this.baseCommit);
-    const dirty = [...git.dirtyFiles(this.root)].filter(([p, h]) => this.dirtyBase[p] !== h).map(([p]) => p);
-    return [...new Set([...committed, ...dirty])].filter((p) => !ours(p));
-  }
-
   async pass({ text, boxes, accepted }: EditInput = {}) {
     if (this.working) throw new Error("The agent already has the pen.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
@@ -295,10 +278,10 @@ export class Session extends EventEmitter {
       boxes: this.boxes,
       threads: this.threads,
       humanDiff: this.humanDiff(),
-      drift: this.drift(),
+      drift: this.log.drift(),
       last: this.last,
     });
-    const before = this.root ? git.dirtyFiles(this.root) : new Map<string, string>();
+    this.log.begin();
     const prev = { ...this.turnState(), threads: structuredClone(this.threads) };
     this.working = true;
     this.activity = [];
@@ -328,16 +311,11 @@ export class Session extends EventEmitter {
     // Whatever the turn changed gets a commit, even when it failed, so it can be undone.
     // A turn that failed before replying commits only the code the agent touched.
     let commit: string | null = null;
-    if (this.commit && this.root) {
-      const paths = [...new Set([...git.changedSince(this.root, before), ...(reply ? this.ownPaths : [])])];
-      const title = `underpaint: ${error ? "failed turn" : "turn"} ${this.turn} on ${this.name}`;
-      try {
-        commit = git.commitPaths(this.root, paths, `${title}\n\n${reply?.summary || error || ""}`.trim());
-      } catch (e) {
-        error ??= (e as Error).message;
-      }
-      this.baseCommit = git.head(this.root);
-      this.dirtyBase = Object.fromEntries(git.dirtyFiles(this.root));
+    const title = `underpaint: ${error ? "failed turn" : "turn"} ${this.turn} on ${this.name}`;
+    try {
+      commit = this.log.record(`${title}\n\n${reply?.summary || error || ""}`.trim(), { ownFiles: !!reply });
+    } catch (e) {
+      error ??= (e as Error).message;
     }
     if (reply || commit) {
       this.history.push({ ...prev, commit });
@@ -428,13 +406,13 @@ export class Session extends EventEmitter {
     if (!h) throw new Error("There is no agent turn to undo.");
     // The code goes back through git; the plan, boxes and threads come back from memory,
     // as they were just before the turn, with the person's edits from before it.
-    const reverted = h.commit && this.root ? git.revertExcept(this.root, h.commit, this.ownPaths) : [];
     const { commit, ...state } = h;
+    this.log.begin();
+    if (commit) this.log.revert(commit);
     Object.assign(this, state, { threads: h.threads || [] });
     this.save();
-    if (this.commit && this.root && commit) {
-      git.commitPaths(this.root, [...new Set([...reverted, ...this.ownPaths])], `underpaint: undo turn ${h.turn} on ${this.name}`);
-      this.baseCommit = git.head(this.root);
+    if (commit) {
+      this.log.record(`underpaint: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
       this.save();
     }
     this.emit("change", {});

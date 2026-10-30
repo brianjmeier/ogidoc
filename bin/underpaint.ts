@@ -64,7 +64,7 @@ const session = new Session({ cwd: process.cwd(), planFile: positionals[0] || "u
 session.save();
 const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
 console.log(`Underpaint is open at ${url}`);
-console.log(`Plan: ${session.planPath}  Agent: ${agent.name}${session.commit ? "  Commits: one per agent turn" : ""}`);
+console.log(`Plan: ${session.planPath}  Agent: ${agent.name}${session.log.commits ? "  Commits: one per agent turn" : ""}`);
 if (values.open) {
   const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   spawn(opener, [url], { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
