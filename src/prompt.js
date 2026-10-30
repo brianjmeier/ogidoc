@@ -64,7 +64,8 @@ export function parseReply(text) {
     const obj = tryParse(raw);
     if (obj && Array.isArray(obj.plan)) return normalize(obj);
   }
-  throw new Error("The agent's reply had no JSON block with a plan in it.");
+  const said = text.trim().slice(-300);
+  throw new Error(`The agent's reply had no JSON block with a plan in it.${said ? ` It said: ${said}` : ""}`);
 }
 
 function tryParse(raw) {

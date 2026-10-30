@@ -76,4 +76,5 @@ test("parseReply takes the last JSON block and normalizes it", () => {
 
 test("parseReply fails clearly without a plan", () => {
   assert.throws(() => parseReply("no json here"), /no JSON block/);
+  assert.throws(() => parseReply("Not logged in · Please run /login"), /It said: Not logged in/);
 });
