@@ -99,11 +99,11 @@ export function Editor(props: Props) {
   });
   createEffect(() => {
     wrapped();
-    lines();
-    const rows = rowsEl.children as HTMLCollectionOf<HTMLElement>;
+    rows();
+    const els = rowsEl.children as HTMLCollectionOf<HTMLElement>;
     setRail(choices().flatMap((choice) => {
-      const first = rows[choice.line];
-      const last = rows[choice.line + choice.options[choice.current].length - 1];
+      const first = els[choice.line];
+      const last = els[choice.line + choice.options[choice.current].length - 1];
       return first && last ? [{ choice, top: first.offsetTop, height: last.offsetTop + last.offsetHeight - first.offsetTop }] : [];
     }));
   });

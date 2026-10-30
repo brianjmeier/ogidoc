@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // Drives the real editor in Chromium against the scripted mock agent:
-// write a plan, pass the pen, cycle through the ways the agent offered, autocomplete,
+// write a plan, pass the pen, cycle through the ways the agent offered and use one, autocomplete,
 // accept a proposal, ask about a line and pass from the comment, watch pieces move into
 // boxes, comment on a line, disagree inside a box, reach done, undo.
 //
@@ -41,11 +41,11 @@ page.on("pageerror", (e) => errors.push(e.message));
 const shot = (name: string) => page.screenshot({ path: join(SHOTS, `${name}.png`) });
 const pen = async () => (await page.textContent(".pen")) ?? "";
 const waitPen = (re: RegExp) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector(".pen")?.textContent ?? ""), re.source, { timeout: 15000 });
-// Each line as it reads, without the comment pins or the ways control drawn at its end.
+// Each line as it reads, without the comment pins drawn at its end.
 const planText = () =>
   page.$$eval(".rows .ln", (els) => els.map((e) => {
     const c = e.cloneNode(true) as HTMLElement;
-    c.querySelectorAll(".pin-btn, .ways").forEach((p) => p.remove());
+    c.querySelectorAll(".pin-btn").forEach((p) => p.remove());
     return c.textContent ?? "";
   }));
 const passPen = () => page.keyboard.press("Control+Enter");
@@ -126,6 +126,20 @@ try {
   assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-built`));
   await page.waitForFunction(() => fetch("/api/state").then((r) => r.json()).then((s) => s.choices[0]?.current === 0), null, { timeout: 5000 });
 
+  step("typing in a way keeps it a choice, and Use this locks it in");
+  await page.$eval(TA, (el) => {
+    const ta = el as HTMLTextAreaElement;
+    const end = ta.value.indexOf("in the browser's timezone") + "in the browser's timezone".length;
+    ta.focus();
+    ta.setSelectionRange(end, end);
+  });
+  await page.keyboard.type(", for now");
+  assert.equal(await page.textContent(".ways span"), "1 of 2", "editing an option doesn't drop the choice");
+  await page.click('.ways button:has-text("Use this")');
+  assert.equal(await page.$$(".ways").then((w) => w.length), 0);
+  assert.equal((await planText())[row].trim(), "in the browser's timezone, for now");
+  await page.waitForFunction(() => fetch("/api/state").then((r) => r.json()).then((s) => !s.choices.length && s.lines.some((l: { text: string }) => l.text.endsWith(", for now"))), null, { timeout: 5000 });
+
   step("autocomplete offers the line the agent expects next");
   await page.click(".brand");
   await page.$eval(TA, (el) => {
@@ -159,7 +173,6 @@ try {
   await waitPen(/your pen/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-move"), null, { timeout: 5000 });
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
-  assert.equal(await page.$$(".ways").then((w) => w.length), 0, "the kept choice is settled");
   const thread = JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"))[0];
   assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["h", "a"], "the comment reached the agent and it answered");
   assert.equal(await page.$$eval(".canvas .box", (b) => b.length), 4);

@@ -58,8 +58,9 @@ tool and how to start it.
 - **Options, not questions.** The agent decides the small things itself. Where a
   decision is expensive to undo or you'd notice it (a dependency, a data model, a
   public interface, behavior), it builds its pick and offers the other ways on the
-  same lines: `‹ 1 of 2 ›` at the end of the line, or `⌥[` / `⌥]` with the caret in
-  it, swaps them in place. Pass the pen on another way and the agent builds that one.
+  same lines. A bracket beside them switches between the ways in place (`‹ 1 of 2 ›`,
+  or `⌥[` / `⌥]` with the caret in them), and **Use this** (`⌥↵`) locks one in.
+  Pass the pen on another way and the agent builds that one.
 - **Comments are yours.** Click a line number to comment on a line. The agent answers
   in the thread (`⌘↵` sends and passes the pen), folds the answer into the plan and
   resolves it.
