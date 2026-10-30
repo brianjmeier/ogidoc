@@ -26,7 +26,7 @@
   },
   "scripts": {
     "start": "node bin/ogidoc.ts",
-    "build": "vite build && tsc -p tsconfig.build.json",
+    "build": "node -e \"for (const d of ['dist/bin', 'dist/src']) require('fs').rmSync(d, { recursive: true, force: true })\" && vite build && tsc -p tsconfig.build.json",
     "dev": "vite build --watch",
     "site": "vite -c vite.site.config.ts",
     "build:site": "vite build -c vite.site.config.ts",
