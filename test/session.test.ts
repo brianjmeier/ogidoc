@@ -231,6 +231,16 @@ test("a turn that only changes code, with lines still to build, goes back to the
   assert.equal(view().last!.error, undefined);
 });
 
+test("closing braces and blank lines don't wait to be built: a fully built plan ends the turn and is done", async () => {
+  const { dir } = repo();
+  const reply = '```json\n{"plan":[{"text":"nave {","status":"built"},{"text":"  vida","status":"built"},{"text":"}","status":null},{"text":"","status":null}],"checks":[{"name":"node --test","ok":true}],"summary":"nothing left to build"}\n```';
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("all-built", async () => reply) });
+  await s.pass({ text: "nave {\n  vida\n}\n" });
+  assert.equal(prompts.length, 1, "no retry");
+  assert.equal(view().last!.error, undefined);
+  assert.equal(view().done, true);
+});
+
 test("an agent that keeps not ending its turn fails it after a few tries", async () => {
   const { dir } = repo();
   const agent = fakeAgent("stuck", async () => '```json\n{"plan":[{"text":"hello","status":"stale"}],"summary":"nothing"}\n```');

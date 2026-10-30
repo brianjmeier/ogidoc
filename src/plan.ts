@@ -71,13 +71,16 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
 
 // Done is read off the plan: no open comment, choice or proposal, every line built,
 // checks green.
+// A line with words in it that isn't built yet. Blank lines and bare structure like
+// a closing brace have nothing of their own to build.
+const unbuilt = (l: Line) => /[\p{L}\p{N}]/u.test(l.text) && l.kind !== "proposal" && l.status !== "built";
+
 export function isDone(plan: Plan, last: LastTurn | null): boolean {
   if (!last || last.error) return false;
-  const content = plan.lines.filter((l) => l.text.trim());
-  if (!content.length) return false;
+  if (!plan.lines.some((l) => /[\p{L}\p{N}]/u.test(l.text))) return false;
   if (plan.threads.some((t) => !t.resolved) || plan.choices.length) return false;
   if (plan.lines.some((l) => l.kind === "proposal")) return false;
-  if (content.some((l) => l.status !== "built")) return false;
+  if (plan.lines.some(unbuilt)) return false;
   if (plan.boxes.some((b) => b.status !== "built")) return false;
   return (last.checks || []).every((c) => c.ok);
 }
@@ -101,7 +104,7 @@ export function agree(plan: Plan): Plan {
 // agent keeps building.
 export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; boxChanges: BoxChanges }): string | null {
   const p = after.plan;
-  const built = p.lines.every((l) => !l.text.trim() || l.kind === "proposal" || l.status === "built") && p.boxes.every((b) => b.status === "built");
+  const built = !p.lines.some(unbuilt) && p.boxes.every((b) => b.status === "built");
   if (built) return null;
   const text = (x: Plan) => x.lines.map((l) => l.text).join("\n");
   const ids = (x: Plan) => x.choices.map((c) => c.id).sort().join(" ");
@@ -109,7 +112,7 @@ export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; box
   if (Object.keys(after.boxChanges).length || before.boxes.length !== p.boxes.length) return null;
   if (reply.replies.some((r) => r.text.trim() || r.resolve)) return null;
   if (reply.steps.some((s) => s.kind === "stop")) return null;
-  return "Lines are still not built, and nothing changed in the plan for the person to look at.";
+  return "Lines are still not built, and the plan shows nothing new.";
 }
 
 // Take the agent's reply apart into lines, boxes, threads and choices, keeping authorship, and
