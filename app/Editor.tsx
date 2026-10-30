@@ -1,11 +1,12 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "../src/shared/diff.ts";
 import { choose, follow } from "../src/choices.ts";
+import { nextStop, stops } from "../src/shared/stops.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
 import { STATUS_LABEL, STATUS_MARK, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
-import { draftLine, openId, setOpenId, startThread } from "./threads.ts";
+import { draftLine, openId, setOpenId, startThread, waitingOnYou } from "./threads.ts";
 
 // The plan editor. A transparent textarea sits on top of a rendered copy of the same
 // text, so typing stays native while the copy carries color, marks, comment pins and
@@ -35,6 +36,9 @@ export interface EditorApi {
   focus(): void;
   // Nothing typed since the plan last came from the server, so the undo key undoes the agent's turn.
   fresh(): boolean;
+  // The lines that wait on the person, and moving the caret to the next one.
+  stops(): number[];
+  jump(by: 1 | -1): void;
 }
 
 interface Props {
@@ -171,6 +175,12 @@ export function Editor(props: Props) {
     // The caret may have moved without a click or a key, from a script or a drop.
     readCaret();
     const n = caret().line;
+    const by = keys.jump.by(e);
+    if (by) {
+      e.preventDefault();
+      jump(by);
+      return;
+    }
     if (keys.comment.is(e)) {
       e.preventDefault();
       const t = openOn().get(n)?.[0];
@@ -216,6 +226,19 @@ export function Editor(props: Props) {
     for (let i = 0; i < l; i++) at += texts[i].length + 1;
     ta.setSelectionRange(at, at);
     readCaret();
+  }
+
+  // The caret goes to the next line that waits on the person; a comment the agent
+  // answered there opens.
+  const waiting = createMemo(() => stops(lines(), choices(), props.threads));
+  function jump(by: 1 | -1) {
+    const n = nextStop(waiting(), caret().line, by);
+    if (n === null) return;
+    ta.focus({ preventScroll: true });
+    place(n, lines()[n].text.match(/^\s*/)![0].length);
+    (rowsEl.children[n] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
+    const t = props.threads.find((t) => t.line === n && waitingOnYou(t));
+    if (t) setOpenId(t.id);
   }
 
   // ---------- proposals ----------
@@ -318,6 +341,8 @@ export function Editor(props: Props) {
     takeAccepted: () => { const a = [...accepted]; accepted.clear(); return a; },
     focus: () => ta.focus({ preventScroll: true }),
     fresh,
+    stops: waiting,
+    jump,
   });
 
   return (

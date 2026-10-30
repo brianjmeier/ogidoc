@@ -100,6 +100,23 @@ try {
   assert.match((await page.textContent(".under-body")) ?? "", /src\/summarize\.js/);
   await page.click(".under summary");
 
+  step("the jump key walks the lines that wait on the person");
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  const jump = (dir: "Down" | "Up") => page.keyboard.press(`${mac ? "Alt+Meta" : "Alt"}+Arrow${dir}`);
+  const caretLine = () => page.$eval(TA, (el) => { const ta = el as HTMLTextAreaElement; return ta.value.slice(0, ta.selectionStart).split("\n").length - 1; });
+  assert.match((await page.textContent('.top button:has-text("Next to decide")')) ?? "", /↓/, "the top bar offers the next thing to decide, with its key");
+  await caretOn("weekly reflection");
+  const lineOf = async (t: string) => (await page.inputValue(TA)).split("\n").findIndex((l) => l.includes(t));
+  const [choiceLine, proposalLine] = [await lineOf("in the browser's timezone"), await lineOf("7-day strip")];
+  await jump("Down");
+  assert.equal(await caretLine(), choiceLine, "first the choice");
+  await jump("Down");
+  assert.equal(await caretLine(), proposalLine, "then the proposal");
+  await jump("Down");
+  assert.equal(await caretLine(), choiceLine, "then around again");
+  await jump("Up");
+  assert.equal(await caretLine(), proposalLine, "and back up");
+
   step("the agent built one way and shows the other in place");
   const row: number = await page.evaluate(() => fetch("/api/state").then((r) => r.json()).then((s) => s.choices[0].line));
   assert.equal((await planText())[row].trim(), "in the browser's timezone", "the agent's pick is in the plan");

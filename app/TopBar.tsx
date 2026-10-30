@@ -14,6 +14,8 @@ interface Props {
   undo: Confirmed;
   // Whether the undo key would undo the agent's turn right now.
   undoKey: boolean;
+  // Moves to the next line that waits on the person, when one does.
+  onNext?: () => void;
 }
 
 export function TopBar(props: Props) {
@@ -39,6 +41,11 @@ export function TopBar(props: Props) {
       </Show>
       <Show when={props.turn.cls === "done"}>
         <Button class="btn ghost-btn" onClick={remove.click}>{remove.armed() ? "Delete it? Click again" : "Delete the plan"}</Button>
+      </Show>
+      <Show when={props.onNext}>
+        <Button class="btn ghost-btn" onClick={() => props.onNext!()}>
+          Next to decide <kbd>{keys.jump.label}</kbd>
+        </Button>
       </Show>
       <span class={`turn ${props.turn.cls}`} classList={{ passing: props.passing }}>
         <i class="dot" />

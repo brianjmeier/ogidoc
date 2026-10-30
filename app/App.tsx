@@ -113,7 +113,7 @@ export function App() {
     <Show when={state()}>
       {(s) => (
         <Show when={!s().finished} fallback={<Finished state={s()} />}>
-          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={ready() && editable() && editor.fresh()} />
+          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={ready() && editable() && editor.fresh()} onNext={ready() && editable() && editor.stops().length ? () => editor.jump(1) : undefined} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">

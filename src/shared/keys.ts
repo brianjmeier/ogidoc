@@ -27,6 +27,15 @@ export function keymap(mac: boolean) {
     // The other ways of a choice, matched by position so the key sits where [ and ] do on US keyboards.
     prev: { is: (e: KeyLike) => altOnly(e) && e.code === "BracketLeft" },
     next: { is: (e: KeyLike) => altOnly(e) && e.code === "BracketRight" },
+    // To the next or previous line that waits on the person. Plain ⌥↓ is taken on macOS
+    // (end of paragraph), and Ctrl+Alt+↓ by GNOME (switch workspace).
+    jump: {
+      label: mac ? "⌥⌘↓" : "Alt+↓",
+      by: (e: KeyLike): 1 | -1 | 0 => {
+        const held = mac ? e.altKey && e.metaKey && !e.ctrlKey && !e.shiftKey : altOnly(e);
+        return !held ? 0 : e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+      },
+    },
     // ⌘Z / Ctrl+Z before the person has typed anything since the agent's turn.
     undo: { label: mac ? "⌘Z" : "Ctrl+Z", is: (e: KeyLike) => mod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "z" },
   };

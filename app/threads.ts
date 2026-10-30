@@ -11,8 +11,7 @@ const [drafts, setDrafts] = createSignal<Record<string, string>>({});
 export const draft = (key: string) => drafts()[key] ?? "";
 export const setDraft = (key: string, text: string) => setDrafts((d) => ({ ...d, [key]: text }));
 
-// A thread is waiting on the person when the agent spoke last.
-export const waitingOnYou = (t: Thread) => !t.resolved && t.messages.at(-1)?.by === "a";
+export { waitingOnYou } from "../src/shared/stops.ts";
 
 export function startThread(line: number) {
   setDraftLine(line);

@@ -36,3 +36,12 @@ test("⌥ alone keeps, rejects and switches ways; other modifiers leave the key 
   assert.equal(mac.keep.label, "⌥↵");
   assert.equal(pc.reject.label, "Alt+⌫");
 });
+
+test("the jump key is ⌥⌘↑↓ on macOS and Alt+↑↓ elsewhere", () => {
+  assert.equal(mac.jump.by(press("ArrowDown", { altKey: true, metaKey: true })), 1);
+  assert.equal(mac.jump.by(press("ArrowUp", { altKey: true, metaKey: true })), -1);
+  assert.equal(mac.jump.by(press("ArrowDown", { altKey: true })), 0, "⌥↓ alone stays end of paragraph");
+  assert.equal(pc.jump.by(press("ArrowDown", { altKey: true })), 1);
+  assert.equal(pc.jump.by(press("ArrowDown", { altKey: true, ctrlKey: true })), 0);
+  assert.equal(pc.jump.by(press("ArrowLeft", { altKey: true })), 0);
+});
