@@ -1,7 +1,7 @@
 /* The site is a scrolling page around small copies of the editor; app/style.css gives
    them the editor's own colours, marks and animation. */
 html, body { height: auto; }
-body { display: block; }
+body, #root { display: block; }
 .site { max-width: 860px; margin: 0 auto; padding: 72px 20px 120px; display: grid; gap: 96px; }
 .hero { display: grid; gap: 16px; }
 .hero h1 { margin: 0; font-size: 44px; }

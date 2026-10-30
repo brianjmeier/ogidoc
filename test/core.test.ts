@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { diffLines, carryMeta, mapIndices } from "../src/shared/diff.ts";
 import { buildPrompt, parseReply, readAgentFile } from "../src/prompt.ts";
+import { follow } from "../src/choices.ts";
 import type { Line } from "../src/types.ts";
 
 test("diffLines keeps equal lines and pairs similar edits", () => {
@@ -95,4 +96,15 @@ test("parseReply takes the last JSON block and normalizes it", () => {
 test("parseReply fails clearly without a plan", () => {
   assert.throws(() => parseReply("no json here"), /no JSON block/);
   assert.throws(() => parseReply("Not logged in · Please run /login"), /It said: Not logged in/);
+});
+
+test("a choice keeps lines written between its first and last line, and not the ones after it", () => {
+  const plan = ["a", "  one", "  two", "b"];
+  const lines = plan.map((text) => ({ text }));
+  const c = { id: "c1", line: 1, current: 0, options: [[lines[1], lines[2]], [{ text: "  other" }]] };
+  const at = (next: string[]) => follow([c], diffLines(plan, next), next.map((text) => ({ text })));
+  assert.deepEqual(at(["a", "  one", "  between", "  two", "b"])[0].options[0].map((l) => l.text), ["  one", "  between", "  two"]);
+  assert.deepEqual(at(["a", "  one", "  two", "  after", "b"])[0].options[0].map((l) => l.text), ["  one", "  two"]);
+  assert.deepEqual(at(["a", "  two", "b"])[0], { ...c, line: 1, options: [[{ text: "  two" }], c.options[1]] });
+  assert.deepEqual(at(["a", "b"]), []);
 });

@@ -41,6 +41,16 @@ try {
 
     await page.locator(scene(3)).scrollIntoViewIfNeeded();
     await count(`${scene(3)} .ways`, 1);
+    const beside = () => page.$eval(scene(3), (s) => {
+      const w = s.querySelector(".ways")!.getBoundingClientRect();
+      const r = s.querySelectorAll(".rows .row")[4].getBoundingClientRect();
+      return { top: Math.round(w.top - r.top), right: Math.round(w.right) };
+    });
+    const at = await beside();
+    assert.equal(at.top, 0, `${colorScheme}: the other way shows beside the line it would replace`);
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent === "2 of 2", `${scene(3)} .ways span`, { timeout: 20000 });
+    assert.deepEqual(await beside(), at, `${colorScheme}: the switch stays put when the person picks the other way`);
+    if (colorScheme === "light") await page.locator(scene(3)).screenshot({ path: "/tmp/site-scene3.png" });
     await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("one table in a local database"), `${scene(3)} .rows`, { timeout: 20000 });
     await count(`${scene(3)} .ways`, 0);
     console.log(`· ${colorScheme}: the agent offers another way, the person picks it, the agent builds it`);

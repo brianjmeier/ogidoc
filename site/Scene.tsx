@@ -81,7 +81,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
       </div>
       <div class="scene-body" classList={{ split: boxes().length > 0 }}>
         <div class="editor" style={{ height: `${rows * 24 + 28}px` }}>
-          <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onPass={() => {}} onHint={() => {}} />
+          <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onSettle={() => {}} onPass={() => {}} onHint={() => {}} />
         </div>
         <Show when={boxes().length}>
           <div class="box-pane">

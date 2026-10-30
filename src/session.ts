@@ -130,6 +130,13 @@ export class Session extends EventEmitter {
     this.changed();
   }
 
+  // Keep the option the plan shows now; the other ways go.
+  settle({ choice }: { choice: string }) {
+    this.guard();
+    this.s.choices = choices.settle(this.s.choices, choice);
+    this.changed();
+  }
+
   edit(input: EditInput) {
     this.guard();
     this.setPlan(plan.edit(this.plan, input));

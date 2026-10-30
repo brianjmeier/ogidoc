@@ -7,19 +7,25 @@ import type { Choice, Line, Reply } from "./types.ts";
 
 const size = (c: Choice) => c.options[c.current].length;
 
-// Keep every choice on its lines through an edit of the plan. Lines edited in place
-// become the current option. A choice whose lines were deleted, or that got lines added
-// inside it, was taken over by the edit and is gone.
+// Keep every choice on its lines through an edit of the plan. Whatever the person
+// writes between its first and last surviving line becomes the current option, lines
+// added or removed included. A choice whose lines were all deleted is gone.
 export function follow(choices: Choice[], ops: DiffOp[], lines: Line[]): Choice[] {
   const to = new Map<number, number>();
   for (const o of ops) if (o.op === "eq" || o.op === "mod") to.set(o.a, o.b);
   return choices.flatMap((c) => {
-    const start = to.get(c.line);
-    if (start === undefined) return [];
-    for (let i = 1; i < size(c); i++) if (to.get(c.line + i) !== start + i) return [];
-    const options = c.options.map((o, k) => (k === c.current ? lines.slice(start, start + size(c)) : o));
+    const kept = Array.from({ length: size(c) }, (_, i) => to.get(c.line + i)).filter((b) => b !== undefined);
+    if (!kept.length) return [];
+    const start = kept[0];
+    const options = c.options.map((o, k) => (k === c.current ? lines.slice(start, kept.at(-1)! + 1) : o));
     return [{ ...c, line: start, options }];
   });
+}
+
+// The person takes the option the plan shows now, and the other ways go.
+export function settle(choices: Choice[], id: string): Choice[] {
+  if (!choices.some((c) => c.id === id)) throw new Error(`There is no choice ${id}.`);
+  return choices.filter((c) => c.id !== id);
 }
 
 // Swap a choice's lines in the plan for another of its options.

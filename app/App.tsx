@@ -29,14 +29,14 @@ export function App() {
   }
 
   // An edit still waiting to be sent goes first, as it was before the switch, so the
-  // server swaps the same lines the person saw.
-  async function choose(choice: string, option: number, before: string) {
+  // server acts on the same lines the person saw.
+  async function onChoice(path: string, body: object, before: string) {
     if (editTimer) {
       clearTimeout(editTimer);
       editTimer = undefined;
       await post("/api/edit", { text: before, accepted: editor.takeAccepted() });
     }
-    await post("/api/choose", { choice, option });
+    await post(path, body);
   }
 
   async function pass() {
@@ -117,7 +117,8 @@ export function App() {
                   working={s().working}
                   threads={s().threads}
                   onEdit={() => { clearTimeout(editTimer); editTimer = setTimeout(sendEdit, 400); }}
-                  onChoose={choose}
+                  onChoose={(choice, option, before) => onChoice("/api/choose", { choice, option }, before)}
+                  onSettle={(choice, before) => onChoice("/api/settle", { choice }, before)}
                   onPass={pass}
                   onHint={setHint}
                 />

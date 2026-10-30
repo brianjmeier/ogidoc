@@ -90,12 +90,18 @@ try {
   await page.click(".under summary");
 
   step("the agent built one way and shows the other in place");
-  const choiceRow = () => page.$$eval(".rows .row", (rows) => rows.findIndex((r) => r.querySelector(".ways")));
-  const row = await choiceRow();
+  const row: number = await page.evaluate(() => fetch("/api/state").then((r) => r.json()).then((s) => s.choices[0].line));
   assert.equal((await planText())[row].trim(), "in the browser's timezone", "the agent's pick is in the plan");
   assert.equal(await page.textContent(".ways span"), "1 of 2");
   assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-built`));
   assert.deepEqual(new Set(await page.$$eval(".rows .row", (r) => r.map((x) => (x as HTMLElement).offsetHeight))), new Set([24]), "the control doesn't make its line taller");
+  const beside = () => page.evaluate((n) => {
+    const w = document.querySelector(".ways")!.getBoundingClientRect();
+    const r = document.querySelectorAll(".rows .row")[n].getBoundingClientRect();
+    return { top: w.top - r.top, left: Math.round(w.left) };
+  }, row);
+  const at = await beside();
+  assert.equal(at.top, 0, "the switch sits beside the choice's first line");
   await shot("05-choice");
 
   step("Alt+] switches to the other way, which needs a build");
@@ -108,6 +114,7 @@ try {
   await page.keyboard.press("Alt+BracketRight");
   assert.equal((await planText())[row].trim(), "in a timezone you set once");
   assert.equal(await page.textContent(".ways span"), "2 of 2");
+  assert.deepEqual(await beside(), at, "the switch doesn't move when the text changes");
   assert.ok(await page.$(`.rows .row:nth-child(${row + 1}) .m-stale`), "the switched-in way needs a build");
   await page.waitForTimeout(300);
   await shot("06-switched");

@@ -81,7 +81,7 @@ test("switching a choice swaps its lines, needs a build, and tells the agent; sw
   assert.match(prompts[1], /c1 on line 2: the person switched to option 2\n  option 1: \["    in the browser's timezone"\]\n  option 2, in the plan now: \["    in a timezone you set once"\]/);
 });
 
-test("editing inside a choice updates that option; adding or deleting lines in it drops the choice", async () => {
+test("editing inside a choice updates that option; deleting all its lines drops it; using it settles it", async () => {
   const { dir } = repo();
   const { session: s, view } = open(dir);
   await s.pass({ text: PLAN });
@@ -96,6 +96,19 @@ test("editing inside a choice updates that option; adding or deleting lines in i
   assert.equal(view().lines[c.line].text, "    in the browser's own timezone", "the person's edit is kept as that option");
   s.edit({ text: texts(view().lines).filter((_, i) => i !== c.line).join("\n") });
   assert.deepEqual(view().choices, []);
+});
+
+test("using a choice keeps the lines it shows and drops the other ways", async () => {
+  const { dir } = repo();
+  const { session: s, view } = open(dir);
+  await s.pass({ text: PLAN });
+  const [c] = view().choices;
+  s.choose({ choice: c.id, option: 1 });
+  s.settle({ choice: c.id });
+  assert.deepEqual(view().choices, []);
+  assert.equal(view().lines[c.line].text, "    in a timezone you set once");
+  assert.equal(view().lines[c.line].status, "stale", "the agent still has to build it");
+  assert.throws(() => s.settle({ choice: c.id }), /no choice/);
 });
 
 test("an agent can't start a comment thread, and a choice that doesn't match the plan is dropped", async () => {
