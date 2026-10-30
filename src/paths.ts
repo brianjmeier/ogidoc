@@ -13,7 +13,7 @@ function packageRoot(): string {
   return dir;
 }
 
-export const ROOT = packageRoot();
+const ROOT = packageRoot();
 export const AGENT_DIR = join(ROOT, "agent");
 // Built by `npm run build`.
 export const WEB_DIR = join(ROOT, "dist", "web");

@@ -36,7 +36,7 @@ export interface HistoryEntry {
   commit: string | null;
 }
 
-export interface Stored {
+interface Stored {
   turn: number;
   lines: Line[];
   boxes: Box[];

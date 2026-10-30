@@ -157,7 +157,7 @@ function runJsonLines(
   });
 }
 
-export function describeTool(name: string, input: Record<string, unknown> = {}): string {
+function describeTool(name: string, input: Record<string, unknown> = {}): string {
   const n = String(name).toLowerCase();
   const path = input.file_path || input.path || "";
   if (n === "edit" || n === "write" || n === "multiedit") return `editing ${path}`;

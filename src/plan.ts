@@ -27,7 +27,7 @@ export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; acc
 }
 
 // Box files are plain text, edited in the box pane or anywhere else.
-export function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
+function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
   return boxes.map((b) => {
     if (!(b.name in bodies) || joinLines(b.lines) === bodies[b.name]) return b;
     const lines = carryMeta(b.lines, splitLines(bodies[b.name]), { anyBuilt: true }).map((l) => ({ ...l, kind: null }));
