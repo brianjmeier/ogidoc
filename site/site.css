@@ -1,11 +1,11 @@
 /* The site is a scrolling page around small copies of the editor; app/style.css gives
    them the editor's own colours, marks and animation. */
-/* The wordmark's handwriting ships with the site (Caveat, SIL OFL, fonts/OFL.txt). */
-@font-face { font-family: Caveat; src: url("./fonts/caveat-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* The wordmark's handwriting ships with the site (Patrick Hand, SIL OFL, fonts/OFL.txt). */
+@font-face { font-family: "Patrick Hand"; src: url("./fonts/patrick-hand-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 html, body { height: auto; }
 body, #root { display: block; }
 .site { max-width: 860px; margin: 0 auto; padding: 72px 20px 120px; display: grid; gap: 96px; }
-.site .brand { font-family: Caveat, cursive; font-style: normal; font-weight: 700; letter-spacing: 0; }
+.site .brand { font-family: "Patrick Hand", cursive; font-style: normal; font-weight: 400; letter-spacing: 0; }
 .hero { display: grid; gap: 16px; }
 .hero h1 { margin: 0; font-size: 44px; }
 .hero p { margin: 0; font-size: 19px; line-height: 1.5; color: var(--muted); max-width: 36em; }
