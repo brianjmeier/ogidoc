@@ -86,9 +86,9 @@ export class Session extends EventEmitter {
   }
 
   // The person's changes are refused during the agent's turn.
-  private guard() {
+  private guard(working = "It's the agent's turn.") {
     if (this.finished) throw new Error("This plan is built and removed.");
-    if (this.working) throw new Error("It's the agent's turn.");
+    if (this.working) throw new Error(working);
   }
 
   private changed() {
@@ -163,8 +163,7 @@ export class Session extends EventEmitter {
   // ---------- the agent's turn ----------
 
   async pass({ text, boxes, accepted }: EditInput = {}) {
-    if (this.finished) throw new Error("This plan is built and removed.");
-    if (this.working) throw new Error("It's already the agent's turn.");
+    this.guard("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     const s = this.s;
     const prompt = buildPrompt({
