@@ -3,7 +3,7 @@ import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines }
 import { choose, follow } from "../src/choices.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
-import { STATUS_LABEL, STATUS_MARK, altKey, decorate, isPassKey, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, STATUS_MARK, altKey, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
 import { draftLine, openId, startThread } from "./threads.ts";
 
@@ -33,6 +33,8 @@ export interface EditorApi {
   lines(): Line[];
   takeAccepted(): number[];
   focus(): void;
+  // Nothing typed since the plan last came from the server, so the undo key undoes the agent's turn.
+  fresh(): boolean;
 }
 
 interface Props {
@@ -47,6 +49,7 @@ interface Props {
   onSettle: (choice: string, before: string) => void;
   onPass: () => void;
   onHint: (hint: string) => void;
+  onUndo?: () => void;
 }
 
 export function Editor(props: Props) {
@@ -61,6 +64,7 @@ export function Editor(props: Props) {
   const [ghostOff, setGhostOff] = createSignal(false);
   const [anim, setAnim] = createSignal<Row[] | null>(null);
   const accepted = new Set<number>();
+  const [fresh, setFresh] = createSignal(true);
   const symRe = createMemo(() => symbolPattern(symbols()));
 
   // The agent's suggestions are whole lines it expects you to write. Offer the rest of
@@ -133,6 +137,7 @@ export function Editor(props: Props) {
     setLines(next);
     setChoices((cs) => follow(cs, ops, next));
     setGhostOff(false);
+    setFresh(false);
     readCaret();
     props.onEdit();
   }
@@ -149,6 +154,11 @@ export function Editor(props: Props) {
       return;
     }
     if (!props.editable) return;
+    if (keys.undo.is(e) && fresh() && props.onUndo) {
+      e.preventDefault();
+      props.onUndo();
+      return;
+    }
     // The caret may have moved without a click or a key, from a script or a drop.
     readCaret();
     const c = choiceAt().get(caret().line);
@@ -180,6 +190,7 @@ export function Editor(props: Props) {
   function accept(n: number) {
     setLines((ls) => ls.map((l, i) => (i === n ? acceptProposal(l, built()) : l)));
     accepted.add(n);
+    setFresh(false);
     props.onEdit();
   }
 
@@ -203,11 +214,13 @@ export function Editor(props: Props) {
     ta.value = joinLines(next.lines);
     ta.setSelectionRange(selectionStart, selectionEnd);
     readCaret();
+    setFresh(false);
     props.onChoose(c.id, option, before);
   }
 
   function settle(c: Choice) {
     setChoices((cs) => cs.filter((x) => x.id !== c.id));
+    setFresh(false);
     props.onSettle(c.id, ta.value);
   }
 
@@ -244,6 +257,7 @@ export function Editor(props: Props) {
     setLines(next.lines);
     setChoices(next.choices ?? []);
     accepted.clear();
+    setFresh(true);
     const text = joinLines(next.lines);
     if (ta.value === text) return;
     const focused = document.activeElement === ta;
@@ -259,6 +273,7 @@ export function Editor(props: Props) {
     lines,
     takeAccepted: () => { const a = [...accepted]; accepted.clear(); return a; },
     focus: () => ta.focus({ preventScroll: true }),
+    fresh,
   });
 
   return (

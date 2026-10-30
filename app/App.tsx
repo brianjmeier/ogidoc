@@ -4,7 +4,7 @@ import type { Snapshot } from "../src/types.ts";
 import { listen, notice, post, state, type TurnChanges } from "./api.ts";
 import { Boxes, type BoxAnimation, type BoxesApi } from "./Boxes.tsx";
 import { Editor, type EditorApi } from "./Editor.tsx";
-import { TopBar } from "./TopBar.tsx";
+import { TopBar, confirmed } from "./TopBar.tsx";
 import { Underneath } from "./Underneath.tsx";
 import { sendAll, setOpenId, waitingOnYou } from "./threads.ts";
 import { isPassKey } from "./text.ts";
@@ -21,6 +21,9 @@ export function App() {
   const [workStart, setWorkStart] = createSignal(0);
 
   const editable = () => !!state() && !state()!.working && !writing();
+  const undo = confirmed(() => post("/api/undo"));
+  // The top bar renders before the editor exists.
+  const [ready, setReady] = createSignal(false);
 
   function sendEdit() {
     clearTimeout(editTimer);
@@ -107,12 +110,12 @@ export function App() {
     <Show when={state()}>
       {(s) => (
         <Show when={!s().finished} fallback={<Finished state={s()} />}>
-          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} />
+          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={ready() && editable() && editor.fresh()} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">
                 <Editor
-                  ref={(api) => (editor = api)}
+                  ref={(api) => { editor = api; setReady(true); }}
                   editable={editable()}
                   working={s().working}
                   threads={s().threads}
@@ -121,6 +124,7 @@ export function App() {
                   onSettle={(choice, before) => onChoice("/api/settle", { choice }, before)}
                   onPass={pass}
                   onHint={setHint}
+                  onUndo={() => s().canUndo && undo.click()}
                 />
                 <StatusCard state={s()} />
               </div>

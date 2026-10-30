@@ -163,6 +163,12 @@ try {
   assert.ok(!(await planText()).some((t) => t.includes("Accept")));
   await page.waitForTimeout(600);
 
+  step("the person replaces the whole plan in one go, which the browser's undo remembers");
+  await page.focus(TA);
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.insertText(await page.inputValue(TA));
+  await page.waitForTimeout(600);
+
   step("the person asks about a line and hands over from the comment");
   await page.click(".rows .row:first-child .no");
   await page.fill(".card textarea", "does this fit on a phone?");
@@ -176,6 +182,9 @@ try {
   await page.waitForFunction(() => !document.querySelector(".rows .a-move"), null, { timeout: 5000 });
   const afterTurn = await page.inputValue(TA);
   await page.focus(TA);
+  await page.keyboard.press("End");
+  await page.keyboard.type("!");
+  await page.keyboard.press("ControlOrMeta+z");
   await page.keyboard.press("ControlOrMeta+z");
   await page.waitForTimeout(600);
   assert.equal(await page.inputValue(TA), afterTurn, "the browser's undo doesn't reach back into the agent's turn");
@@ -230,10 +239,15 @@ try {
   assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".underpaint/weekly/boxes/weekWindow.plan"), files.join(", "));
   assert.ok(files.includes(".underpaint/weekly/comments.json"), "the thread is committed with the turn");
 
-  step("undo the last agent turn");
-  await page.click('button:has-text("Undo agent turn")');
-  await page.click('button:has-text("Undo it? Click again")');
+  step("undo the last agent turn from the keyboard, pressing the key twice");
+  await page.focus(TA);
+  assert.match(await page.textContent('button:has-text("Undo agent turn")') ?? "", /Z$/, "the button shows its key while nothing is typed");
+  await page.keyboard.press("ControlOrMeta+z");
+  assert.match(await page.textContent('button:has-text("Undo it?")') ?? "", /Undo it\? .*Z again/);
+  assert.match(g("log", "-1", "--format=%s"), /turn 3/, "one press alone doesn't undo");
+  await page.keyboard.press("ControlOrMeta+z");
   await waitTurn(/your turn/);
+  for (let i = 0; i < 50 && !/undo turn 3/.test(g("log", "-1", "--format=%s")); i++) await page.waitForTimeout(100);
   assert.match(readFileSync(join(dir, "src/summarize.js"), "utf8"), /keep = 3/);
   assert.match(g("log", "-1", "--format=%s"), /undo turn 3/);
 

@@ -3,7 +3,7 @@ import { Button } from "@kobalte/core/button";
 import { Select } from "@kobalte/core/select";
 import type { Snapshot } from "../src/types.ts";
 import { post } from "./api.ts";
-import { passKey } from "./text.ts";
+import { keys, passKey } from "./text.ts";
 const DEFAULT = "default";
 
 interface Props {
@@ -11,10 +11,12 @@ interface Props {
   turn: { cls: string; label: string };
   passing: boolean;
   onPass: () => void;
+  undo: Confirmed;
+  // Whether the undo key would undo the agent's turn right now.
+  undoKey: boolean;
 }
 
 export function TopBar(props: Props) {
-  const undo = confirmed(() => post("/api/undo"));
   const remove = confirmed(() => post("/api/finish"));
 
   return (
@@ -29,7 +31,11 @@ export function TopBar(props: Props) {
         <Effort state={props.state} />
       </Show>
       <Show when={props.state.canUndo}>
-        <Button class="btn ghost-btn" onClick={undo.click}>{undo.armed() ? "Undo it? Click again" : "Undo agent turn"}</Button>
+        <Button class="btn ghost-btn" onClick={props.undo.click}>
+          <Show when={props.undoKey} fallback={props.undo.armed() ? "Undo it? Click again" : "Undo agent turn"}>
+            {props.undo.armed() ? "Undo it? " : "Undo agent turn "}<kbd>{keys.undo.label}</kbd>{props.undo.armed() ? " again" : ""}
+          </Show>
+        </Button>
       </Show>
       <Show when={props.turn.cls === "done"}>
         <Button class="btn ghost-btn" onClick={remove.click}>{remove.armed() ? "Delete it? Click again" : "Delete the plan"}</Button>
@@ -45,8 +51,10 @@ export function TopBar(props: Props) {
   );
 }
 
+export type Confirmed = ReturnType<typeof confirmed>;
+
 // An action that is hard to take back runs on the second click within 3 seconds.
-function confirmed(run: () => unknown) {
+export function confirmed(run: () => unknown) {
   const [armed, setArmed] = createSignal(false);
   let disarm: ReturnType<typeof setTimeout> | undefined;
   return {
