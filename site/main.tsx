@@ -36,11 +36,15 @@ const BESIDE: { kind: "cmd" | "out" | "ask" | "tool"; text: string }[] = [
   { kind: "ask", text: "when the agent's turn is done, run the tests and open a PR" },
   { kind: "tool", text: "ogidoc wait" },
   { kind: "out", text: "Last turn: the board now finds a winner in rows, columns and diagonals." },
+  { kind: "out", text: "Commit: 3f9c2a1" },
   { kind: "tool", text: "npm test" },
   { kind: "out", text: "18 passing" },
-  { kind: "tool", text: "gh pr create" },
-  { kind: "out", text: "Opened #12: Win check" },
+  { kind: "tool", text: "gh pr create, from a worktree of its own" },
+  { kind: "out", text: "https://github.com/you/tic-tac-toe/pull/12" },
 ];
+
+// What each line is, for a screen reader, since the marks are only drawn.
+const SAYS = { cmd: "You run:", ask: "You ask the chat:", tool: "The chat runs:", out: "Output:" };
 
 function Beside() {
   return (
@@ -49,6 +53,7 @@ function Beside() {
       <pre>
         {BESIDE.map((l) => (
           <span class={`t-${l.kind}`}>
+            <span class="sr-only">{SAYS[l.kind]} </span>
             <span class="t-mark" aria-hidden="true">{{ cmd: "$ ", ask: "› ", tool: "● ", out: "  " }[l.kind]}</span>
             {l.text}
           </span>
@@ -106,7 +111,7 @@ function Page() {
       <section class="beat">
         <div class="copy-col">
           <h2><span>Keep your&nbsp;chat.</span><span> Ogidoc runs beside&nbsp;it.</span></h2>
-          <p>Start a session in the background and your Claude Code or pi chat keeps the terminal for tests, the app and pull requests. It reads the session and never takes a&nbsp;turn.</p>
+          <p>Start a session in the background and your Claude Code or pi chat keeps the terminal for tests, the app and pull requests. It reads the session, and the turns stay between you and the plan&nbsp;agent.</p>
         </div>
         <Beside />
       </section>
