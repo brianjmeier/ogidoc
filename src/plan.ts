@@ -82,6 +82,22 @@ export function isDone(plan: Plan, last: LastTurn | null): boolean {
   return (last.checks || []).every((c) => c.ok);
 }
 
+// Why a reply doesn't end the agent's turn, or null when it does. A turn moves the plan
+// on: it changes code or the plan's text, offers or settles a choice, shapes a box,
+// answers the person, stops on something only the person has, or finds everything
+// built. Only relabelling lines, like calling a line an example, is not a turn.
+export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; boxChanges: BoxChanges }, codeChanged: boolean): string | null {
+  const text = (p: Plan) => p.lines.map((l) => l.text).join("\n");
+  const ids = (p: Plan) => p.choices.map((c) => c.id).sort().join(" ");
+  if (codeChanged || text(before) !== text(after.plan) || ids(before) !== ids(after.plan)) return null;
+  if (Object.keys(after.boxChanges).length || before.boxes.length !== after.plan.boxes.length) return null;
+  if (reply.replies.some((r) => r.text.trim() || r.resolve)) return null;
+  if (reply.steps.some((s) => s.kind === "stop")) return null;
+  const built = after.plan.lines.every((l) => !l.text.trim() || l.kind === "proposal" || l.status === "built");
+  if (built && reply.steps.some((s) => s.kind === "done")) return null;
+  return "It changed no code and nothing in the plan but how lines are labelled.";
+}
+
 // Take the agent's reply apart into lines, boxes, threads and choices, keeping authorship, and
 // describe the change so the browser can animate it.
 export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges } {

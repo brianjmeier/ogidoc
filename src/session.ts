@@ -3,7 +3,7 @@ import * as plan from "./plan.ts";
 import type { Plan } from "./plan.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
+import { buildPrompt, notATurn, parseReply, readAgentFile } from "./prompt.ts";
 import { planStore, type Loaded, type PlanStore, type SessionState } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
@@ -15,6 +15,9 @@ interface EditInput {
   boxes?: Record<string, string>;
   accepted?: number[];
 }
+
+// How many replies the agent gets to end its turn properly before the turn fails.
+const TURN_ATTEMPTS = 3;
 
 // Put a session together from where its plan lives, the agent, and the clock.
 export function openSession({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
@@ -192,20 +195,34 @@ export class Session extends EventEmitter {
     let boxChanges: BoxChanges = {};
     let error: string | null = null;
     try {
-      const out = await this.agent.run({
-        prompt,
-        cwd: this.store.cwd,
-        ...s.settings,
-        onActivity: (a: string) => {
-          this.activity.push(a);
-          this.emit("change", {});
-        },
-      });
-      reply = parseReply(out);
-      const next = plan.fromReply(this.plan, reply, s.turn);
+      // A reply that doesn't end the turn goes back to the agent with the reason, out of
+      // the person's sight, a couple of times before the turn fails.
+      let next: ReturnType<typeof plan.fromReply> | undefined;
+      let problem: string | null = null;
+      for (let attempt = 1; ; attempt++) {
+        const out = await this.agent.run({
+          prompt: problem ? `${prompt}\n\n${notATurn(problem)}` : prompt,
+          cwd: this.store.cwd,
+          ...s.settings,
+          onActivity: (a: string) => {
+            this.activity.push(a);
+            this.emit("change", {});
+          },
+        });
+        try {
+          const r = parseReply(out);
+          const n = plan.fromReply(this.plan, r, s.turn);
+          problem = plan.whyNotATurn(this.plan, r, n, this.log.codeChanged(mark) ?? r.files.length > 0);
+          if (!problem) [reply, next] = [r, n];
+        } catch (e) {
+          problem = (e as Error).message;
+        }
+        if (next) break;
+        if (attempt === TURN_ATTEMPTS) throw new Error(problem!);
+      }
       this.setPlan(next.plan);
       ({ animation, boxChanges } = next);
-      this.s = { ...this.s, symbols: reply.symbols, suggestions: reply.suggestions, base: plan.baseOf(next.plan) };
+      this.s = { ...this.s, symbols: reply!.symbols, suggestions: reply!.suggestions, base: plan.baseOf(next.plan) };
       this.save();
     } catch (e) {
       error = (e as Error).message;

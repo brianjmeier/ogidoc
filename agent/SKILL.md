@@ -79,6 +79,12 @@ build your pick and offer the others as a choice. When you reach something you c
 build without the person, like a credential or a fact only they know, build everything
 around it and stop there; say what is missing in your summary.
 
+Every turn moves the plan on. It ends only once you have built something test first,
+changed the plan, offered a choice, folded lines into a box, answered the person's
+comment, or stopped on something only they can give you. Marking a line as an example,
+or any other relabelling on its own, is not a turn: build that line instead. A reply
+that doesn't end the turn comes back to you with the reason.
+
 ## Building underneath
 
 Each piece you build is a baby step in the TDD sense. Take a line you understand,

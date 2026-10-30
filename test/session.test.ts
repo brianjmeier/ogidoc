@@ -186,12 +186,52 @@ test("a failed turn that changed code can be undone", async () => {
 
 test("a failed agent turn gives the turn back with an error", async () => {
   const { dir } = repo();
-  const { session: s, view } = open(dir, { planFile: "p.plan", agent: fakeAgent("broken", async () => "I forgot the JSON") });
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("broken", async () => "I forgot the JSON") });
   await s.pass({ text: "hello" });
+  assert.equal(prompts.length, 3, "asked again before giving up");
   assert.equal(view().working, false);
   assert.match(view().last!.error!, /no JSON block/);
   assert.equal(view().turn, 1);
   assert.equal(view().canUndo, false, "nothing changed, so there is nothing to undo");
+});
+
+test("a reply that only relabels lines goes back to the agent, and the person never sees it", async () => {
+  const { dir } = repo();
+  const relabel = '```json\n{"plan":[{"text":"hi -> hello","kind":"example","status":"stale"}],"summary":"it becomes a test"}\n```';
+  let n = 0;
+  const agent = fakeAgent("lazy-then-good", async ({ cwd }) => {
+    if (n++ === 0) return relabel;
+    writeFileSync(join(cwd, "hi.test.js"), "test\n");
+    return '```json\n{"plan":[{"text":"hi -> hello","kind":"example","status":"built"}],"summary":"built it"}\n```';
+  });
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "hi -> hello" });
+  assert.equal(prompts.length, 2, "the agent was asked again");
+  assert.match(prompts[1], /Your turn isn't over/);
+  assert.match(prompts[1], /nothing in the plan but how lines are labelled/);
+  assert.equal(view().last!.error, undefined, "no error reaches the person");
+  assert.equal(view().last!.summary, "built it");
+  assert.equal(view().lines[0].status, "built");
+  assert.equal(view().turn, 2);
+});
+
+test("an agent that keeps not ending its turn fails it after a few tries", async () => {
+  const { dir } = repo();
+  const agent = fakeAgent("stuck", async () => '```json\n{"plan":[{"text":"hello","status":"stale"}],"summary":"nothing"}\n```');
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "hello" });
+  assert.equal(prompts.length, 3);
+  assert.match(view().last!.error!, /changed no code/);
+  assert.equal(view().turn, 1, "the turn is the person's again");
+});
+
+test("a turn that stops on something only the person has, or finds it all built, ends", async () => {
+  const { dir } = repo();
+  const stop = '```json\n{"plan":[{"text":"pay with stripe","status":"stale"}],"steps":[{"kind":"stop","what":"needs a stripe key"}],"summary":"needs a key"}\n```';
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("stopper", async () => stop) });
+  await s.pass({ text: "pay with stripe" });
+  assert.equal(prompts.length, 1);
+  assert.equal(view().last!.error, undefined);
 });
 
 test("without a repository the session works and keeps undo", async () => {
@@ -231,7 +271,7 @@ test("a turn reports how long the agent took", async () => {
   const clock = testClock(1_000_000);
   const agent = fakeAgent("slow", async () => {
       clock.advance(7_400);
-      return '```json\n{"plan":[{"text":"hello"}],"summary":"ok"}\n```';
+      return '```json\n{"plan":[{"text":"hello","status":"built"}],"files":[{"op":"+","path":"hello.js","why":"hello"}],"summary":"ok"}\n```';
     });
   const { session: s, view } = open(emptyDir(), { planFile: "p.plan", clock, agent });
   await s.pass({ text: "hello" });

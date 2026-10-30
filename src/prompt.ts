@@ -88,6 +88,16 @@ const KINDS = new Set<unknown>(["proposal", "example"]);
 const STATUSES = new Set<unknown>(["built", "stale", "blocked"]);
 
 // The agent ends its reply with a fenced JSON object. Take the last one that parses.
+// Sent back with the turn's prompt when a reply didn't end the turn.
+export const notATurn = (problem: string) => `# Your turn isn't over
+
+Your last reply didn't end the turn. ${problem}
+
+Whatever you changed in the code is still there. Carry on from where you are: build
+the next line that isn't built, test first, or offer a choice, fold settled lines into
+a box, or stop on what only the person can give you. Then end with the reply described
+above.`;
+
 export function parseReply(text: string): Reply {
   const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
   const start = text.lastIndexOf('{"plan"') >= 0 ? text.lastIndexOf('{"plan"') : text.lastIndexOf("{\n  \"plan\"");
