@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AnimationOp } from "../src/types.ts";
 import { makeAgent } from "../src/agents.ts";
-import { PLAN, emptyDir, fakeAgent, open, repo, testClock, texts } from "./support/index.ts";
+import { PLAN, emptyDir, fakeAgent, open, replying, repo, testClock, texts } from "./support/index.ts";
 
 test("a full session: build with a choice, comment, move into boxes, disagree in a box, done, undo", async () => {
   const { dir, log } = repo();
@@ -197,13 +197,10 @@ test("a failed agent turn gives the turn back with an error", async () => {
 
 test("a reply that only relabels lines goes back to the agent, and the person never sees it", async () => {
   const { dir } = repo();
-  const relabel = '```json\n{"plan":[{"text":"hi -> hello","kind":"example","status":"stale"}],"summary":"it becomes a test"}\n```';
-  let n = 0;
-  const agent = fakeAgent("lazy-then-good", async ({ cwd }) => {
-    if (n++ === 0) return relabel;
-    writeFileSync(join(cwd, "hi.test.js"), "test\n");
-    return '```json\n{"plan":[{"text":"hi -> hello","kind":"example","status":"built"}],"summary":"built it"}\n```';
-  });
+  const agent = replying("lazy-then-good", [
+    { plan: [{ text: "hi -> hello", kind: "example", status: "stale" }], summary: "it becomes a test" },
+    { plan: [{ text: "hi -> hello", kind: "example", status: "built" }], summary: "built it" },
+  ], (cwd, n) => n && writeFileSync(join(cwd, "hi.test.js"), "test\n"));
   const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hi -> hello" });
   assert.equal(prompts.length, 2, "the agent was asked again");
@@ -217,12 +214,8 @@ test("a reply that only relabels lines goes back to the agent, and the person ne
 
 test("a turn that only changes code, with lines still to build, goes back to the agent", async () => {
   const { dir } = repo();
-  const plan = (second: string) => '```json\n{"plan":[{"text":"draw the board","status":"built"},{"text":"click a cell","status":"' + second + '"}],"summary":"x"}\n```';
-  let n = 0;
-  const agent = fakeAgent("code-only", async ({ cwd }) => {
-    writeFileSync(join(cwd, `step${n}.js`), "x\n");
-    return plan(n++ === 0 ? "stale" : "built");
-  });
+  const plan = (second: string) => ({ plan: [{ text: "draw the board", status: "built" }, { text: "click a cell", status: second }], summary: "x" });
+  const agent = replying("code-only", [plan("stale"), plan("built")], (cwd, n) => writeFileSync(join(cwd, `step${n}.js`), "x\n"));
   const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   s.edit({ text: "draw the board\nclick a cell" });
   await s.pass();
@@ -233,8 +226,12 @@ test("a turn that only changes code, with lines still to build, goes back to the
 
 test("closing braces and blank lines don't wait to be built: a fully built plan ends the turn and is done", async () => {
   const { dir } = repo();
-  const reply = '```json\n{"plan":[{"text":"nave {","status":"built"},{"text":"  vida","status":"built"},{"text":"}","status":null},{"text":"","status":null}],"checks":[{"name":"node --test","ok":true}],"summary":"nothing left to build"}\n```';
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("all-built", async () => reply) });
+  const agent = replying("all-built", [{
+    plan: [{ text: "nave {", status: "built" }, { text: "  vida", status: "built" }, { text: "}", status: null }, { text: "", status: null }],
+    checks: [{ name: "node --test", ok: true }],
+    summary: "nothing left to build",
+  }]);
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "nave {\n  vida\n}\n" });
   assert.equal(prompts.length, 1, "no retry");
   assert.equal(view().last!.error, undefined);
@@ -243,11 +240,8 @@ test("closing braces and blank lines don't wait to be built: a fully built plan 
 
 test("a red-green with no refactor after it goes back to the agent", async () => {
   const { dir } = repo();
-  const steps = (s: string[]) => s.map((kind) => ({ kind, what: kind }));
-  let n = 0;
-  const agent = fakeAgent("no-refactor", async () =>
-    "```json\n" + JSON.stringify({ plan: [{ text: "say hi", status: "built" }], steps: steps(n++ === 0 ? ["red-green"] : ["red-green", "refactor"]), summary: "hi" }) + "\n```");
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const reply = (...kinds: string[]) => ({ plan: [{ text: "say hi", status: "built" }], steps: kinds.map((kind) => ({ kind, what: kind })), summary: "hi" });
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: replying("no-refactor", [reply("red-green"), reply("red-green", "refactor")]) });
   await s.pass({ text: "say hi" });
   assert.equal(prompts.length, 2);
   assert.match(prompts[1], /no refactor step after it/);
@@ -256,7 +250,7 @@ test("a red-green with no refactor after it goes back to the agent", async () =>
 
 test("an agent that keeps not ending its turn fails it after a few tries", async () => {
   const { dir } = repo();
-  const agent = fakeAgent("stuck", async () => '```json\n{"plan":[{"text":"hello","status":"stale"}],"summary":"nothing"}\n```');
+  const agent = replying("stuck", [{ plan: [{ text: "hello", status: "stale" }], summary: "nothing" }]);
   const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
   assert.equal(prompts.length, 3);
@@ -264,10 +258,19 @@ test("an agent that keeps not ending its turn fails it after a few tries", async
   assert.equal(view().turn, 1, "the turn is the person's again");
 });
 
+test("a reply to a comment that doesn't exist doesn't end the turn", async () => {
+  const { dir } = repo();
+  const agent = replying("made-up", [{ plan: [{ text: "hello", status: "stale" }], replies: [{ thread: "t9", text: "done" }], summary: "answered" }]);
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "hello" });
+  assert.equal(prompts.length, 3);
+  assert.match(view().last!.error!, /still not built/);
+});
+
 test("a turn that stops on something only the person has, or finds it all built, ends", async () => {
   const { dir } = repo();
-  const stop = '```json\n{"plan":[{"text":"pay with stripe","status":"stale"}],"steps":[{"kind":"stop","what":"needs a stripe key"}],"summary":"needs a key"}\n```';
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("stopper", async () => stop) });
+  const agent = replying("stopper", [{ plan: [{ text: "pay with stripe", status: "stale" }], steps: [{ kind: "stop", what: "needs a stripe key" }], summary: "needs a key" }]);
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "pay with stripe" });
   assert.equal(prompts.length, 1);
   assert.equal(view().last!.error, undefined);
@@ -275,15 +278,10 @@ test("a turn that stops on something only the person has, or finds it all built,
 
 test("handing over agrees to the agent's lines the person left alone, but not to what it still offers", async () => {
   const { dir } = repo();
-  const replies = [
+  const agent = replying("fake", [
     { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }], choices: [{ line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "one" },
     { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }, { text: "  loudly", status: "built" }], choices: [{ id: "c1", line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "two" },
-  ];
-  let n = 0;
-  const agent = fakeAgent("fake", async ({ cwd }) => {
-    writeFileSync(join(cwd, `t${n}.js`), "x\n");
-    return "```json\n" + JSON.stringify(replies[Math.min(n++, 1)]) + "\n```";
-  });
+  ], (cwd, n) => writeFileSync(join(cwd, `t${n}.js`), "x\n"));
   const { session: s, view } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "say hi" });
   assert.deepEqual(view().lines.map((l) => l.by), ["h", "a", "a"]);

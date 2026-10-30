@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./paths.ts";
+import { hasContent } from "./shared/diff.ts";
 import type { Box, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
 
 export function readAgentFile(name: string): string {
@@ -87,18 +88,16 @@ function describeHumanDiff(d: HumanDiff, turn: number): string {
 const KINDS = new Set<unknown>(["proposal", "example"]);
 const STATUSES = new Set<unknown>(["built", "stale", "blocked"]);
 
-// The agent ends its reply with a fenced JSON object. Take the last one that parses.
 // Sent back with the turn's prompt when a reply didn't end the turn.
 export const notATurn = (problem: string) => `# Your turn isn't over
 
 Your last reply didn't end the turn. ${problem}
 
 Whatever you changed in the code is still there. Carry on from where you are and keep
-building, test first, with a refactor after every green, until every line is built. End sooner only on something the
-person needs to see in the plan: a decision worth offering as a choice, settled lines
-folded into a box, an answer to their comment, or a stop on what only they can give
-you. Then end with the reply described above.`;
+building until your turn ends the way "When your turn ends" says. Then end with the
+reply described above.`;
 
+// The agent ends its reply with a fenced JSON object. Take the last one that parses.
 export function parseReply(text: string): Reply {
   const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
   const start = text.lastIndexOf('{"plan"') >= 0 ? text.lastIndexOf('{"plan"') : text.lastIndexOf("{\n  \"plan\"");
@@ -132,7 +131,7 @@ function normalize(o: any): Reply {
       return {
         text,
         kind: KINDS.has(line.kind) ? line.kind : null,
-        status: text.trim() && STATUSES.has(line.status) ? line.status : null,
+        status: hasContent(text) && STATUSES.has(line.status) ? line.status : null,
       };
     }),
     boxes: arr(o.boxes)

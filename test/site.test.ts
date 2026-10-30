@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { abstractions, choices, frames, keystrokes, promptWithCode, styles } from "../site/scenes.ts";
+import { hasContent } from "../src/shared/diff.ts";
 
 test("keystrokes type a new line one character at a time, after its indentation", () => {
   assert.deepEqual(keystrokes(["a"], ["a", "  bc"]), ["a\n  b", "a\n  bc"]);
@@ -67,7 +68,8 @@ for (const [style, guard] of [["python", "        if board[row][col]: return"], 
     const all = frames(styles[style].start, styles[style].beats);
     const typed = all.at(-2)!.plan.lines;
     const before = styles[style].start.lines.map((l) => l.text);
-    assert.deepEqual(typed.map((l) => l.status), typed.map((l) => (before.includes(l.text) ? "built" : "stale")), "every line the person wrote or changed needs a build");
+    const want = (t: string) => (before.includes(t) ? "built" : hasContent(t) ? "stale" : null);
+    assert.deepEqual(typed.map((l) => l.status), typed.map((l) => want(l.text)), "every line the person wrote or changed needs a build, unless it's bare structure like a brace");
     const done = all.at(-1)!.plan.lines;
     assert.deepEqual(done.filter((l) => l.by === "a").map((l) => l.text), [guard]);
     assert.ok(done.every((l) => l.status === "built"));

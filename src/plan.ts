@@ -1,4 +1,4 @@
-import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
+import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
 import type { AnimationOp, Box, BoxChanges, Choice, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
@@ -69,26 +69,25 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
   return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes };
 }
 
+// Every line with something to build is built, and every box. Proposals aren't code yet.
+const allBuilt = (plan: Plan) =>
+  plan.lines.every((l) => !hasContent(l.text) || l.kind === "proposal" || l.status === "built") && plan.boxes.every((b) => b.status === "built");
+
 // Done is read off the plan: no open comment, choice or proposal, every line built,
 // checks green.
-// A line with words in it that isn't built yet. Blank lines and bare structure like
-// a closing brace have nothing of their own to build.
-const unbuilt = (l: Line) => /[\p{L}\p{N}]/u.test(l.text) && l.kind !== "proposal" && l.status !== "built";
-
 export function isDone(plan: Plan, last: LastTurn | null): boolean {
   if (!last || last.error) return false;
-  if (!plan.lines.some((l) => /[\p{L}\p{N}]/u.test(l.text))) return false;
+  if (!plan.lines.some((l) => hasContent(l.text))) return false;
   if (plan.threads.some((t) => !t.resolved) || plan.choices.length) return false;
   if (plan.lines.some((l) => l.kind === "proposal")) return false;
-  if (plan.lines.some(unbuilt)) return false;
-  if (plan.boxes.some((b) => b.status !== "built")) return false;
+  if (!allBuilt(plan)) return false;
   return (last.checks || []).every((c) => c.ok);
 }
 
 // The person hands over: whatever the agent wrote and they left as it is, they agreed
 // to, so it is theirs now. Proposals and open choices are still the agent's offer.
 export function agree(plan: Plan): Plan {
-  const offered = new Set(plan.choices.flatMap((c) => c.options[c.current].map((_, i) => c.line + i)));
+  const offered = new Set(plan.choices.flatMap(choices.span));
   const own = (l: Line): Line => (l.by === "a" ? { ...l, by: "h" } : l);
   return {
     ...plan,
@@ -106,13 +105,12 @@ export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; box
   const kinds = reply.steps.map((s) => s.kind);
   if (kinds.lastIndexOf("red-green") > kinds.lastIndexOf("refactor")) return "The last red-green step has no refactor step after it.";
   const p = after.plan;
-  const built = !p.lines.some(unbuilt) && p.boxes.every((b) => b.status === "built");
-  if (built) return null;
-  const text = (x: Plan) => x.lines.map((l) => l.text).join("\n");
+  if (allBuilt(p)) return null;
   const ids = (x: Plan) => x.choices.map((c) => c.id).sort().join(" ");
-  if (text(before) !== text(p) || ids(before) !== ids(p)) return null;
+  if (joinLines(before.lines) !== joinLines(p.lines) || ids(before) !== ids(p)) return null;
   if (Object.keys(after.boxChanges).length || before.boxes.length !== p.boxes.length) return null;
-  if (reply.replies.some((r) => r.text.trim() || r.resolve)) return null;
+  // An answer counts only where it lands: in one of the person's threads.
+  if (JSON.stringify(before.threads) !== JSON.stringify(p.threads)) return null;
   if (reply.steps.some((s) => s.kind === "stop")) return null;
   return "Lines are still not built, and the plan shows nothing new.";
 }

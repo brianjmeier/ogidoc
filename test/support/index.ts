@@ -40,6 +40,19 @@ export function repo() {
 // An agent for one test: it answers each turn with `run`.
 export const fakeAgent = (name: string, run: Agent["run"]): Agent => ({ name, settingOptions: { models: [], efforts: [] }, acceptsModel: () => true, run });
 
+// A reply as the agent writes it: the JSON object fenced at the end.
+export const jsonReply = (o: object) => "```json\n" + JSON.stringify(o) + "\n```";
+
+// An agent that gives these replies in order, then the last one again. `each` runs
+// before every reply, like the agent touching the code.
+export function replying(name: string, replies: object[], each?: (cwd: string, n: number) => void): Agent {
+  let n = 0;
+  return fakeAgent(name, async ({ cwd }) => {
+    each?.(cwd, n);
+    return jsonReply(replies[Math.min(n++, replies.length - 1)]);
+  });
+}
+
 // An agent that remembers every prompt it was given.
 export function recording(agent: Agent): Agent & { prompts: string[] } {
   const prompts: string[] = [];

@@ -7,6 +7,10 @@ import type { Box, Line } from "../types.ts";
 export const splitLines = (text: string): string[] => (text === "" ? [] : text.split("\n"));
 export const joinLines = (lines: Line[]): string => lines.map((l) => l.text).join("\n");
 
+// A line with words in it has something to build. Blank lines and bare structure like
+// a closing brace don't.
+export const hasContent = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
+
 // Once anything is built, a line the person writes or changes needs a build.
 export const anyBuilt = (lines: Line[], boxes: Box[]): boolean =>
   lines.some((l) => l.status === "built") || boxes.some((b) => b.status === "built");
@@ -112,7 +116,7 @@ export function carryMeta(oldLines: Line[], newTexts: string[], { anyBuilt, ops 
         text,
         by: "h" as const,
         kind: prev?.kind ?? null,
-        status: text.trim() && anyBuilt ? "stale" : null,
+        status: hasContent(text) && anyBuilt ? "stale" : null,
         chg: true,
       };
     }

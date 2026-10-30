@@ -1,3 +1,4 @@
+import { hasContent } from "./diff.ts";
 import type { Choice, Line, Thread } from "../types.ts";
 
 // A thread is waiting on the person when the agent spoke last.
@@ -6,7 +7,7 @@ export const waitingOnYou = (t: Thread) => !t.resolved && t.messages.at(-1)?.by 
 // A proposal the person can accept or reject; a blank one offers nothing.
 export const isOpenProposal = (l: Line) => l.kind === "proposal" && !!l.text.trim();
 
-const waits = (l: Line) => isOpenProposal(l) || (!!l.text.trim() && l.status === "blocked");
+const waits = (l: Line) => isOpenProposal(l) || (hasContent(l.text) && l.status === "blocked");
 
 // The lines that wait on the person, top to bottom: a choice to make, a proposal to
 // accept or reject, a line blocked on a comment, a comment the agent answered.

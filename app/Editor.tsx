@@ -1,6 +1,6 @@
 import { For, Index, Show, createEffect, createMemo, createSelector, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
-import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "../src/shared/diff.ts";
-import { choose, follow } from "../src/choices.ts";
+import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines } from "../src/shared/diff.ts";
+import { choose, follow, span } from "../src/choices.ts";
 import { anyStop, isOpenProposal, nextStop, stops, waitingOnYou } from "../src/shared/stops.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
@@ -108,7 +108,7 @@ export function Editor(props: Props) {
   // Which choice each line belongs to.
   const choiceAt = createMemo(() => {
     const at = new Map<number, Choice>();
-    for (const c of choices()) for (let i = 0; i < c.options[c.current].length; i++) at.set(c.line + i, c);
+    for (const c of choices()) for (const n of span(c)) at.set(n, c);
     return at;
   });
   // A choice's lines share a band, so it's plain which lines the switch swaps.
@@ -398,7 +398,7 @@ export function Editor(props: Props) {
               const n = () => r().n;
               const indent = () => indentOf(l().text);
               const body = () => l().text.slice(indent().length);
-              const st = () => (l().text.trim() ? l().status : null);
+              const st = () => (hasContent(l().text) ? l().status : null);
               const deciding = () => isOpenProposal(l()) && props.editable && !anim() && n() !== null;
               return (
                 <div

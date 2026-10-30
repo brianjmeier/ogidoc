@@ -7,6 +7,9 @@ import type { Choice, Line, Reply } from "./types.ts";
 
 const size = (c: Choice) => c.options[c.current].length;
 
+// The plan lines a choice's current option covers.
+export const span = (c: Choice): number[] => Array.from({ length: size(c) }, (_, i) => c.line + i);
+
 // Keep every choice on its lines through an edit of the plan. Whatever the person
 // writes between its first and last surviving line becomes the current option, lines
 // added or removed included. A choice whose lines were all deleted is gone.
@@ -14,7 +17,7 @@ export function follow(choices: Choice[], ops: DiffOp[], lines: Line[]): Choice[
   const to = new Map<number, number>();
   for (const o of ops) if (o.op === "eq" || o.op === "mod") to.set(o.a, o.b);
   return choices.flatMap((c) => {
-    const kept = Array.from({ length: size(c) }, (_, i) => to.get(c.line + i)).filter((b) => b !== undefined);
+    const kept = span(c).map((n) => to.get(n)).filter((b) => b !== undefined);
     if (!kept.length) return [];
     const start = kept[0];
     const options = c.options.map((o, k) => (k === c.current ? lines.slice(start, kept.at(-1)! + 1) : o));

@@ -165,6 +165,29 @@ export class Session extends EventEmitter {
 
   // ---------- the agent's turn ----------
 
+  // Run the agent until a reply ends its turn. One that doesn't goes back to it with
+  // the reason, out of the person's sight, a couple of times before the turn fails.
+  private async runTurn(prompt: string, turn: number): Promise<{ reply: Reply; next: ReturnType<typeof plan.fromReply> }> {
+    const onActivity = (a: string) => {
+      this.activity.push(a);
+      this.emit("change", {});
+    };
+    let problem = "";
+    for (let attempt = 1; attempt <= TURN_ATTEMPTS; attempt++) {
+      const out = await this.agent.run({ prompt: problem ? `${prompt}\n\n${notATurn(problem)}` : prompt, cwd: this.store.cwd, ...this.s.settings, onActivity });
+      try {
+        const reply = parseReply(out);
+        const next = plan.fromReply(this.plan, reply, turn);
+        const why = plan.whyNotATurn(this.plan, reply, next);
+        if (!why) return { reply, next };
+        problem = why;
+      } catch (e) {
+        problem = (e as Error).message;
+      }
+    }
+    throw new Error(problem);
+  }
+
   async pass({ text, boxes, accepted }: EditInput = {}) {
     this.guard("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
@@ -196,34 +219,11 @@ export class Session extends EventEmitter {
     let boxChanges: BoxChanges = {};
     let error: string | null = null;
     try {
-      // A reply that doesn't end the turn goes back to the agent with the reason, out of
-      // the person's sight, a couple of times before the turn fails.
-      let next: ReturnType<typeof plan.fromReply> | undefined;
-      let problem: string | null = null;
-      for (let attempt = 1; ; attempt++) {
-        const out = await this.agent.run({
-          prompt: problem ? `${prompt}\n\n${notATurn(problem)}` : prompt,
-          cwd: this.store.cwd,
-          ...s.settings,
-          onActivity: (a: string) => {
-            this.activity.push(a);
-            this.emit("change", {});
-          },
-        });
-        try {
-          const r = parseReply(out);
-          const n = plan.fromReply(this.plan, r, s.turn);
-          problem = plan.whyNotATurn(this.plan, r, n);
-          if (!problem) [reply, next] = [r, n];
-        } catch (e) {
-          problem = (e as Error).message;
-        }
-        if (next) break;
-        if (attempt === TURN_ATTEMPTS) throw new Error(problem!);
-      }
+      let next: ReturnType<typeof plan.fromReply>;
+      ({ reply, next } = await this.runTurn(prompt, s.turn));
       this.setPlan(next.plan);
       ({ animation, boxChanges } = next);
-      this.s = { ...this.s, symbols: reply!.symbols, suggestions: reply!.suggestions, base: plan.baseOf(next.plan) };
+      this.s = { ...this.s, symbols: reply.symbols, suggestions: reply.suggestions, base: plan.baseOf(next.plan) };
       this.save();
     } catch (e) {
       error = (e as Error).message;
