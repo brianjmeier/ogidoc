@@ -2,8 +2,8 @@
 // by its name. A name runs once per machine. An entry whose server is gone is dropped
 // the next time anyone looks.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, sep } from "node:path";
 import { sessionName } from "./sessions.ts";
 
 export interface Running {
@@ -54,10 +54,22 @@ export function registry({ dir, alive }: { dir: string; alive: (pid: number) => 
   return {
     list,
     check,
+    // Claim the name. Two servers starting the same name at once can't both win: the
+    // entry is written whole beside it and linked into place, which fails if it exists.
     register(e: Running) {
       check(e.name, e.cwd);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(file(e.name), JSON.stringify(e, null, 2) + "\n");
+      const tmp = join(dir, `.${e.name}.${e.pid}.tmp`);
+      writeFileSync(tmp, JSON.stringify(e, null, 2) + "\n");
+      try {
+        linkSync(tmp, file(e.name));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        check(e.name, e.cwd);
+        throw new Error(`The session ${e.name} was just started by someone else.`);
+      } finally {
+        rmSync(tmp, { force: true });
+      }
     },
     // Only the server that registered a name can let it go.
     release(name: string, pid: number) {
@@ -69,12 +81,12 @@ export function registry({ dir, alive }: { dir: string; alive: (pid: number) => 
       const all = list();
       const names = all.map((e) => e.name).join(", ");
       if (given) {
-        const name = sessionName(given);
+        const name = sessionName(given, all.map((e) => e.name));
         const e = all.find((x) => x.name === name);
         if (e) return e;
         throw new Error(all.length ? `No session named ${name} is running. Running: ${names}.` : `No session named ${name} is running.`);
       }
-      const here = all.filter((e) => e.cwd === cwd);
+      const here = all.filter((e) => cwd === e.cwd || cwd.startsWith(e.cwd + sep));
       if (here.length === 1) return here[0];
       if (here.length > 1) throw new Error(`Several sessions run here: ${here.map((e) => e.name).join(", ")}. Name one.`);
       if (all.length === 1) return all[0];

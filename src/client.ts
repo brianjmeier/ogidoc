@@ -11,13 +11,15 @@ export async function readState(url: string): Promise<Snapshot> {
   return (await res.json()) as Snapshot;
 }
 
-// The session's state once the plan agent's turn is over: at once when it isn't the
-// agent's turn, else when the turn ends.
-export async function turnOver(url: string): Promise<Snapshot> {
+// The session's state once the plan agent's turn ends: the one running now, or else the
+// next one, after the person hands over. `onWaiting` hears when it is listening.
+export async function turnOver(url: string, onWaiting: (state: Snapshot) => void = () => {}): Promise<Snapshot> {
   const res = await fetch(`${url}/api/events`);
   if (!res.ok || !res.body) throw new Error(`The session at ${url} answered ${res.status}.`);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
+  let started = false;
+  let first = true;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) throw new Error("The session stopped before the turn ended.");
@@ -28,7 +30,11 @@ export async function turnOver(url: string): Promise<Snapshot> {
       buf = buf.slice(end + 2);
       const data = event.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
       const state: Snapshot | undefined = data ? JSON.parse(data).state : undefined;
-      if (state && !state.working) {
+      if (!state) continue;
+      if (first) onWaiting(state);
+      first = false;
+      if (state.working) started = true;
+      else if (started) {
         await reader.cancel();
         return state;
       }
@@ -42,8 +48,8 @@ export function describe(s: Running, state: Snapshot): string {
   const last = state.last;
   const out = [`Session ${s.name}, in ${s.cwd}, open at ${s.url}`];
   if (state.finished) out.push("The plan was built and removed.");
-  else if (state.working) out.push(`The agent is on turn ${state.turn}${state.activity.length ? `: ${state.activity.at(-1)}` : "."}`);
-  else out.push(`It's the person's turn (turn ${state.turn}).${waiting ? ` ${waiting} ${waiting === 1 ? "thing waits" : "things wait"} on them.` : ""}`);
+  else if (state.working) out.push(`The agent is taking turn ${state.turn}${state.activity.length ? `: ${state.activity.at(-1)}` : "."}`);
+  else out.push(`It's the person's turn; the agent has taken ${state.turn - 1} ${state.turn === 2 ? "turn" : "turns"}.${waiting ? ` ${waiting} ${waiting === 1 ? "thing waits" : "things wait"} on them.` : ""}`);
   if (last?.error) out.push(`The last turn failed: ${last.error}`);
   else if (last?.summary) out.push(`Last turn: ${last.summary}`);
   if (last?.commit) out.push(`Commit: ${last.commit}`);

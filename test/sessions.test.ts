@@ -15,7 +15,7 @@ test("a session is a name; a plan file name still reads as its session", () => {
   assert.equal(sessionName("weekly"), "weekly");
   assert.equal(sessionName("weekly.plan"), "weekly");
   assert.throws(() => sessionName("My Plan"), /lowercase letters, digits and dashes/);
-  assert.throws(() => sessionName("../etc"), /can't name a session/);
+  assert.throws(() => sessionName("../etc"), /is a path/);
   assert.throws(() => sessionName("status"), /one of ogidoc's commands/);
   assert.equal(fromFolder("My App_v2"), "my-app-v2");
   assert.equal(fromFolder("___"), "plan");
@@ -69,4 +69,20 @@ test("a name runs once on the machine, and a session that died is forgotten", ()
   assert.equal(reg.list().length, 1, "only the server that registered a name lets it go");
   reg.release("nave", 2);
   assert.deepEqual(reg.list(), []);
+});
+
+test("sessions made before names had rules keep their names; paths get told what changed", async () => {
+  assert.equal(sessionName("tic_tac_toe", ["tic_tac_toe"]), "tic_tac_toe");
+  assert.equal(await sessionToOpen({ given: "tic_tac_toe.plan", here: ["tic_tac_toe"], folder: "x" }), "tic_tac_toe");
+  assert.equal(await sessionToOpen({ here: ["Old_One"], folder: "x" }), "Old_One");
+  assert.throws(() => sessionName("sub/x.plan"), /is a path. A session is a name now/);
+  assert.equal(fromFolder("list"), "list-plan", "a folder named like a command still gives a usable name");
+});
+
+test("a chat in a project's subfolder finds the session started above it", () => {
+  const { reg, run } = machine();
+  reg.register(run("nave", "/a", 1));
+  reg.register(run("site", "/b", 2));
+  assert.equal(reg.pick({ cwd: "/a/src/game" }).name, "nave");
+  assert.throws(() => reg.pick({ cwd: "/ab" }), /Several sessions are running/, "a sibling folder isn't inside");
 });

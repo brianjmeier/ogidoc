@@ -56,8 +56,8 @@ the editor, and the plan agent.
 ogidoc --detach        # the session runs in the background
 ogidoc list            # the sessions running on this machine
 ogidoc status          # whose turn it is, and how the last turn went (--json for scripts)
-ogidoc wait            # returns when the agent's turn ends, with its summary and commit
-ogidoc stop            # stops it
+ogidoc wait            # returns when the agent's current or next turn ends, with its summary and commit
+ogidoc stop            # stops it, once no turn is running
 ```
 
 Each command takes a session name; without one it uses the session started in this

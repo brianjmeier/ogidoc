@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { emptyDir, repo } from "./support/index.ts";
 
@@ -20,16 +20,21 @@ test("a detached session gives the terminal back, and list, status, wait and sto
   assert.ok(url, started.stdout);
   try {
     assert.match(ogidoc("list").stdout, /^weekly {2}http:\/\/\S+ {2}\//);
-    assert.match(ogidoc("status").stdout, /Session weekly[\s\S]*It's the person's turn \(turn 1\)/);
+    assert.match(ogidoc("status").stdout, /Session weekly[\s\S]*It's the person's turn; the agent has taken 0 turns/);
     assert.match(ogidoc("weekly", "--detach").stderr, /The session weekly is already open at/);
 
-    // The person hands over in the editor; the chat waits for the turn to end.
+    // The chat waits first; it returns only once the person has handed over in the editor
+    // and the agent's turn has ended.
+    const waiting = spawn(process.execPath, [BIN, "wait", "--json"], { cwd: dir, env });
+    let out = "";
+    waiting.stdout.on("data", (d) => (out += d));
+    const waited = new Promise<number | null>((r) => waiting.on("exit", r));
+    await new Promise((r) => waiting.stderr.on("data", (d) => String(d).includes("Waiting for the next agent turn in weekly") && r(null)));
     const text = "weekly reflection\n  every sunday\n    look at my week\n    tell me what i felt most";
     const pass = await fetch(`${url}/api/pass`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
     assert.equal(pass.status, 202);
-    const waited = ogidoc("wait", "--json");
-    assert.equal(waited.status, 0, waited.stderr);
-    const state = JSON.parse(waited.stdout);
+    assert.equal(await waited, 0);
+    const state = JSON.parse(out);
     assert.equal(state.name, "weekly");
     assert.equal(state.working, false);
     assert.equal(state.turn, 2);

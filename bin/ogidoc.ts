@@ -96,12 +96,22 @@ const commands: Record<string, () => Promise<void> | void> = {
   },
   async wait() {
     const s = sessions.pick({ given: positionals[1], cwd });
-    const state = await turnOver(s.url);
+    const state = await turnOver(s.url, (now) =>
+      console.error(now.working ? `Waiting for the agent's turn in ${s.name} to end…` : `Waiting for the next agent turn in ${s.name} to end…`),
+    );
     print(values.json ? summary(s, state) : describe(s, state));
     if (state.last?.error) process.exitCode = 1;
   },
-  stop() {
+  // Only a session that answers is stopped, so a reused pid is never killed; one whose
+  // agent is mid-turn is left to finish, since its turn would be lost.
+  async stop() {
     const s = sessions.pick({ given: positionals[1], cwd });
+    const state = await readState(s.url).catch(() => null);
+    if (!state) {
+      sessions.release(s.name, s.pid);
+      return print(`${s.name} wasn't running anymore.`);
+    }
+    if (state.working) throw new Error(`The agent is taking a turn in ${s.name}. Stop it once the turn is over: ogidoc wait ${s.name} && ogidoc stop ${s.name}`);
     process.kill(s.pid, "SIGTERM");
     sessions.release(s.name, s.pid);
     print(`Stopped ${s.name}.`);
@@ -134,9 +144,15 @@ async function open() {
   const session = openSession({ cwd, name, agent, clock: systemClock, commit: !values["no-commit"] });
   session.save();
   const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
-  sessions.register({ name, cwd, url, pid: process.pid, agent: agent.name, log });
+  try {
+    sessions.register({ name, cwd, url, pid: process.pid, agent: agent.name, log });
+  } catch (e) {
+    // The server is already listening, so leave rather than run unlisted.
+    console.error((e as Error).message);
+    process.exit(1);
+  }
   process.on("exit", () => sessions.release(name, process.pid));
-  for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => process.exit(0));
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => process.exit(0));
   console.log(`Ogidoc session ${name} is open at ${url}`);
   console.log(`Agent: ${agent.name}${session.log.commits ? "  Commits: one per agent turn" : ""}`);
   // A detached parent waits for this to know the session is up.
@@ -183,7 +199,7 @@ function openBrowser(url: string) {
 }
 
 try {
-  await (commands[positionals[0]] ?? open)();
+  await (Object.hasOwn(commands, positionals[0] ?? "") ? commands[positionals[0]] : open)();
 } catch (e) {
   console.error((e as Error).message);
   process.exitCode = 1;

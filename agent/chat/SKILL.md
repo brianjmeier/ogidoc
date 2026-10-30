@@ -30,18 +30,20 @@ Every session has a name, and both you and the plan agent know it.
 ```bash
 ogidoc list               # the sessions running on this machine
 ogidoc status [name]      # whose turn it is, what the agent is doing, how the last turn went
-ogidoc wait [name]        # returns when the agent's turn ends, with its summary and commit
+ogidoc wait [name]        # returns when the agent's current or next turn ends, with its summary and commit
 ```
 
-Without a name, a command takes the session started in the current folder, or the only
-one running. Add `--json` when you want to read the result in a script.
+Without a name, a command takes the session started in the current folder (or a folder
+above it), or the only one running. When several could be meant, it says so: name one.
+Add `--json` when you want to read the result in a script.
 
-`ogidoc wait` blocks until the plan agent's turn is over. Run it in the background when
-you have something to do after the turn, like running the tests on what it built, so
-you are told when it ends. It exits with an error when the turn failed.
+`ogidoc wait` blocks until the plan agent's turn ends: the one running now, or the next
+one, after the person hands over. Run it in the background when you have something to
+do after a turn, like running the tests on what it built, so you are told when it ends.
+It exits with an error when the turn failed.
 
-To see what a turn did, read its commit: `git show <commit>`. The turns are commits
-titled `ogidoc: turn N on <name>`.
+To see what a turn did, read its commit: `git show <commit>`. Turns are commits titled
+`ogidoc: turn N on <name>`, or `ogidoc: failed turn N on <name>`.
 
 ## Changing code from the chat
 
@@ -59,7 +61,7 @@ From the project directory:
 
 ```bash
 ogidoc --detach --open    # start the session in the background and open the editor
-ogidoc stop [name]        # stop it
+ogidoc stop [name]        # stop it, once no turn is running
 ```
 
 Without a name, Ogidoc opens the session in this folder, or starts one named after
