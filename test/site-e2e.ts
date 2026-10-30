@@ -26,6 +26,9 @@ try {
     const count = (sel: string, n: number) => page.waitForFunction(([s, k]) => document.querySelectorAll(s as string).length === k, [sel, n] as const, { timeout: 20000 });
     await page.goto(url);
 
+    const brandFonts = await page.$$eval(".brand", (els) => els.map((e) => getComputedStyle(e).fontFamily));
+    assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith('"Bradley Hand"')), `${colorScheme}: "Underpaint" is handwritten everywhere on the page, got ${brandFonts}`);
+
     await count(`${scene(1)} .ln`, 3);
     assert.deepEqual(await marks(1), ["built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
     assert.equal(await page.$(`${scene(1)} .under`), null, `${colorScheme}: no code before the turn`);

@@ -3,6 +3,7 @@
 html, body { height: auto; }
 body, #root { display: block; }
 .site { max-width: 860px; margin: 0 auto; padding: 72px 20px 120px; display: grid; gap: 96px; }
+.site .brand { font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive; font-style: normal; font-weight: 700; letter-spacing: 0; }
 .hero { display: grid; gap: 16px; }
 .hero h1 { margin: 0; font-size: 44px; }
 .hero p { margin: 0; font-size: 19px; line-height: 1.5; color: var(--muted); max-width: 36em; }
