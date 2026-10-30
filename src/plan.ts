@@ -1,6 +1,5 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
-import type { Base } from "./plan-store.ts";
 import type { AnimationOp, Box, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
@@ -11,17 +10,23 @@ export interface Plan {
   threads: Thread[];
 }
 
+// The text the agent last saw, to tell it what the person changed since.
+export interface Base {
+  lines: string[];
+  boxes: Record<string, string[]>;
+}
+
 // The person's edits: new plan text, proposals they accepted, box bodies they changed.
 export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; accepted?: number[]; boxes?: Record<string, string> }): Plan {
   let { lines, threads: ts } = plan;
-  const built = anyBuilt(plan.lines, plan.boxes);
   if (typeof text === "string") {
     const texts = splitLines(text);
     const ops = diffLines(lines.map((l) => l.text), texts);
     ts = threads.move(ts, ops, lines.length);
-    lines = carryMeta(lines, texts, { anyBuilt: built, ops });
+    lines = carryMeta(lines, texts, { anyBuilt: anyBuilt(lines, plan.boxes), ops });
   }
   const take = new Set((accepted ?? []).filter((i) => lines[i]?.kind === "proposal"));
+  const built = anyBuilt(lines, plan.boxes);
   if (take.size) lines = lines.map((l, i) => (take.has(i) ? acceptProposal(l, built) : l));
   return { lines, threads: ts, boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
 }
@@ -37,9 +42,10 @@ function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
 
 // The plan as the files on disk have it; the text there wins over what was saved.
 export function fromFiles(saved: Plan, planText: string, boxTexts: Record<string, string>): Plan {
-  const boxes = saved.boxes.filter((b) => b.name in boxTexts);
+  const p = edit(saved, { text: planText });
+  const boxes = p.boxes.filter((b) => b.name in boxTexts);
   for (const name of Object.keys(boxTexts)) if (!boxes.some((b) => b.name === name)) boxes.push({ name, lines: [], status: "stale", uses: [] });
-  return edit({ ...saved, boxes }, { text: planText, boxes: boxTexts });
+  return { ...p, boxes: editBoxes(boxes, boxTexts) };
 }
 
 export const baseOf = (plan: Plan): Base => ({

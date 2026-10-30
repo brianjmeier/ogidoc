@@ -3,15 +3,15 @@ import { statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Where each agent turn is recorded, so it can be undone and so changes made outside a
-// turn can be told apart from the agent's. In a git repository every turn is a commit;
-// anywhere else, or with --no-commit, nothing is recorded and undo restores the plan
-// alone.
+// turn can be told apart from the agent's. In a git repository every turn is a commit.
+// With --no-commit nothing new is recorded, but a turn committed earlier can still be
+// undone. Outside a repository undo restores the plan alone.
 export interface TurnLog {
   readonly commits: boolean;
-  // Note the code as it is now; `record` commits what changes after this.
-  begin(): void;
-  // Commit what changed since `begin`, plus the editor's own files when asked.
-  record(message: string, opts: { ownFiles: boolean }): string | null;
+  // The code as it is now; `record` commits what changes after this mark.
+  begin(): Mark;
+  // Commit what changed since `mark`, plus the editor's own files when asked.
+  record(mark: Mark, message: string, opts: { ownFiles: boolean }): string | null;
   // Take a recorded turn's code back out of the working tree. The editor's own files
   // are left alone: the caller rewrites them before the next `record`.
   revert(commit: string): void;
@@ -21,6 +21,8 @@ export interface TurnLog {
   saved(): LogState;
 }
 
+export type Mark = Map<string, string>;
+
 export interface LogState {
   baseCommit?: string | null;
   dirtyBase?: Record<string, string>;
@@ -28,13 +30,15 @@ export interface LogState {
 
 // `ownFiles` are absolute paths the editor writes itself: the plan and its folder.
 export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ownFiles: string[]; commit: boolean; saved?: LogState }): TurnLog {
-  const root = commit ? repoRoot(cwd) : null;
-  return root ? gitLog(root, ownFiles.map((f) => relative(root, f)), saved) : noLog;
+  const root = repoRoot(cwd);
+  if (!root) return noLog;
+  const log = gitLog(root, ownFiles.map((f) => relative(root, f)), saved);
+  return commit ? log : { ...noLog, revert: log.revert };
 }
 
 const noLog: TurnLog = {
   commits: false,
-  begin() {},
+  begin: () => new Map(),
   record: () => null,
   revert() {},
   drift: () => [],
@@ -46,14 +50,11 @@ function gitLog(root: string, own: string[], saved: LogState): TurnLog {
   let baseCommit = saved.baseCommit ?? head(root);
   // Work already in progress when we start isn't drift; only what changes after.
   let dirtyBase = saved.dirtyBase ?? Object.fromEntries(dirtyFiles(root));
-  let before = new Map<string, string>();
 
   return {
     commits: true,
-    begin() {
-      before = dirtyFiles(root);
-    },
-    record(message, { ownFiles }) {
+    begin: () => dirtyFiles(root),
+    record(before, message, { ownFiles }) {
       const after = dirtyFiles(root);
       const changed = [...after.keys()].filter((p) => before.get(p) !== after.get(p));
       try {
@@ -123,7 +124,8 @@ function status(root: string, paths?: string[]): Entry[] {
 // Uncommitted paths mapped to a content hash, so a file that was already dirty but
 // changed again still counts as changed.
 function dirtyFiles(root: string): Map<string, string> {
-  const paths = status(root).map((e) => e.path);
+  // A rename also changes the path it came from.
+  const paths = status(root).flatMap((e) => (e.from ? [e.path, e.from] : [e.path]));
   // One git call hashes every file still on disk; a deleted one has no hash.
   const present = paths.filter((p) => statSync(join(root, p), { throwIfNoEntry: false })?.isFile());
   const hashes = present.length ? run(root, ["hash-object", "--stdin-paths"], present.join("\n")).out.trim().split("\n") : [];

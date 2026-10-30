@@ -4,7 +4,7 @@ import type { Reply, Thread, Who } from "./types.ts";
 // Comment threads pinned to plan lines. Every change returns new threads and leaves the
 // old ones as they were, so a saved copy for undo stays exactly what it was.
 
-export function find(threads: Thread[], id: string): Thread {
+function find(threads: Thread[], id: string): Thread {
   const t = threads.find((x) => x.id === id);
   if (!t) throw new Error(`There is no comment thread ${id}.`);
   return t;

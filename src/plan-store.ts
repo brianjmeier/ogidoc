@@ -3,6 +3,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { joinLines } from "./shared/diff.ts";
 import { AGENT_DIR } from "./paths.ts";
 import type { LogState } from "./turn-log.ts";
+import type { Base } from "./plan.ts";
 import type { Box, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
 
 // Where a plan lives on disk and how it is saved. Everything stays plain text beside the
@@ -16,12 +17,6 @@ import type { Box, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
 //   .underpaint/weekly/comments.json
 //   .underpaint/weekly/state.json      local
 //   .underpaint/weekly/history.json    local
-
-// The text the agent last saw, to tell it what the person changed since.
-export interface Base {
-  lines: string[];
-  boxes: Record<string, string[]>;
-}
 
 // The session as it was just before an agent turn, so the turn can be taken back.
 export interface HistoryEntry {
@@ -56,6 +51,9 @@ export interface Loaded extends Stored {
   boxTexts: Record<string, string>;
 }
 
+// The editor's own bookkeeping, which stays on this machine.
+const LOCAL = ["state.json", "history.json"];
+
 export type PlanStore = ReturnType<typeof planStore>;
 
 export function planStore(cwd: string, planFile: string) {
@@ -84,7 +82,9 @@ export function planStore(cwd: string, planFile: string) {
       // The plan and boxes are shared in git; the editor's bookkeeping stays local.
       const ignore = at(".gitignore");
       const ignored = existsSync(ignore) ? readFileSync(ignore, "utf8") : "";
-      if (!ignored.includes("history.json")) writeFileSync(ignore, `${ignored.includes("state.json") ? ignored : "state.json\n"}history.json\n`);
+      const have = new Set(ignored.split("\n").map((l) => l.trim()));
+      const missing = LOCAL.filter((f) => !have.has(f));
+      if (missing.length) writeFileSync(ignore, `${ignored}${ignored && !ignored.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
       if (!existsSync(rulesPath)) copyFileSync(join(AGENT_DIR, "rules.md"), rulesPath);
       const s = readJson("state.json") ?? {};
       const boxTexts: Record<string, string> = {};
@@ -101,7 +101,8 @@ export function planStore(cwd: string, planFile: string) {
         // Sessions saved before history had its own file kept it in state.json.
         history: readJson("history.json") ?? s.history ?? [],
         settings: { model: "", effort: "", ...s.settings },
-        log: { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase },
+        // Older sessions kept the turn log's state at the top level.
+        log: s.log ?? { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase },
         planText: readText(planPath),
         boxTexts,
       };
@@ -113,7 +114,7 @@ export function planStore(cwd: string, planFile: string) {
       const keep = new Set(s.boxes.map((b) => `${b.name}.plan`));
       for (const f of readdirSync(boxDir)) if (!keep.has(f)) rmSync(join(boxDir, f));
       for (const b of s.boxes) writeFileSync(join(boxDir, `${b.name}.plan`), joinLines(b.lines) + "\n");
-      writeFileSync(at("state.json"), JSON.stringify({ ...s, ...log }, null, 1));
+      writeFileSync(at("state.json"), JSON.stringify({ ...s, log }, null, 1));
       writeFileSync(at("comments.json"), JSON.stringify(threads, null, 1) + "\n");
       // History only changes with an agent turn or an undo, and it is the biggest file.
       const h = JSON.stringify(history);

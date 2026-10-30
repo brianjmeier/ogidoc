@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AnimationOp } from "../src/types.ts";
 import { PLAN, emptyDir, open, repo, testClock, texts } from "./support/index.ts";
@@ -176,4 +176,73 @@ test("a turn reports how long the agent took", async () => {
   const { session: s, view } = open(emptyDir(), { planFile: "p.plan", clock, agent });
   await s.pass({ text: "hello" });
   assert.equal(view().last!.seconds, 7);
+});
+
+test("an agent's renames, deletions and staged edits all land in its turn's commit", async () => {
+  const { dir, git } = repo();
+  writeFileSync(join(dir, "old.js"), "a\n");
+  writeFileSync(join(dir, "gone.js"), "b\n");
+  writeFileSync(join(dir, "staged.js"), "c\n");
+  git("add", ".");
+  git("commit", "-qm", "files");
+  const agent = {
+    name: "git-savvy",
+    choices: { models: [], efforts: [] },
+    run: async () => {
+      git("mv", "old.js", "new.js");
+      git("rm", "-q", "gone.js");
+      writeFileSync(join(dir, "staged.js"), "c2\n");
+      git("add", "staged.js");
+      return '```json\n{"plan":[{"text":"hello"}],"summary":"moved things"}\n```';
+    },
+  };
+  const { session: s } = open(dir, { planFile: "p.plan", agent });
+  await s.pass({ text: "hello" });
+  const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".underpaint"));
+  assert.deepEqual(files.sort(), ["A\tp.plan", "D\tgone.js", "M\tstaged.js", "R100\told.js\tnew.js"]);
+  assert.equal(git("status", "--porcelain", "--", "new.js", "old.js", "gone.js", "staged.js"), "");
+});
+
+test("undo commits only what the undo changed, not the person's other work", async () => {
+  const { dir, git, log } = repo();
+  const { session: s } = open(dir);
+  await s.pass({ text: PLAN });
+  writeFileSync(join(dir, "notes.txt"), "the person's own work in progress\n");
+  s.undo();
+  assert.match(log()[0], /undo turn 1/);
+  assert.doesNotMatch(git("show", "--name-only", "--format=", "HEAD"), /notes\.txt/);
+  assert.match(git("status", "--porcelain"), /\?\? notes\.txt/);
+});
+
+test("with --no-commit, a turn committed earlier can still be undone", async () => {
+  const { dir } = repo();
+  await open(dir).session.pass({ text: PLAN });
+  const { session: s } = open(dir, { commit: false });
+  s.undo();
+  assert.equal(existsSync(join(dir, "src/summarize.js")), false, "the agent's code is gone too");
+});
+
+test("drift is measured from the last turn even across a restart", async () => {
+  const { dir } = repo();
+  await open(dir).session.pass({ text: PLAN });
+  writeFileSync(join(dir, "src/summarize.js"), "// edited while the editor was closed\n");
+  const { session: s, view, prompts } = open(dir);
+  await s.pass({ text: texts(view().lines).join("\n") });
+  assert.match(prompts[0], /# Code that changed outside a turn[\s\S]*- src\/summarize\.js/);
+});
+
+test("a session saved by an older version still opens with its undo history", async () => {
+  const { dir } = repo();
+  await open(dir).session.pass({ text: PLAN });
+  // Older versions kept history and the turn log's state inside state.json, and
+  // ignored only state.json.
+  const at = (f: string) => join(dir, ".underpaint/weekly", f);
+  const state = JSON.parse(readFileSync(at("state.json"), "utf8"));
+  const { log, ...rest } = state;
+  writeFileSync(at("state.json"), JSON.stringify({ ...rest, ...log, history: JSON.parse(readFileSync(at("history.json"), "utf8")) }));
+  rmSync(at("history.json"));
+  writeFileSync(at(".gitignore"), "# local\nstate.json");
+  const { view } = open(dir);
+  assert.equal(view().canUndo, true);
+  assert.equal(readFileSync(at(".gitignore"), "utf8"), "# local\nstate.json\nhistory.json\n");
 });

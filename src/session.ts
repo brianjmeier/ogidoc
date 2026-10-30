@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
 import * as plan from "./plan.ts";
-import type { Plan } from "./plan.ts";
+import type { Base, Plan } from "./plan.ts";
 import * as threads from "./threads.ts";
 import { buildPrompt, parseReply, readAgentFile } from "./prompt.ts";
-import { planStore, type Base, type HistoryEntry, type Loaded, type PlanStore } from "./plan-store.ts";
+import { planStore, type HistoryEntry, type Loaded, type PlanStore } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent } from "./agents.ts";
@@ -16,8 +16,10 @@ interface EditInput {
 }
 
 // What an agent turn can take back: the session as it was just before the turn.
-const TURN_STATE = ["lines", "boxes", "threads", "base", "last", "symbols", "suggestions", "turn"] as const;
 type TurnState = Omit<HistoryEntry, "commit">;
+const TURN_STATE = ["lines", "boxes", "threads", "base", "last", "symbols", "suggestions", "turn"] as const satisfies readonly (keyof TurnState)[];
+// Fails to compile when TurnState gains a field TURN_STATE doesn't list.
+const _everyField: Exclude<keyof TurnState, (typeof TURN_STATE)[number]> extends never ? true : never = true;
 
 // Put a session together from where its plan lives, the agent, and the clock.
 export function openSession({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
@@ -180,7 +182,7 @@ export class Session extends EventEmitter {
       drift: this.log.drift(),
       last: this.last,
     });
-    this.log.begin();
+    const mark = this.log.begin();
     const prev = this.turnState();
     this.working = true;
     this.activity = [];
@@ -216,7 +218,7 @@ export class Session extends EventEmitter {
     let commit: string | null = null;
     const title = `underpaint: ${error ? "failed turn" : "turn"} ${this.turn} on ${this.name}`;
     try {
-      commit = this.log.record(`${title}\n\n${reply?.summary || error || ""}`.trim(), { ownFiles: !!reply });
+      commit = this.log.record(mark, `${title}\n\n${reply?.summary || error || ""}`.trim(), { ownFiles: !!reply });
     } catch (e) {
       error ??= (e as Error).message;
     }
@@ -230,7 +232,11 @@ export class Session extends EventEmitter {
     }
     if (error) this.last = { ...(this.last || {}), error };
     this.working = false;
-    this.save();
+    try {
+      this.save();
+    } catch (e) {
+      this.last = { ...(this.last || {}), error: `Couldn't save the plan: ${(e as Error).message}` };
+    }
     this.emit("change", reply ? { animation } : {});
   }
 
@@ -245,12 +251,12 @@ export class Session extends EventEmitter {
     // The code goes back through git; the plan, boxes and threads come back from memory,
     // as they were just before the turn, with the person's edits from before it.
     const { commit, ...state } = h;
-    this.log.begin();
+    const mark = this.log.begin();
     if (commit) this.log.revert(commit);
     Object.assign(this, state);
     this.save();
     if (commit) {
-      this.log.record(`underpaint: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
+      this.log.record(mark, `underpaint: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
       this.save();
     }
     this.emit("change", {});
