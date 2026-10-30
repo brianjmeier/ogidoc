@@ -28,6 +28,10 @@
   /* The room the text leaves on its right for a choice's switch, and the gap before it. */
   --ways-w: 15em;
   --ways-gap: 1em;
+  --way-tint: rgba(23, 25, 29, 0.035);
+  --way-tint-here: rgba(23, 25, 29, 0.06);
+  --way-edge: rgba(23, 25, 29, 0.22);
+  --way-edge-here: rgba(23, 25, 29, 0.45);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -35,7 +39,8 @@
     --paper: #101215; --surface: #171a1f; --surface-2: #1c2026; --ink: #e6e8eb; --muted: #9aa1ab; --line: #2b3039;
     --human: #9aa6ff; --human-tint: rgba(154, 166, 255, 0.11); --agent: #52d0a5; --agent-tint: rgba(82, 208, 165, 0.11);
     --agent-glow: rgba(82, 208, 165, 0.25); --sym: #e2b660; --sym-tint: rgba(226, 182, 96, 0.11); --gone: #f08a8a;
-    --gone-tint: rgba(240, 138, 138, 0.10); color-scheme: dark;
+    --gone-tint: rgba(240, 138, 138, 0.10); --way-tint: rgba(230, 232, 235, 0.04); --way-tint-here: rgba(230, 232, 235, 0.07);
+    --way-edge: rgba(230, 232, 235, 0.22); --way-edge-here: rgba(230, 232, 235, 0.5); color-scheme: dark;
   }
 }
 
@@ -145,18 +150,22 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .row.h .ln { color: var(--human); }
 .ln.k-example .tx { font-style: italic; }
 .chip { font: 500 10.5px/1 var(--font-ui); padding: 3px 6px; border-radius: 4px; margin-left: 10px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; font-style: normal; font-weight: 500; }
-/* A choice: a bracket on the right spans its lines, with the switch at its top. It
-   sits in a rail of its own, so it stays still while the text beside it changes. */
+/* A choice's lines share a band that runs under the switch, so the switch reads as
+   swapping exactly those lines. Layered over the changed-line tint, not instead of it. */
+.row.way .ln { --t: 0 0 transparent; --b: 0 0 transparent; background-image: linear-gradient(var(--way-tint), var(--way-tint)); box-shadow: inset 1px 0 var(--way-edge), inset -1px 0 var(--way-edge), inset 0 var(--t), inset 0 var(--b); }
+.row.way.way-top .ln { --t: 1px var(--way-edge); border-top-left-radius: 5px; border-top-right-radius: 5px; }
+.row.way.way-end .ln { --b: -1px var(--way-edge); border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }
+.row.way.way-here { --way-tint: var(--way-tint-here); --way-edge: var(--way-edge-here); }
+/* A choice's switch sits at the top right of its box, in a rail of its own, so it stays still while the text beside it changes. */
 .rail { position: absolute; top: 0; right: 0; width: calc(var(--ways-w) - var(--ways-gap)); pointer-events: none; }
 .code.has-ways .ln, .code.has-ways > textarea { padding-right: var(--ways-w); }
-.ways { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: auto; padding-left: 14px; font: 500 11.5px/1 var(--font-ui); color: var(--muted); }
+.ways { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: auto; padding-left: 6px; font: 500 11.5px/1 var(--font-ui); color: var(--muted); }
 .ways-row { display: flex; align-items: flex-start; gap: 2px; }
 /* A key on a small pill, shown while the caret is on what the pill does. */
 .ways-row, .ways span { white-space: nowrap; }
 .ways .use kbd, .decide kbd { font: 9.5px/1 var(--font-mono); padding: 1px 3px; margin-left: 2px; border-radius: 3px; vertical-align: 1px; }
 .ways-keys { margin-top: 2px; font: 10.5px/1.4 var(--font-ui); white-space: nowrap; }
 .ways-keys kbd { font: 10.5px/1 var(--font-mono); padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
-.ways::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 6px; border: 2px solid var(--agent); border-left: 0; border-radius: 0 3px 3px 0; opacity: 0.55; }
 .ways button { all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-top: 2px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--agent); font-size: 14px; }
 .ways button:hover:not(:disabled) { background: var(--agent-tint); border-color: var(--agent); }
 .ways button:disabled { cursor: default; opacity: 0.5; }

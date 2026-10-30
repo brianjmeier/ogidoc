@@ -111,6 +111,11 @@ export function Editor(props: Props) {
     for (const c of choices()) for (let i = 0; i < c.options[c.current].length; i++) at.set(c.line + i, c);
     return at;
   });
+  // A choice's lines share a band, so it's plain which lines the switch swaps.
+  const wayEdges = (n: number | null) => {
+    const c = anim() || n === null ? undefined : choiceAt().get(n);
+    return { way: !!c, "way-top": !!c && n === c.line, "way-end": !!c && n === c.line + c.options[c.current].length - 1, "way-here": !!c && inChoice(c) };
+  };
   const caretChoice = createMemo(() => choiceAt().get(caretLine()));
   const isCaretChoice = createSelector<Choice | undefined, Choice>(caretChoice);
   // Where each choice's lines sit, so its control stays beside them on the right, still
@@ -399,7 +404,7 @@ export function Editor(props: Props) {
               return (
                 <div
                   class={`row ${l().by || "h"} ${r().cls ?? ""}`}
-                  classList={{ chg: !!l().chg }}
+                  classList={{ chg: !!l().chg, ...wayEdges(n()) }}
                   style={{ "--d": `${r().delay ?? 0}ms` }}
                 >
                   <div class="g">
