@@ -27,6 +27,37 @@ function Install() {
   );
 }
 
+// A terminal beside the editor: the session runs in the background, and the chat keeps
+// the terminal for everything that isn't the plan.
+const BESIDE: { kind: "cmd" | "out" | "ask" | "tool"; text: string }[] = [
+  { kind: "cmd", text: "ogidoc tic-tac-toe --detach" },
+  { kind: "out", text: "Ogidoc session tic-tac-toe is open at http://127.0.0.1:4747" },
+  { kind: "cmd", text: "claude" },
+  { kind: "ask", text: "when the agent's turn is done, run the tests and open a PR" },
+  { kind: "tool", text: "ogidoc wait" },
+  { kind: "out", text: "Last turn: the board now finds a winner in rows, columns and diagonals." },
+  { kind: "tool", text: "npm test" },
+  { kind: "out", text: "18 passing" },
+  { kind: "tool", text: "gh pr create" },
+  { kind: "out", text: "Opened #12: Win check" },
+];
+
+function Beside() {
+  return (
+    <figure class="terminal" aria-label="A chat in the terminal works beside a running session">
+      <div class="terminal-top"><span>~/tic-tac-toe</span></div>
+      <pre>
+        {BESIDE.map((l) => (
+          <span class={`t-${l.kind}`}>
+            <span class="t-mark" aria-hidden="true">{{ cmd: "$ ", ask: "› ", tool: "● ", out: "  " }[l.kind]}</span>
+            {l.text}
+          </span>
+        ))}
+      </pre>
+    </figure>
+  );
+}
+
 function Page() {
   return (
     <main class="site">
@@ -71,6 +102,13 @@ function Page() {
           <Scene label="JavaScript-like pseudocode, and the agent's line in the same style" under={false} start={styles.js.start} frames={frames(styles.js.start, styles.js.beats)} />
           <Scene label="Clojure-like pseudocode, and the agent's line in the same style" under={false} start={styles.clojure.start} frames={frames(styles.clojure.start, styles.clojure.beats)} />
         </div>
+      </section>
+      <section class="beat">
+        <div class="copy-col">
+          <h2><span>Keep your&nbsp;chat.</span><span> Ogidoc runs beside&nbsp;it.</span></h2>
+          <p>Start a session in the background and your Claude Code or pi chat keeps the terminal for tests, the app and pull requests. It reads the session and never takes a&nbsp;turn.</p>
+        </div>
+        <Beside />
       </section>
       <footer class="end">
         <p class="note"><span>Code exists because prose isn't precise&nbsp;enough.</span><span> Write the parts that matter, wave&nbsp;at&nbsp;the&nbsp;rest, and the agent makes it&nbsp;run.</span></p>

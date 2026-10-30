@@ -48,7 +48,7 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 .copy { all: unset; cursor: pointer; flex: none; padding: 0 14px; font: 500 12.5px/1 var(--font-ui); color: var(--muted); border-left: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; min-width: 4.5em; text-align: center; }
 .copy:hover { color: var(--ink); }
 
-/* ---------- the four beats ---------- */
+/* ---------- the beats ---------- */
 .beat { display: grid; gap: 22px; padding: clamp(40px, 9vh, 96px) 0; border-top: 1px solid var(--line); }
 .copy-col h2 { margin: 0 0 12px; font: 600 clamp(22px, 1.9vw, 26px)/1.22 var(--font-brand); letter-spacing: -0.005em; text-wrap: balance; }
 .copy-col p { margin: 0; font-size: 16.5px; line-height: 1.6; color: var(--muted); max-width: 30em; text-wrap: pretty; }
@@ -57,6 +57,18 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
   .beat { grid-template-columns: minmax(0, 1fr) minmax(0, 2.1fr); gap: 56px; align-items: start; }
   .copy-col { position: sticky; top: 96px; padding-top: 8px; }
 }
+
+/* ---------- the terminal beside the editor ---------- */
+.terminal { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
+@media (prefers-color-scheme: dark) { .terminal { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }
+.terminal-top { padding: 11px 16px; border-bottom: 1px solid var(--line); font: 500 12.5px/1 var(--font-ui); color: var(--muted); }
+.terminal pre { margin: 0; padding: 16px 18px 18px; font: 13.5px/1.75 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.terminal pre > span { display: block; padding-left: 2ch; text-indent: -2ch; }
+.terminal .t-mark { color: var(--muted); user-select: none; }
+.terminal .t-cmd, .terminal .t-tool { color: var(--ink); }
+.terminal .t-out { color: var(--muted); }
+.terminal .t-ask { color: var(--human); }
+.terminal .t-ask .t-mark { color: var(--human); }
 
 /* ---------- the editor copies ---------- */
 .scene { position: relative; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
