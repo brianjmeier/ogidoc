@@ -29,16 +29,39 @@ and `npm run dev` to rebuild the editor as you change it.
 
 ```bash
 cd your-project
-ogidoc feature.plan --open
+ogidoc --open
 ```
+
+A session has a name. Leave it out and Ogidoc opens the one session in this folder, or
+asks you to name a new one (the folder's name is the suggestion). `ogidoc checkout`
+opens or starts the session called `checkout`.
 
 | Option | |
 | --- | --- |
+| `--detach` | Run in the background and give the terminal back. |
 | `--agent claude\|pi\|mock` | The agent that takes turns with you. Defaults to Claude Code if installed, else pi. |
 | `--agent-arg <arg>` | Extra argument for the agent CLI, repeatable: `--agent-arg=--model --agent-arg=sonnet` |
 | `--no-commit` | Don't commit each agent turn. |
 | `--port <n>` | Defaults to 4747, or any free port. |
 | `--open` | Open the editor in the browser. |
+
+### Next to your chat
+
+Start the session with `--detach` and keep using Claude Code or pi in the same
+terminal for everything that isn't the plan: running tests, running the app, opening a
+PR. Your chat can read the session but never takes a turn; turns stay between you, in
+the editor, and the plan agent.
+
+```bash
+ogidoc --detach        # the session runs in the background
+ogidoc list            # the sessions running on this machine
+ogidoc status          # whose turn it is, and how the last turn went (--json for scripts)
+ogidoc wait            # returns when the agent's turn ends, with its summary and commit
+ogidoc stop            # stops it
+```
+
+Each command takes a session name; without one it uses the session started in this
+folder, or the only one running.
 
 To see it without an agent, run `npm run demo` in a clone (a scripted agent plays four
 turns).

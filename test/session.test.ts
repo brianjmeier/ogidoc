@@ -174,7 +174,7 @@ test("a failed turn that changed code can be undone", async () => {
       writeFileSync(join(cwd, "half.js"), "// half done\n");
       return "I forgot the JSON";
     });
-  const { session: s, view } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   assert.match(view().last!.error!, /no JSON block/);
   assert.equal(log()[0], "ogidoc: failed turn 1 on p");
@@ -186,7 +186,7 @@ test("a failed turn that changed code can be undone", async () => {
 
 test("a failed agent turn gives the turn back with an error", async () => {
   const { dir } = repo();
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: fakeAgent("broken", async () => "I forgot the JSON") });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent: fakeAgent("broken", async () => "I forgot the JSON") });
   await s.pass({ text: "hello" });
   assert.equal(prompts.length, 3, "asked again before giving up");
   assert.equal(view().working, false);
@@ -201,7 +201,7 @@ test("a reply that only relabels lines goes back to the agent, and the person ne
     { plan: [{ text: "hi -> hello", kind: "example", status: "stale" }], summary: "it becomes a test" },
     { plan: [{ text: "hi -> hello", kind: "example", status: "built" }], summary: "built it" },
   ], (cwd, n) => n && writeFileSync(join(cwd, "hi.test.js"), "test\n"));
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   await s.pass({ text: "hi -> hello" });
   assert.equal(prompts.length, 2, "the agent was asked again");
   assert.match(prompts[1], /Your turn isn't over/);
@@ -224,7 +224,7 @@ test("a retry carries on the agent's own conversation with just the reason, when
     onSession?.("conv-1");
     return jsonReply(replies[asked.length - 1]);
   });
-  const { session: s, view } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   assert.equal(asked[0].resume, undefined);
   assert.equal(asked[1].resume, "conv-1");
@@ -236,7 +236,7 @@ test("a turn that only changes code, with lines still to build, goes back to the
   const { dir } = repo();
   const plan = (second: string) => ({ plan: [{ text: "draw the board", status: "built" }, { text: "click a cell", status: second }], summary: "x" });
   const agent = replying("code-only", [plan("stale"), plan("built")], (cwd, n) => writeFileSync(join(cwd, `step${n}.js`), "x\n"));
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   s.edit({ text: "draw the board\nclick a cell" });
   await s.pass();
   assert.equal(prompts.length, 2, "code alone, with a line still to build, is not the end of a turn");
@@ -251,7 +251,7 @@ test("closing braces and blank lines don't wait to be built: a fully built plan 
     checks: [{ name: "node --test", ok: true }],
     summary: "nothing left to build",
   }]);
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   await s.pass({ text: "nave {\n  vida\n}\n" });
   assert.equal(prompts.length, 1, "no retry");
   assert.equal(view().last!.error, undefined);
@@ -261,7 +261,7 @@ test("closing braces and blank lines don't wait to be built: a fully built plan 
 test("a red-green with no refactor after it goes back to the agent", async () => {
   const { dir } = repo();
   const reply = (...kinds: string[]) => ({ plan: [{ text: "say hi", status: "built" }], steps: kinds.map((kind) => ({ kind, what: kind })), summary: "hi" });
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent: replying("no-refactor", [reply("red-green"), reply("red-green", "refactor")]) });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent: replying("no-refactor", [reply("red-green"), reply("red-green", "refactor")]) });
   await s.pass({ text: "say hi" });
   assert.equal(prompts.length, 2);
   assert.match(prompts[1], /no refactor step after it/);
@@ -271,7 +271,7 @@ test("a red-green with no refactor after it goes back to the agent", async () =>
 test("an agent that keeps not ending its turn fails it after a few tries", async () => {
   const { dir } = repo();
   const agent = replying("stuck", [{ plan: [{ text: "hello", status: "stale" }], summary: "nothing" }]);
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   assert.equal(prompts.length, 3);
   assert.match(view().last!.error!, /still not built/);
@@ -281,7 +281,7 @@ test("an agent that keeps not ending its turn fails it after a few tries", async
 test("a reply to a comment that doesn't exist doesn't end the turn", async () => {
   const { dir } = repo();
   const agent = replying("made-up", [{ plan: [{ text: "hello", status: "stale" }], replies: [{ thread: "t9", text: "done" }], summary: "answered" }]);
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   assert.equal(prompts.length, 3);
   assert.match(view().last!.error!, /still not built/);
@@ -290,7 +290,7 @@ test("a reply to a comment that doesn't exist doesn't end the turn", async () =>
 test("a turn that stops on something only the person has, or finds it all built, ends", async () => {
   const { dir } = repo();
   const agent = replying("stopper", [{ plan: [{ text: "pay with stripe", status: "stale" }], steps: [{ kind: "stop", what: "needs a stripe key" }], summary: "needs a key" }]);
-  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view, prompts } = open(dir, { name: "p", agent });
   await s.pass({ text: "pay with stripe" });
   assert.equal(prompts.length, 1);
   assert.equal(view().last!.error, undefined);
@@ -302,7 +302,7 @@ test("handing over agrees to the agent's lines the person left alone, but not to
     { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }], choices: [{ line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "one" },
     { plan: [{ text: "say hi", status: "built" }, { text: "  in english", status: "built" }, { text: "maybe wave", kind: "proposal" }, { text: "  loudly", status: "built" }], choices: [{ id: "c1", line: 1, options: [["  in english"], ["  in spanish"]] }], summary: "two" },
   ], (cwd, n) => writeFileSync(join(cwd, `t${n}.js`), "x\n"));
-  const { session: s, view } = open(dir, { planFile: "p.plan", agent });
+  const { session: s, view } = open(dir, { name: "p", agent });
   await s.pass({ text: "say hi" });
   assert.deepEqual(view().lines.map((l) => l.by), ["h", "a", "a"]);
   await s.pass();
@@ -351,7 +351,7 @@ test("a turn reports how long the agent took", async () => {
       clock.advance(7_400);
       return '```json\n{"plan":[{"text":"hello","status":"built"}],"files":[{"op":"+","path":"hello.js","why":"hello"}],"summary":"ok"}\n```';
     });
-  const { session: s, view } = open(emptyDir(), { planFile: "p.plan", clock, agent });
+  const { session: s, view } = open(emptyDir(), { name: "p", clock, agent });
   await s.pass({ text: "hello" });
   assert.equal(view().last!.seconds, 7);
 });
@@ -370,7 +370,7 @@ test("an agent's renames, deletions and staged edits all land in its turn's comm
       git("add", "staged.js");
       return '```json\n{"plan":[{"text":"hello","status":"built"}],"summary":"moved things"}\n```';
     });
-  const { session: s } = open(dir, { planFile: "p.plan", agent });
+  const { session: s } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".ogidoc"));
   assert.deepEqual(files.sort(), ["A\tp.plan", "D\tgone.js", "M\tstaged.js", "R100\told.js\tnew.js"]);

@@ -53,11 +53,18 @@ const LOCAL = ["state.json", "history.json"];
 
 export type PlanStore = ReturnType<typeof planStore>;
 
-export function planStore(cwd: string, planFile: string) {
+// The sessions started in a directory: one folder each under .ogidoc/.
+export function sessionsIn(cwd: string): string[] {
+  const shared = join(cwd, ".ogidoc");
+  if (!existsSync(shared)) return [];
+  return readdirSync(shared, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+}
+
+// A session is a name; its plan is `<name>.plan` in the directory it was started in.
+export function planStore(cwd: string, name: string) {
   const root = realpathSync(resolve(cwd));
-  const planPath = resolve(root, planFile);
-  const name = basename(planPath).replace(/\.[^.]+$/, "");
-  const shared = join(dirname(planPath), ".ogidoc");
+  const planPath = join(root, `${name}.plan`);
+  const shared = join(root, ".ogidoc");
   const dir = join(shared, name);
   const boxDir = join(dir, "boxes");
   const rulesPath = join(shared, "rules.md");

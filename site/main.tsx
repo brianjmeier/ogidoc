@@ -38,7 +38,7 @@ function Page() {
           <Install />
           <a class="repo" href={REPO}>Source on GitHub</a>
         </div>
-        <p class="run">then <code>ogidoc tic_tac_toe.plan</code></p>
+        <p class="run">then <code>ogidoc tic-tac-toe</code></p>
       </header>
       <section class="beat">
         <div class="copy-col">

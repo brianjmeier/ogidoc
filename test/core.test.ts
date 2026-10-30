@@ -55,6 +55,7 @@ test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
   const p = buildPrompt({
     skill: readAgentFile("SKILL.md"),
     rules: "Keep turns small.",
+    session: "weekly",
     turn: 2,
     planPath: "weekly.plan",
     cwd: "/tmp/x",
@@ -67,6 +68,7 @@ test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
     last: { summary: "Asked about the timezone." },
   });
   assert.match(p, /# Ogidoc/);
+  assert.match(p, /the Ogidoc session `weekly`/);
   assert.doesNotMatch(p, /^---/);
   assert.match(p, /Keep turns small\./);
   assert.match(p, /\{"text":"weekly reflection","kind":null,"status":null,"by":"h"\}/);

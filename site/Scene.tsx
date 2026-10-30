@@ -89,7 +89,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
     <div class="scene" ref={el} aria-label={props.label}>
       <div class="scene-top">
         <span class="brand">ogidoc</span>
-        <span class="file">{props.file ?? "tic_tac_toe.plan"}</span>
+        <span class="file">{props.file ?? "tic-tac-toe"}</span>
         <span class="spacer" />
         <span class={`turn ${whose()}`} classList={{ passing: passing() }}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
         <span class="btn primary" classList={{ pressed: passing() }} data-disabled={whose() === "a" ? "" : undefined} aria-hidden="true">

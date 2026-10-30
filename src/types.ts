@@ -74,6 +74,8 @@ export interface LastTurn {
   checks?: Check[];
   seconds?: number;
   error?: string;
+  // The commit the turn made, if it made one.
+  commit?: string | null;
 }
 
 export interface Reply {

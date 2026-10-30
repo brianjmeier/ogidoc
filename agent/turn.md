@@ -8,7 +8,7 @@ It is your turn in an Ogidoc session. The skill below explains what that means.
 
 # Where things stand
 
-This is turn {{turn}}. The plan file is `{{planPath}}`, and you work in `{{cwd}}`.
+This is turn {{turn}} of the Ogidoc session `{{session}}`. The plan file is `{{planPath}}`, and you work in `{{cwd}}`.
 Don't edit the plan file or the box files yourself. Return them in your reply and the
 editor will write them. Edit the code directly, run the tests, and leave the code in a
 state you would commit. The editor commits your turn when you finish.

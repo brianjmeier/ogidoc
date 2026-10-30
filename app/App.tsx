@@ -167,7 +167,7 @@ function Finished(props: { state: Snapshot }) {
   return (
     <main class="finished">
       <span class="brand">ogidoc</span>
-      <p>{props.state.planPath} was built and is removed. The code it built stays in your repository.</p>
+      <p>{props.state.name} was built and is removed. The code it built stays in your repository.</p>
       <p class="muted">You can close this tab.</p>
     </main>
   );

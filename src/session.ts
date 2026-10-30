@@ -20,8 +20,8 @@ interface EditInput {
 const TURN_ATTEMPTS = 3;
 
 // Put a session together from where its plan lives, the agent, and the clock.
-export function openSession({ cwd, planFile, agent, clock, commit = true }: { cwd: string; planFile: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
-  const store = planStore(cwd, planFile);
+export function openSession({ cwd, name, agent, clock, commit = true }: { cwd: string; name: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
+  const store = planStore(cwd, name);
   const saved = store.load();
   const log = turnLog({ cwd: store.cwd, ownFiles: store.ownFiles, commit, saved: saved.log });
   return new Session({ store, saved, log, agent, clock });
@@ -202,6 +202,7 @@ export class Session extends EventEmitter {
     const prompt = buildPrompt({
       skill: readAgentFile("SKILL.md"),
       rules: this.store.rules(),
+      session: this.name,
       turn: s.turn,
       planPath: this.store.displayPath,
       cwd: this.store.cwd,
@@ -250,6 +251,7 @@ export class Session extends EventEmitter {
       this.s.turn += 1;
     }
     if (error) this.s.last = { ...(this.s.last || {}), error };
+    if (this.s.last) this.s.last = { ...this.s.last, commit };
     this.working = false;
     try {
       this.save();

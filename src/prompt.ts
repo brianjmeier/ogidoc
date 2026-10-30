@@ -11,6 +11,7 @@ export function readAgentFile(name: string): string {
 interface PromptInput {
   skill: string;
   rules: string;
+  session: string;
   turn: number;
   planPath: string;
   cwd: string;
@@ -23,10 +24,11 @@ interface PromptInput {
   last: LastTurn | null;
 }
 
-export function buildPrompt({ skill, rules, turn, planPath, cwd, lines, boxes, threads, choices, humanDiff, drift, last }: PromptInput): string {
+export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines, boxes, threads, choices, humanDiff, drift, last }: PromptInput): string {
   const vars: Record<string, string> = {
     skill: skill.replace(/^---[\s\S]*?---\n/, "").trim(),
     rules: rules.trim(),
+    session,
     turn: String(turn),
     planPath,
     cwd,

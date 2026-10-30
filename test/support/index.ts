@@ -59,9 +59,9 @@ export function recording(agent: Agent): Agent & { prompts: string[] } {
   return { ...agent, prompts, run: (o) => { prompts.push(o.prompt); return agent.run(o); } };
 }
 
-export function open(dir: string, { planFile = "weekly.plan", clock = testClock(), agent = scripted(clock), commit = true }: { planFile?: string; clock?: Clock; agent?: Agent; commit?: boolean } = {}) {
+export function open(dir: string, { name = "weekly", clock = testClock(), agent = scripted(clock), commit = true }: { name?: string; clock?: Clock; agent?: Agent; commit?: boolean } = {}) {
   const a = recording(agent);
-  const session = openSession({ cwd: dir, planFile, agent: a, clock, commit });
+  const session = openSession({ cwd: dir, name, agent: a, clock, commit });
   return { session, view: () => session.snapshot(), prompts: a.prompts };
 }
 

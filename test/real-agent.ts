@@ -22,7 +22,7 @@ writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "demo", type: "m
 g("add", ".");
 g("commit", "-qm", "init");
 
-const s = openSession({ cwd: dir, planFile: "slug.plan", agent: makeAgent(name, { env: process.env }), clock: systemClock });
+const s = openSession({ cwd: dir, name: "slug", agent: makeAgent(name, { env: process.env }), clock: systemClock });
 s.on("change", () => { if (s.working && s.activity.length) console.log(`  … ${s.activity.at(-1)}`); });
 const plan = [
   "slugify(title) for blog urls",

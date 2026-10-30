@@ -18,7 +18,7 @@ function send(port: number, method: string, path: string, headers: Record<string
 
 test("only the editor's own page on this machine can drive the session", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ogidoc-server-"));
-  const { session } = open(dir, { planFile: "p.plan", commit: false });
+  const { session } = open(dir, { name: "p", commit: false });
   const { server } = await startServer(session, { port: 0 });
   const port = (server.address() as AddressInfo).port;
   const self = `127.0.0.1:${port}`;
