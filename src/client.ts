@@ -31,6 +31,10 @@ export async function turnOver(url: string, onWaiting: (state: Snapshot) => void
       const data = event.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
       const state: Snapshot | undefined = data ? JSON.parse(data).state : undefined;
       if (!state) continue;
+      if (state.finished) {
+        await reader.cancel();
+        throw new Error("The plan was built and removed; no turn will come.");
+      }
       if (first) onWaiting(state);
       first = false;
       if (state.working) started = true;

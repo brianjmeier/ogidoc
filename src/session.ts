@@ -36,6 +36,8 @@ export class Session extends EventEmitter {
   clock: Clock;
   log: TurnLog;
   working = false;
+  // Stops the agent's turn when aborted.
+  private turnAbort = new AbortController();
   // The plan was done and the person removed it; the code stays.
   finished = false;
   activity: string[] = [];
@@ -176,11 +178,15 @@ export class Session extends EventEmitter {
     };
     let conversation: string | undefined;
     const onSession = (id: string) => { conversation = id; };
+    const { signal } = this.turnAbort;
     let problem = "";
     for (let attempt = 1; attempt <= TURN_ATTEMPTS; attempt++) {
       const resume = problem ? conversation : undefined;
       const ask = !problem ? prompt : resume ? notATurn(problem) : `${prompt}\n\n${notATurn(problem)}`;
-      const out = await this.agent.run({ prompt: ask, resume, cwd: this.store.cwd, ...this.s.settings, onActivity, onSession });
+      const out = await this.agent.run({ prompt: ask, resume, cwd: this.store.cwd, ...this.s.settings, onActivity, onSession, signal }).catch((e) => {
+        throw signal.aborted ? new Error("The turn was stopped.") : e;
+      });
+      if (signal.aborted) throw new Error("The turn was stopped.");
       try {
         const reply = parseReply(out);
         const next = plan.fromReply(this.plan, reply, turn);
@@ -192,6 +198,22 @@ export class Session extends EventEmitter {
       }
     }
     throw new Error(problem);
+  }
+
+  // Stop the agent's turn, when one is running: its CLI is stopped and the turn ends as a
+  // failed one, with whatever it changed committed so it can be undone.
+  stopTurn(): Promise<void> {
+    if (!this.working) return Promise.resolve();
+    const over = new Promise<void>((resolve) => {
+      const check = () => {
+        if (this.working) return;
+        this.off("change", check);
+        resolve();
+      };
+      this.on("change", check);
+    });
+    this.turnAbort.abort();
+    return over;
   }
 
   async pass({ text, boxes, accepted }: EditInput = {}) {
@@ -218,6 +240,7 @@ export class Session extends EventEmitter {
     // What undo brings back. Every change makes new values, so this copy stays as it is.
     const { history: _history, settings: _settings, ...prev }: SessionState = s;
     this.working = true;
+    this.turnAbort = new AbortController();
     this.activity = [];
     this.emit("change", {});
     const started = this.clock.now();

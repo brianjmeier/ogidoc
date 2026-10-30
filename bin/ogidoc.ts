@@ -107,7 +107,8 @@ const commands: Record<string, () => Promise<void> | void> = {
   async stop() {
     const s = sessions.pick({ given: positionals[1], cwd });
     const state = await readState(s.url).catch(() => null);
-    if (!state) {
+    if (state?.name !== s.name) {
+      if (alive(s.pid)) throw new Error(`${s.name} doesn't answer at ${s.url}. Its process is ${s.pid}.`);
       sessions.release(s.name, s.pid);
       return print(`${s.name} wasn't running anymore.`);
     }
@@ -152,7 +153,8 @@ async function open() {
     process.exit(1);
   }
   process.on("exit", () => sessions.release(name, process.pid));
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => process.exit(0));
+  // A turn running when the session is stopped is stopped too, and kept as a failed turn.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => session.stopTurn().finally(() => process.exit(0)));
   console.log(`Ogidoc session ${name} is open at ${url}`);
   console.log(`Agent: ${agent.name}${session.log.commits ? "  Commits: one per agent turn" : ""}`);
   // A detached parent waits for this to know the session is up.

@@ -85,4 +85,7 @@ test("a chat in a project's subfolder finds the session started above it", () =>
   reg.register(run("site", "/b", 2));
   assert.equal(reg.pick({ cwd: "/a/src/game" }).name, "nave");
   assert.throws(() => reg.pick({ cwd: "/ab" }), /Several sessions are running/, "a sibling folder isn't inside");
+  reg.register(run("game", "/a/game", 3));
+  assert.equal(reg.pick({ cwd: "/a/game/src" }).name, "game", "the nearest folder above wins");
+  assert.equal(reg.pick({ cwd: "/a/src" }).name, "nave");
 });

@@ -62,7 +62,13 @@ export function registry({ dir, alive }: { dir: string; alive: (pid: number) => 
       const tmp = join(dir, `.${e.name}.${e.pid}.tmp`);
       writeFileSync(tmp, JSON.stringify(e, null, 2) + "\n");
       try {
-        linkSync(tmp, file(e.name));
+        try {
+          linkSync(tmp, file(e.name));
+        } catch (err) {
+          // A disk without hard links: create the entry only if it doesn't exist.
+          if (!["EPERM", "ENOTSUP", "EXDEV"].includes((err as NodeJS.ErrnoException).code ?? "")) throw err;
+          writeFileSync(file(e.name), readFileSync(tmp), { flag: "wx" });
+        }
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
         check(e.name, e.cwd);
@@ -86,9 +92,13 @@ export function registry({ dir, alive }: { dir: string; alive: (pid: number) => 
         if (e) return e;
         throw new Error(all.length ? `No session named ${name} is running. Running: ${names}.` : `No session named ${name} is running.`);
       }
-      const here = all.filter((e) => cwd === e.cwd || cwd.startsWith(e.cwd + sep));
-      if (here.length === 1) return here[0];
-      if (here.length > 1) throw new Error(`Several sessions run here: ${here.map((e) => e.name).join(", ")}. Name one.`);
+      // The session started here, or in the nearest folder above.
+      const inside = (e: Running) => cwd === e.cwd || cwd.startsWith(e.cwd.endsWith(sep) ? e.cwd : e.cwd + sep);
+      const here = all.filter(inside);
+      const depth = Math.max(...here.map((e) => e.cwd.length));
+      const nearest = here.filter((e) => e.cwd.length === depth);
+      if (nearest.length === 1) return nearest[0];
+      if (nearest.length > 1) throw new Error(`Several sessions run here: ${nearest.map((e) => e.name).join(", ")}. Name one.`);
       if (all.length === 1) return all[0];
       if (!all.length) throw new Error("No Ogidoc session is running. Start one with: ogidoc --detach");
       throw new Error(`Several sessions are running: ${names}. Name one.`);

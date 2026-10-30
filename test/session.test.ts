@@ -454,3 +454,19 @@ test("a done plan can be removed in one commit; the code stays and the session i
   assert.throws(() => s.edit({ text: "again" }), /built and removed/);
   await assert.rejects(s.pass(), /built and removed/);
 });
+
+test("stopping a turn stops the agent and keeps the turn as a failed one", async () => {
+  const { dir } = repo();
+  const agent = fakeAgent("slow", ({ cwd, signal }) => {
+    writeFileSync(join(cwd, "half.js"), "half done\n");
+    return new Promise((_, reject) => signal?.addEventListener("abort", () => reject(new Error("killed"))));
+  });
+  const { session: s, view } = open(dir, { name: "p", agent });
+  const turn = s.pass({ text: "hello" });
+  assert.equal(view().working, true);
+  await s.stopTurn();
+  await turn;
+  assert.equal(view().working, false);
+  assert.equal(view().last!.error, "The turn was stopped.");
+  assert.equal(view().canUndo, true, "what it changed is committed, so it can be undone");
+});
