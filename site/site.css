@@ -1,23 +1,17 @@
 /* The site is a scrolling page around small copies of the editor; app/style.css gives
    them the editor's own colours, marks and animation. Everything here is the page
    around them, plus the few places a small, read-only copy needs less room. */
-/* The wordmark's mono ships with the site (JetBrains Mono Bold, SIL OFL, fonts/OFL.txt). */
-@font-face { font-family: "Ogidoc Wordmark"; src: url("./fonts/jetbrains-mono-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
-
 :root {
-  --font-mark: "Ogidoc Wordmark", var(--font-mono);
   --side: clamp(16px, 4vw, 48px);
 }
 
 html, body { height: auto; }
 body, #root { display: block; }
-body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { color: var(--human); }
 a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-offset: 3px; border-radius: 4px; }
 
 .site { max-width: 1240px; margin: 0 auto; padding: 0 var(--side); }
-.site .brand { font-family: var(--font-mark); font-style: normal; font-weight: 700; letter-spacing: -0.03em; }
 
 /* ---------- hero ---------- */
 .hero { position: relative; display: grid; gap: 22px; padding: clamp(40px, 8vh, 96px) 0 clamp(48px, 7vh, 80px); max-width: 1080px; isolation: isolate; }
