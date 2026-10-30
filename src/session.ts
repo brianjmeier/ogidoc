@@ -105,7 +105,6 @@ export class Session extends EventEmitter {
     // another editor; carry what we know across that edit.
     const text = existsSync(this.planPath) ? readFileSync(this.planPath, "utf8") : "";
     this.applyText(text.replace(/\n$/, ""));
-    this.migrateQuestionLines();
     const onDisk: Record<string, string> = {};
     for (const f of readdirSync(join(this.dir, "boxes"))) {
       if (f.endsWith(".plan")) onDisk[f.slice(0, -5)] = readFileSync(join(this.dir, "boxes", f), "utf8").replace(/\n$/, "");
@@ -115,19 +114,6 @@ export class Session extends EventEmitter {
       if (!this.boxes.find((b) => b.name === name)) this.boxes.push({ name, lines: [], status: "stale", uses: [] });
     }
     this.applyBoxes(onDisk);
-  }
-
-  // Sessions from before comment threads kept questions as plan lines.
-  migrateQuestionLines() {
-    const keep: Line[] = [];
-    for (const l of this.lines) {
-      const kind: string | null | undefined = l.kind;
-      if (kind === "question") {
-        const by = l.by ?? "a";
-        this.addThread(Math.max(0, keep.length - 1), by, l.text.trim());
-      } else keep.push(kind === "answer" ? { ...l, kind: null } : l);
-    }
-    this.lines = keep;
   }
 
   addThread(line: number, by: Thread["by"], text: string): Thread {

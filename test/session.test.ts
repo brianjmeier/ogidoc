@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeAgent } from "../src/agents.ts";
@@ -118,24 +118,6 @@ test("a thread stays on its line while the person edits around it, and keeps the
   s.resolve({ thread: mine.id });
   assert.equal(s.threads.find((t) => t.id === mine.id)!.resolved, true);
   assert.ok(JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8")).length === 2, "threads are saved beside the plan");
-});
-
-test("questions kept as plan lines by older sessions become threads", () => {
-  const { dir } = repo();
-  mkdirSync(join(dir, ".underpaint/old"), { recursive: true });
-  writeFileSync(join(dir, "old.plan"), "weekly reflection\n  every sunday\n    sunday in whose timezone?\n");
-  writeFileSync(join(dir, ".underpaint/old/state.json"), JSON.stringify({
-    turn: 2,
-    lines: [
-      { text: "weekly reflection", by: "h", kind: null },
-      { text: "  every sunday", by: "h", kind: null },
-      { text: "    sunday in whose timezone?", by: "a", kind: "question" },
-    ],
-  }));
-  const s = new Session({ cwd: dir, planFile: "old.plan", agent: makeAgent("mock", { script: SCRIPT }) });
-  assert.deepEqual(s.lines.map((l) => l.text), ["weekly reflection", "  every sunday"]);
-  assert.equal(s.threads[0].line, 1);
-  assert.equal(s.threads[0].messages[0].text, "sunday in whose timezone?");
 });
 
 test("a failed turn that changed code can be undone", async () => {
