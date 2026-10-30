@@ -1,0 +1,43 @@
+// What the session tests share: a throwaway repository, the scripted agent, and one
+// way to open a session, so how a session is put together is written here once.
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { makeAgent } from "../../src/agents.ts";
+import { Session } from "../../src/session.ts";
+import type { Agent } from "../../src/types.ts";
+
+export const SCRIPT = new URL("../fixtures/weekly.json", import.meta.url).pathname;
+export const PLAN = "weekly reflection\n  every sunday\n    look at my week\n    tell me what i felt most";
+
+export function emptyDir(): string {
+  return mkdtempSync(join(tmpdir(), "underpaint-"));
+}
+
+export function repo() {
+  const dir = emptyDir();
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+  git("init", "-q");
+  git("config", "user.email", "t@example.com");
+  git("config", "user.name", "Test");
+  writeFileSync(join(dir, "README.md"), "hi\n");
+  git("add", ".");
+  git("commit", "-qm", "init");
+  return { dir, git, log: () => git("log", "--format=%s").trim().split("\n") };
+}
+
+// An agent that remembers every prompt it was given.
+export function recording(agent: Agent): Agent & { prompts: string[] } {
+  const prompts: string[] = [];
+  return { ...agent, prompts, run: (o) => { prompts.push(o.prompt); return agent.run(o); } };
+}
+
+export function open(dir: string, { planFile = "weekly.plan", agent = makeAgent("mock", { script: SCRIPT }), commit = true }: { planFile?: string; agent?: Agent; commit?: boolean } = {}) {
+  const a = recording(agent);
+  const session = new Session({ cwd: dir, planFile, agent: a, commit });
+  return { session, view: () => session.snapshot(), prompts: a.prompts };
+}
+
+export const texts = (lines: { text: string }[]) => lines.map((l) => l.text);

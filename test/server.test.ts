@@ -32,8 +32,8 @@ test("only the editor's own page on this machine can drive the session", async (
     assert.equal(await send(port, "POST", "/api/pass", { host: self, origin: "https://evil.example", "content-type": "application/json" }, "{}"), 403, "another site");
     assert.equal(await send(port, "POST", "/api/pass", { host: self, "content-type": "text/plain" }, "{}"), 403, "a form post, which needs no preflight");
     assert.equal(await send(port, "GET", "/api/state", { host: `evil.example:${port}` }), 403, "DNS rebinding");
-    assert.equal(session.working, false);
-    assert.equal(session.lines[0].text, "hello");
+    assert.equal(session.snapshot().working, false);
+    assert.equal(session.snapshot().lines[0].text, "hello");
   } finally {
     server.close();
   }
