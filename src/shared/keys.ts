@@ -40,3 +40,10 @@ export function keymap(mac: boolean) {
     undo: { label: mac ? "⌘Z" : "Ctrl+Z", is: (e: KeyLike) => mod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "z" },
   };
 }
+
+// What to print for the choice keys, from the person's own layout when the browser can
+// tell: the keys where [ and ] sit on a US keyboard are Ü and + on a German one.
+export function bracketLabels(layout?: { get(code: string): string | undefined }) {
+  const at = (code: string, us: string) => (layout?.get(code) || us).toUpperCase();
+  return { prev: at("BracketLeft", "["), next: at("BracketRight", "]") };
+}

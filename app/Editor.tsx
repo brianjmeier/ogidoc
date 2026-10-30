@@ -4,7 +4,7 @@ import { choose, follow } from "../src/choices.ts";
 import { nextStop, stops } from "../src/shared/stops.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
-import { STATUS_LABEL, STATUS_MARK, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, STATUS_MARK, brackets, decorate, isPassKey, keys, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
 import { draftLine, openId, setOpenId, startThread, waitingOnYou } from "./threads.ts";
 
@@ -348,7 +348,7 @@ export function Editor(props: Props) {
     const c = choiceAt().get(n);
     if (ghost()) return `Suggestion: ${ghost()}. Tab accepts.`;
     if (tabLeaves()) return "Tab leaves the plan.";
-    if (c) return `A choice, way ${c.current + 1} of ${c.options.length}. ${keys.alt}[ and ${keys.alt}] switch, ${keys.keep.label} uses this way.`;
+    if (c) return `A choice, way ${c.current + 1} of ${c.options.length}. ${keys.alt}${brackets().prev} and ${keys.alt}${brackets().next} switch, ${keys.keep.label} uses this way.`;
     if (proposalAt(n)) return `A proposal. ${keys.keep.label} accepts, ${keys.reject.label} rejects.`;
     return "";
   });
@@ -447,7 +447,7 @@ export function Editor(props: Props) {
                   </button>
                 </div>
                 <Show when={inChoice(w().choice)}>
-                  <div class="ways-keys"><kbd>{keys.alt}[</kbd> <kbd>{keys.alt}]</kbd></div>
+                  <div class="ways-keys"><kbd>{keys.alt}{brackets().prev}</kbd> <kbd>{keys.alt}{brackets().next}</kbd></div>
                 </Show>
               </div>
             )}

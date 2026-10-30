@@ -1,5 +1,6 @@
 import type { Status, Symbol } from "../src/types.ts";
-import { keymap } from "../src/shared/keys.ts";
+import { createSignal } from "solid-js";
+import { bracketLabels, keymap } from "../src/shared/keys.ts";
 
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -12,6 +13,10 @@ export const passKey = isMac ? "⌘" : "Ctrl";
 // ⌘/Ctrl Enter hands over from anywhere.
 export const isPassKey = (e: KeyboardEvent) => e.key === "Enter" && (e.metaKey || e.ctrlKey);
 export const keys = keymap(isMac);
+// Only Chromium reads the layout; elsewhere the choice keys print as [ and ].
+export const [brackets, setBrackets] = createSignal(bracketLabels());
+type LayoutMap = { get(code: string): string | undefined };
+(navigator as { keyboard?: { getLayoutMap?(): Promise<LayoutMap> } }).keyboard?.getLayoutMap?.().then((m) => setBrackets(bracketLabels(m)), () => {});
 
 // Real names from the codebase, longest first so a longer name wins over its prefix.
 export function symbolPattern(symbols: Symbol[]): RegExp | null {

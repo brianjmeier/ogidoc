@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keymap, type KeyLike } from "../src/shared/keys.ts";
+import { bracketLabels, keymap, type KeyLike } from "../src/shared/keys.ts";
 
 const press = (key: string, mods: Partial<KeyLike> = {}, code = ""): KeyLike => ({ key, code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods });
 const mac = keymap(true);
@@ -44,4 +44,10 @@ test("the jump key is ⌥⌘↑↓ on macOS and Alt+↑↓ elsewhere", () => {
   assert.equal(pc.jump.by(press("ArrowDown", { altKey: true })), 1);
   assert.equal(pc.jump.by(press("ArrowDown", { altKey: true, ctrlKey: true })), 0);
   assert.equal(pc.jump.by(press("ArrowLeft", { altKey: true })), 0);
+});
+
+test("the choice keys print as the person's own keyboard labels them", () => {
+  assert.deepEqual(bracketLabels(), { prev: "[", next: "]" });
+  assert.deepEqual(bracketLabels(new Map([["BracketLeft", "ü"], ["BracketRight", "+"]])), { prev: "Ü", next: "+" });
+  assert.deepEqual(bracketLabels(new Map()), { prev: "[", next: "]" });
 });
