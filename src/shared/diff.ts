@@ -99,9 +99,12 @@ export function mapIndices(ops: DiffOp[], oldLen: number): number[] {
 // Pass `ops` when the caller already diffed the same texts.
 export function carryMeta(oldLines: Line[], newTexts: string[], { anyBuilt, ops = diffLines(oldLines.map((l) => l.text), newTexts) }: { anyBuilt: boolean; ops?: DiffOp[] }): Line[] {
   const out: Line[] = new Array(newTexts.length);
+  // The agent's marks last until the person starts changing things, so their own
+  // edits, even on top of the agent's, are the only ones marked.
+  const touched = ops.some((o) => o.op !== "eq");
   for (const o of ops) {
     // The same object, so the browser can tell nothing about the line changed.
-    if (o.op === "eq") out[o.b] = oldLines[o.a];
+    if (o.op === "eq") out[o.b] = touched && oldLines[o.a].chg && oldLines[o.a].by === "a" ? { ...oldLines[o.a], chg: false } : oldLines[o.a];
     else if (o.op === "mod" || o.op === "ins") {
       const text = newTexts[o.b];
       const prev = o.op === "mod" ? oldLines[o.a] : null;

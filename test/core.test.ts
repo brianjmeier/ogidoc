@@ -36,6 +36,16 @@ test("mapIndices follows kept and edited lines, and sends deleted ones to the li
   assert.deepEqual(mapIndices(diffLines(["only"], []), 1), [0]);
 });
 
+test("carryMeta clears the agent's marks once the person changes something", () => {
+  const agent: Line = { text: "  top = keep 3", by: "a", kind: null, status: "built", chg: true };
+  const old: Line[] = [{ text: "weekly reflection", by: "h", kind: null, status: "built", chg: false }, agent];
+  assert.equal(carryMeta(old, old.map((l) => l.text), { anyBuilt: true })[1], agent, "no change, nothing cleared");
+  const out = carryMeta(old, ["weekly reflection", "  top = keep 3", "  and weekends"], { anyBuilt: true });
+  assert.equal(out[1].chg, false, "the agent's line is no longer marked");
+  assert.equal(out[1].by, "a", "but it is still the agent's");
+  assert.equal(out[2].chg, true, "the person's new line is marked");
+});
+
 test("carryMeta doesn't mark anything stale before anything is built", () => {
   const out = carryMeta([], ["weekly reflection"], { anyBuilt: false });
   assert.equal(out[0].status, null);
