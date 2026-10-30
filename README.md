@@ -12,15 +12,23 @@ work goes on underneath it.
 
 ![The plan on the left, settled pieces in boxes on the right](docs/boxes.png)
 
-## Run it
+## Install
 
 Node 20 or newer. No dependencies, no build step.
 
 ```bash
+npm install -g github:brianjmeier/underpaint
+underpaint install-skill        # optional: teach Claude Code and pi the tool
+```
+
+Run the same install again to update. Working on Underpaint itself? Clone it and run
+`npm link` inside the checkout instead, so `underpaint` runs your copy.
+
+## Run it
+
+```bash
 cd your-project
-node path/to/underpaint/bin/underpaint.js feature.plan --agent claude --open
-# or, after `npm link` inside underpaint/:
-underpaint feature.plan --agent pi --open
+underpaint feature.plan --open
 ```
 
 | Option | |
@@ -31,14 +39,12 @@ underpaint feature.plan --agent pi --open
 | `--port <n>` | Defaults to 4747, or any free port. |
 | `--open` | Open the editor in the browser. |
 
-To see it without an agent: `npm run demo` (a scripted agent plays four turns).
+To see it without an agent, run `npm run demo` in a clone (a scripted agent plays four
+turns).
 
-`underpaint install-skill [claude|pi|both]` copies the skill into `~/.claude/skills`
-or `~/.pi/agent/skills`, so an agent in a normal session knows the tool and how to start
-it.
-
-Underpaint currently lives in the michiadas monorepo and is built to move out on its
-own; see [PORTING.md](PORTING.md).
+`underpaint install-skill [claude|pi|both]` (default both) copies the skill into
+`~/.claude/skills` and `~/.pi/agent/skills`, so an agent in a normal session knows the
+tool and how to start it.
 
 ## How a session goes
 
@@ -102,6 +108,8 @@ design/               the design walkthrough this was built from
 ```
 
 ## Tests
+
+From a clone of this repository:
 
 ```bash
 npm ci                # only installs Playwright, for the browser test

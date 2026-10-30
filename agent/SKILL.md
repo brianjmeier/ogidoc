@@ -84,11 +84,10 @@ code to match. Ask about it with a question on the line it affects.
 
 ## Starting a session
 
-From the project directory, with the `underpaint` command on the path (run `npm link`
-inside the `underpaint` package once):
+From the project directory:
 
     underpaint feature.plan --agent claude --open   # or --agent pi
 
-This opens the editor in the browser. Without `npm link`, run
-`node path/to/underpaint/bin/underpaint.js` the same way. The plan file and its boxes live next to the
-code as plain text, so they diff in git like everything else.
+This opens the editor in the browser. If `underpaint` is not on the path, install it
+with `npm install -g github:brianjmeier/underpaint`. The plan file and its boxes live
+next to the code as plain text, so they diff in git like everything else.

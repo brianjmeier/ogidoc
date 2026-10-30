@@ -1,6 +1,5 @@
 name: CI
 
-# Runs at the root once Underpaint lives in its own repository.
 on:
   push:
     branches: [main]
