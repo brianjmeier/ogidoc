@@ -34,7 +34,7 @@ underpaint feature.plan --open
 
 | Option | |
 | --- | --- |
-| `--agent claude\|pi\|mock` | Who holds the other pen. Defaults to Claude Code if installed, else pi. |
+| `--agent claude\|pi\|mock` | The agent that takes turns with you. Defaults to Claude Code if installed, else pi. |
 | `--agent-arg <arg>` | Extra argument for the agent CLI, repeatable: `--agent-arg=--model --agent-arg=sonnet` |
 | `--no-commit` | Don't commit each agent turn. |
 | `--port <n>` | Defaults to 4747, or any free port. |
@@ -49,7 +49,7 @@ tool and how to start it.
 
 ## How a session goes
 
-- **Strict turns.** One side holds the pen. `⌘↵` (or `Ctrl ↵`) passes it. Your edits
+- **Strict turns.** One side edits at a time. `⌘↵` (or `Ctrl ↵`) hands over. Your edits
   are the whole message; passing without edits means "go on". Code never changes on
   your turn.
 - **No syntax.** Write any pseudocode. The agent follows your style and tells the
@@ -60,9 +60,9 @@ tool and how to start it.
   public interface, behavior), it builds its pick and offers the other ways on the
   same lines. A bracket beside them switches between the ways in place (`‹ 1 of 2 ›`,
   or `⌥[` / `⌥]` with the caret in them), and **Use this** (`⌥↵`) locks one in.
-  Pass the pen on another way and the agent builds that one.
+  Hand over on another way and the agent builds that one.
 - **Comments are yours.** Click a line number to comment on a line. The agent answers
-  in the thread (`⌘↵` sends and passes the pen), folds the answer into the plan and
+  in the thread (`⌘↵` sends and hands over), folds the answer into the plan and
   resolves it.
 - **Building underneath.** The agent builds what it understands in TDD baby steps.
   Margin marks say what's built, what needs a build, and what waits on a comment. The Underneath drawer lists the steps, files
@@ -91,7 +91,7 @@ feature.plan                         the plan
 
 ## What the agent reads
 
-- `agent/SKILL.md` teaches the agent what Underpaint is: the shared plan, the pen,
+- `agent/SKILL.md` teaches the agent what Underpaint is: the shared plan, taking turns,
   building underneath, boxes, honest build status.
 - `agent/rules.md` is the default for `.underpaint/rules.md`: how big turns are, what
   to decide alone and what to offer as options, what earns a built mark.

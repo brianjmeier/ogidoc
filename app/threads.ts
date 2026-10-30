@@ -50,7 +50,7 @@ export async function resolve(id: string) {
   if (!r.error) close();
 }
 
-// Whatever the person typed in a card goes with the pen.
+// Whatever the person typed in a card goes with the hand-over.
 export async function sendAll() {
   for (const key of Object.keys(drafts())) if (draft(key).trim()) await send(key, state()?.threads.find((t) => t.id === key));
 }

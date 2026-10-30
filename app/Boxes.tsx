@@ -19,7 +19,7 @@ export interface BoxAnimation {
 }
 
 export interface BoxesApi {
-  // Close an open box editor and hand back its text, to go with the pen.
+  // Close an open box editor and hand back its text, to go with the hand-over.
   take(): Record<string, string> | undefined;
 }
 

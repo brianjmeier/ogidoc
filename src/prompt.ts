@@ -80,7 +80,7 @@ function describeHumanDiff(d: HumanDiff, turn: number): string {
     c.op === "mod" ? `${pad}- ${c.old}\n${pad}+ ${c.text}` : `${pad}${c.op === "add" ? "+" : "-"} ${c.text}`;
   const out = d.lines.map((c) => fmt(c, ""));
   for (const b of d.boxes) out.push(`In box ${b.name}:`, ...b.lines.map((c) => fmt(c, "  ")));
-  if (!out.length) return "Nothing. They passed the pen without editing, which means: go on.";
+  if (!out.length) return "Nothing. They handed over without editing, which means: go on.";
   return "```diff\n" + out.join("\n") + "\n```";
 }
 

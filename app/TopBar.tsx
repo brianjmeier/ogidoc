@@ -8,7 +8,7 @@ const DEFAULT = "default";
 
 interface Props {
   state: Snapshot;
-  pen: { cls: string; label: string };
+  turn: { cls: string; label: string };
   passing: boolean;
   onPass: () => void;
 }
@@ -42,12 +42,12 @@ export function TopBar(props: Props) {
       <Show when={props.state.canUndo}>
         <Button class="btn ghost-btn" onClick={undo}>{undoArmed() ? "Undo it? Click again" : "Undo agent turn"}</Button>
       </Show>
-      <span class={`pen ${props.pen.cls}`} classList={{ passing: props.passing }}>
+      <span class={`turn ${props.turn.cls}`} classList={{ passing: props.passing }}>
         <i class="dot" />
-        <span>{props.pen.label}</span>
+        <span>{props.turn.label}</span>
       </span>
       <Button class="btn primary" disabled={props.state.working} onClick={props.onPass}>
-        Pass the pen <kbd>{passKey} ↵</kbd>
+        Hand over <kbd>{passKey} ↵</kbd>
       </Button>
     </header>
   );

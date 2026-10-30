@@ -130,7 +130,7 @@ export const abstractions = {
 };
 
 // When agents have questions: the agent builds its pick, shows the other way in place,
-// and the person switches to it and passes the pen.
+// and the person switches to it and hands over.
 export const choices = {
   start: { lines: reflection.map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
   beats: [

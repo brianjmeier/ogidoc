@@ -184,7 +184,7 @@ test("a failed turn that changed code can be undone", async () => {
   assert.deepEqual(texts(view().lines), ["hello"], "the plan is as the person left it");
 });
 
-test("a failed agent turn gives the pen back with an error", async () => {
+test("a failed agent turn gives the turn back with an error", async () => {
   const { dir } = repo();
   const { session: s, view } = open(dir, { planFile: "p.plan", agent: fakeAgent("broken", async () => "I forgot the JSON") });
   await s.pass({ text: "hello" });

@@ -320,10 +320,15 @@ export function Editor(props: Props) {
           <Index each={anim() ? [] : rail()}>
             {(w) => (
               <div class="ways" style={{ top: `${w().top}px`, height: `${w().height}px` }}>
-                <button type="button" aria-label="Previous way" title={`Other ways to do this · ${altKey}[`} disabled={!props.editable} onClick={() => cycle(w().choice, -1)}>‹</button>
-                <span>{w().choice.current + 1} of {w().choice.options.length}</span>
-                <button type="button" aria-label="Next way" title={`Other ways to do this · ${altKey}]`} disabled={!props.editable} onClick={() => cycle(w().choice, 1)}>›</button>
-                <button type="button" class="use" title={`Keep this way and drop the others · ${altKey}↵`} disabled={!props.editable} onClick={() => settle(w().choice)}>Use this</button>
+                <div class="ways-row">
+                  <button type="button" aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, -1)}>‹</button>
+                  <span>{w().choice.current + 1} of {w().choice.options.length}</span>
+                  <button type="button" aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onClick={() => cycle(w().choice, 1)}>›</button>
+                  <button type="button" class="use" title="Keep this way and drop the others" disabled={!props.editable} onClick={() => settle(w().choice)}>Use this</button>
+                </div>
+                <Show when={props.editable && choiceAt().get(caret().line) === w().choice}>
+                  <div class="ways-keys"><kbd>{altKey}[</kbd> <kbd>{altKey}]</kbd> switch · <kbd>{altKey}↵</kbd> use this</div>
+                </Show>
               </div>
             )}
           </Index>

@@ -81,9 +81,9 @@ export class Session extends EventEmitter {
     this.changed();
   }
 
-  // The person's changes are refused while the agent holds the pen.
+  // The person's changes are refused during the agent's turn.
   private guard() {
-    if (this.working) throw new Error("The agent has the pen.");
+    if (this.working) throw new Error("It's the agent's turn.");
   }
 
   private changed() {
@@ -146,7 +146,7 @@ export class Session extends EventEmitter {
   // ---------- the agent's turn ----------
 
   async pass({ text, boxes, accepted }: EditInput = {}) {
-    if (this.working) throw new Error("The agent already has the pen.");
+    if (this.working) throw new Error("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     const s = this.s;
     const prompt = buildPrompt({

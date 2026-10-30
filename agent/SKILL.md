@@ -57,8 +57,8 @@ a source of truth lives, behavior the person would see. For those, offer a **cho
 - Keep going. A choice never holds up the turn.
 
 The person cycles through the options in place, and can edit one like any other
-line. If they switch to another option and pass the pen, build that one and offer the
-rest again, with the new pick first. If they pass the pen and kept your pick, the
+line. If they switch to another option and hand over, build that one and offer the
+rest again, with the new pick first. If they hand over and kept your pick, the
 choice is settled: leave it out. They can also lock one in themselves, and then the
 choice is gone before your turn; build what the plan says there.
 
@@ -68,7 +68,7 @@ resolve the thread once the answer is in the plan. You can't start one.
 
 ## Taking turns
 
-Only one side holds the pen. When the person passes it to you, read what they changed.
+Only one side edits at a time. When the person hands over to you, read what they changed.
 Their edits are the message, and so are the options they picked and the comments they
 left. A line they rewrote means your version was wrong.
 

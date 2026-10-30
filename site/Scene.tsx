@@ -15,7 +15,7 @@ const HOLD_MS = 2600;
 export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
   let el!: HTMLDivElement;
   let editor!: EditorApi;
-  const [pen, setPen] = createSignal<"h" | "a">("h");
+  const [whose, setWhose] = createSignal<"h" | "a">("h");
   const [last, setLast] = createSignal<LastTurn | null>(null);
   const [boxes, setBoxes] = createSignal<Box[]>([]);
   const [boxAnim, setBoxAnim] = createSignal<BoxAnimation | null>(null);
@@ -37,7 +37,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
       editor.adopt(props.start);
       setBoxes(props.start.boxes);
       setLast(null);
-      setPen("h");
+      setWhose("h");
       for (const [i, f] of props.frames.entries()) {
         if (stopped) return;
         if (f.kind === "type") {
@@ -46,7 +46,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
           await wait(KEY_MS);
         } else {
           await wait(BEFORE_PASS_MS);
-          setPen("a");
+          setWhose("a");
           const old = editor.lines();
           const pulse: Record<string, number> = {};
           f.animation.forEach((o, k) => { if (o.op === "move") pulse[o.to] ??= 500 + k * 40; });
@@ -55,7 +55,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
           await editor.animate(f.animation, old, f.plan);
           setBoxAnim(null);
           setLast(f.last);
-          setPen("h");
+          setWhose("h");
           await wait(HOLD_MS);
         }
       }
@@ -77,7 +77,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string }) {
       <div class="scene-top">
         <span class="brand">Underpaint</span>
         <span class="spacer" />
-        <span class={`pen ${pen()}`}><i class="dot" />{pen() === "a" ? "agent's pen · writing" : "your pen"}</span>
+        <span class={`turn ${whose()}`}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
       </div>
       <div class="scene-body" classList={{ split: boxes().length > 0 }}>
         <div class="editor" style={{ height: `${rows * 24 + 28}px` }}>

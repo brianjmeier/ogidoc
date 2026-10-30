@@ -52,7 +52,7 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
                 {props.thread ? "Reply" : "Comment"}
               </Button>
             </div>
-            <div class="keys">Enter sends · {passKey} Enter sends and passes the pen</div>
+            <div class="keys">Enter sends · {passKey} Enter sends and hands over</div>
           </Show>
         </Popover.Content>
       </Popover.Portal>

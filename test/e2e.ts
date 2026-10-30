@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // Drives the real editor in Chromium against the scripted mock agent:
-// write a plan, pass the pen, cycle through the ways the agent offered and use one, autocomplete,
+// write a plan, hand over, cycle through the ways the agent offered and use one, autocomplete,
 // accept a proposal, ask about a line and pass from the comment, watch pieces move into
 // boxes, comment on a line, disagree inside a box, reach done, undo.
 //
@@ -39,8 +39,8 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors: string[] = [];
 page.on("pageerror", (e) => errors.push(e.message));
 const shot = (name: string) => page.screenshot({ path: join(SHOTS, `${name}.png`) });
-const pen = async () => (await page.textContent(".pen")) ?? "";
-const waitPen = (re: RegExp) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector(".pen")?.textContent ?? ""), re.source, { timeout: 15000 });
+const turn = async () => (await page.textContent(".turn")) ?? "";
+const waitTurn = (re: RegExp) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector(".turn")?.textContent ?? ""), re.source, { timeout: 15000 });
 // Each line as it reads, without the comment pins drawn at its end.
 const planText = () =>
   page.$$eval(".rows .ln", (els) => els.map((e) => {
@@ -48,7 +48,7 @@ const planText = () =>
     c.querySelectorAll(".pin-btn").forEach((p) => p.remove());
     return c.textContent ?? "";
   }));
-const passPen = () => page.keyboard.press("Control+Enter");
+const handOver = () => page.keyboard.press("Control+Enter");
 const step = (s: string) => console.log(`· ${s}`);
 
 try {
@@ -62,10 +62,10 @@ try {
   assert.equal(await page.$$eval(".rows .g .m", (m) => m.length), 0, "nothing is built yet");
   await shot("02-idea");
 
-  step("passing the pen gives it to the agent");
+  step("handing over gives the agent its turn");
   await page.focus(TA);
-  await passPen();
-  await waitPen(/agent's pen · working/);
+  await handOver();
+  await waitTurn(/agent's turn · working/);
   assert.equal(await page.$eval(TA, (t) => (t as HTMLTextAreaElement).readOnly), true, "the text is read-only on the agent's turn");
   await page.waitForSelector(".activity");
   await page.waitForTimeout(500);
@@ -75,7 +75,7 @@ try {
   await page.waitForSelector(".rows .a-add", { timeout: 15000 });
   await page.waitForTimeout(250);
   await shot("04-agent-animating");
-  await waitPen(/your pen/);
+  await waitTurn(/your turn/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-add"), null, { timeout: 5000 });
   const t1 = await planText();
   assert.ok(t1.some((t) => t.includes("7-day strip") && t.includes("AcceptReject")), "a proposal offers Accept and Reject on its line");
@@ -84,7 +84,7 @@ try {
   assert.ok((await page.$$(".rows .m-built")).length >= 3, "built lines are marked");
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent doesn't ask in comments");
   assert.equal((await page.$$(".rows .m-blocked")).length, 0, "nothing waits on the person");
-  assert.match(await pen(), /your pen$/);
+  assert.match(await turn(), /your turn$/);
   await page.click(".under summary");
   assert.match((await page.textContent(".under-body")) ?? "", /src\/summarize\.js/);
   await page.click(".under summary");
@@ -111,6 +111,8 @@ try {
     ta.focus();
     ta.setSelectionRange(at, at);
   });
+  await page.waitForSelector(".ways-keys");
+  assert.match((await page.textContent(".ways-keys")) ?? "", /\[.*\].*switch.*↵.*use this/, "with the caret in a choice, its keys show");
   await page.keyboard.press("Alt+BracketRight");
   assert.equal((await planText())[row].trim(), "in a timezone you set once");
   assert.equal(await page.textContent(".ways span"), "2 of 2");
@@ -161,16 +163,16 @@ try {
   assert.ok(!(await planText()).some((t) => t.includes("Accept")));
   await page.waitForTimeout(600);
 
-  step("the person asks about a line and passes the pen from the comment");
+  step("the person asks about a line and hands over from the comment");
   await page.click(".rows .row:first-child .no");
   await page.fill(".card textarea", "does this fit on a phone?");
   await page.keyboard.press("Control+Enter");
-  await waitPen(/agent's pen/);
+  await waitTurn(/agent's turn/);
   await page.waitForSelector(".rows .a-move", { timeout: 15000 });
   assert.ok(await page.$(".canvas .box.pop-in"), "boxes the agent added pop in");
   await page.waitForTimeout(350);
   await shot("08-moving-into-boxes");
-  await waitPen(/your pen/);
+  await waitTurn(/your turn/);
   await page.waitForFunction(() => !document.querySelector(".rows .a-move"), null, { timeout: 5000 });
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
   const thread = JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"))[0];
@@ -185,7 +187,7 @@ try {
   await page.fill(".card textarea", "could this also go out by email?");
   await page.keyboard.press("Enter");
   await page.waitForSelector('.pin-btn[aria-label="Comment from You"]');
-  assert.match(await pen(), /your pen$/, "the person's own comment isn't waiting on them");
+  assert.match(await turn(), /your turn$/, "the person's own comment isn't waiting on them");
   await shot("10-own-comment");
   await page.click('.pin-btn[aria-label="Comment from You"]');
   await page.click('.card button:has-text("Resolve")');
@@ -203,8 +205,8 @@ try {
 
   step("done means done");
   await page.click(".brand");
-  await passPen();
-  await waitPen(/done · every line built/);
+  await handOver();
+  await waitTurn(/done · every line built/);
   await page.waitForTimeout(1300);
   assert.equal(await page.$$eval(".canvas .box.built", (b) => b.length), 4);
   await shot("12-done");
@@ -219,7 +221,7 @@ try {
   step("undo the last agent turn");
   await page.click('button:has-text("Undo agent turn")');
   await page.click('button:has-text("Undo it? Click again")');
-  await waitPen(/your pen/);
+  await waitTurn(/your turn/);
   assert.match(readFileSync(join(dir, "src/summarize.js"), "utf8"), /keep = 3/);
   assert.match(g("log", "-1", "--format=%s"), /undo turn 3/);
 

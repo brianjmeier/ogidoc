@@ -46,7 +46,7 @@ export function App() {
     clearTimeout(editTimer);
     setPassing(true);
     setTimeout(() => setPassing(false), 500);
-    // Everything not sent yet goes with the pen in one request.
+    // Everything not sent yet goes with the hand-over in one request.
     await post("/api/pass", { text: editor.text(), accepted: editor.takeAccepted(), boxes: boxes?.take() });
   }
 
@@ -70,7 +70,7 @@ export function App() {
       // when the turn moved (an undo) or an agent turn ended without changes (an error).
       editor.adopt(next);
     }
-    // The agent's answer in a thread it left open shows by itself when the pen comes back.
+    // The agent's answer in a thread it left open shows by itself when the turn comes back.
     if (agentFinished && !next.last?.error) {
       const first = next.threads.find(waitingOnYou);
       if (first) setOpenId(first.id);
@@ -94,20 +94,20 @@ export function App() {
     onCleanup(() => clearInterval(t));
   });
 
-  const pen = () => {
+  const whoseTurn = () => {
     const s = state()!;
-    if (writing()) return { cls: "a", label: "agent's pen · writing" };
-    if (s.working) return { cls: "a", label: `agent's pen · working ${Math.max(0, Math.round((now() - workStart()) / 1000))}s` };
+    if (writing()) return { cls: "a", label: "agent's turn · writing" };
+    if (s.working) return { cls: "a", label: `agent's turn · working ${Math.max(0, Math.round((now() - workStart()) / 1000))}s` };
     if (s.done && !editor.lines().some((l) => l.chg && l.by === "h")) return { cls: "done", label: "done · every line built" };
     const waiting = s.threads.filter(waitingOnYou).length;
-    return { cls: "h", label: `your pen${waiting ? ` · ${waiting} comment${waiting > 1 ? "s" : ""} waiting on you` : ""}` };
+    return { cls: "h", label: `your turn${waiting ? ` · ${waiting} comment${waiting > 1 ? "s" : ""} waiting on you` : ""}` };
   };
 
   return (
     <Show when={state()}>
       {(s) => (
         <>
-          <TopBar state={s()} pen={pen()} passing={passing()} onPass={pass} />
+          <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} />
           <main class="panes" classList={{ solo: !s().boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">
@@ -153,7 +153,7 @@ export function App() {
 // One card inside the editor carries what the agent is doing, or why something failed.
 function StatusCard(props: { state: Snapshot }) {
   const failed = () =>
-    notice() || (!props.state.working && props.state.last?.error ? `The agent's turn failed: ${props.state.last.error}\nThe pen is back with you.` : "");
+    notice() || (!props.state.working && props.state.last?.error ? `The agent's turn failed: ${props.state.last.error}\nIt's your turn again.` : "");
   const items = () => (props.state.activity.length ? props.state.activity : ["reading the plan"]).slice(-4);
   return (
     <Show when={failed() || props.state.working}>

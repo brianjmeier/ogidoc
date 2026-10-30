@@ -17,7 +17,7 @@ Usage
   underpaint install-skill [claude|pi|both]
 
 Options
-  --agent <claude|pi|mock>   who holds the other pen (default: claude if installed, else pi)
+  --agent <claude|pi|mock>   the agent that takes turns with you (default: claude if installed, else pi)
   --agent-arg <arg>          extra argument for the agent CLI, repeatable (e.g. --agent-arg=--model --agent-arg=sonnet)
   --script <file.json>       turns for the mock agent
   --port <n>                 port to listen on (default 4747)
