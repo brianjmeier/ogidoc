@@ -76,8 +76,7 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
    the textarea keep the same padding, so they wrap alike. */
 .scene .code:not(.has-ways) .ln, .scene .code:not(.has-ways) > textarea { padding-right: 2.5em; }
 .scene .under summary { pointer-events: none; }
-.under-slot { min-height: 154px; border-top: 1px solid var(--line); background: var(--surface-2); }
-.under-slot .under { border-top: 0; max-height: none; }
+.scene .under { max-height: none; }
 .slide-in { animation: rowIn 420ms ease-out both; }
 
 @media (max-width: 640px) {

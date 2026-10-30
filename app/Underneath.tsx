@@ -2,16 +2,17 @@ import { For, Show } from "solid-js";
 import type { LastTurn } from "../src/types.ts";
 
 // What the last agent turn built underneath the plan: its steps, files and checks.
+// Nothing shows until a turn has built something.
 export function Underneath(props: { last: LastTurn | null; open?: boolean }) {
   const has = () => !!props.last && !!(props.last.summary || props.last.files?.length);
   return (
-    <details class="under" open={props.open}>
-      <summary>
-        <span class="lab">Underneath</span>
-        <span>{has() ? `${props.last!.summary || ""}${props.last!.seconds ? ` · ${props.last!.seconds}s` : ""}` : "No code yet"}</span>
-      </summary>
-      <div class="under-body">
-        <Show when={has()} fallback={<p class="why">Nothing has been built yet.</p>}>
+    <Show when={has()}>
+      <details class="under" open={props.open}>
+        <summary>
+          <span class="lab">Underneath</span>
+          <span>{`${props.last!.summary || ""}${props.last!.seconds ? ` · ${props.last!.seconds}s` : ""}`}</span>
+        </summary>
+        <div class="under-body">
           <Show when={props.last!.steps?.length}>
             <div class="tags">
               <For each={props.last!.steps}>{(st) => <><StepTag kind={st.kind} /><span class="why">{st.what}</span></>}</For>
@@ -29,9 +30,9 @@ export function Underneath(props: { last: LastTurn | null; open?: boolean }) {
               <For each={props.last!.checks}>{(c) => <span class="tag" classList={{ bad: !c.ok }}>{c.ok ? "✓" : "✕"} {c.name}</span>}</For>
             </div>
           </Show>
-        </Show>
-      </div>
-    </details>
+        </div>
+      </details>
+    </Show>
   );
 }
 

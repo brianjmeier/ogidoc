@@ -103,11 +103,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           </div>
         </Show>
       </div>
-      <Show when={props.under !== false}>
-        <div class="under-slot">
-          <Show when={last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>
-        </div>
-      </Show>
+      <Show when={props.under !== false && last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>
     </div>
   );
 }
