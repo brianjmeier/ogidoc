@@ -94,20 +94,22 @@ export function agree(plan: Plan): Plan {
   };
 }
 
-// Why a reply doesn't end the agent's turn, or null when it does. A turn moves the plan
-// on: it changes code or the plan's text, offers or settles a choice, shapes a box,
-// answers the person, stops on something only the person has, or finds everything
-// built. Only relabelling lines, like calling a line an example, is not a turn.
-export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; boxChanges: BoxChanges }, codeChanged: boolean): string | null {
-  const text = (p: Plan) => p.lines.map((l) => l.text).join("\n");
-  const ids = (p: Plan) => p.choices.map((c) => c.id).sort().join(" ");
-  if (codeChanged || text(before) !== text(after.plan) || ids(before) !== ids(after.plan)) return null;
-  if (Object.keys(after.boxChanges).length || before.boxes.length !== after.plan.boxes.length) return null;
+// Why a reply doesn't end the agent's turn, or null when it does. A turn ends on
+// something the person can see in the plan: everything built, a change to the plan, a
+// choice offered or settled, a box, an answer to their comment, or a stop on what only
+// they have. Code alone, or a relabelled line, gives them nothing to look at: the
+// agent keeps building.
+export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; boxChanges: BoxChanges }): string | null {
+  const p = after.plan;
+  const built = p.lines.every((l) => !l.text.trim() || l.kind === "proposal" || l.status === "built") && p.boxes.every((b) => b.status === "built");
+  if (built) return null;
+  const text = (x: Plan) => x.lines.map((l) => l.text).join("\n");
+  const ids = (x: Plan) => x.choices.map((c) => c.id).sort().join(" ");
+  if (text(before) !== text(p) || ids(before) !== ids(p)) return null;
+  if (Object.keys(after.boxChanges).length || before.boxes.length !== p.boxes.length) return null;
   if (reply.replies.some((r) => r.text.trim() || r.resolve)) return null;
   if (reply.steps.some((s) => s.kind === "stop")) return null;
-  const built = after.plan.lines.every((l) => !l.text.trim() || l.kind === "proposal" || l.status === "built");
-  if (built && reply.steps.some((s) => s.kind === "done")) return null;
-  return "It changed no code and nothing in the plan but how lines are labelled.";
+  return "Lines are still not built, and nothing changed in the plan for the person to look at.";
 }
 
 // Take the agent's reply apart into lines, boxes, threads and choices, keeping authorship, and

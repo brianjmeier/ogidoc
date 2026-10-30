@@ -213,7 +213,7 @@ export class Session extends EventEmitter {
         try {
           const r = parseReply(out);
           const n = plan.fromReply(this.plan, r, s.turn);
-          problem = plan.whyNotATurn(this.plan, r, n, this.log.codeChanged(mark) ?? r.files.length > 0);
+          problem = plan.whyNotATurn(this.plan, r, n);
           if (!problem) [reply, next] = [r, n];
         } catch (e) {
           problem = (e as Error).message;

@@ -93,10 +93,11 @@ export const notATurn = (problem: string) => `# Your turn isn't over
 
 Your last reply didn't end the turn. ${problem}
 
-Whatever you changed in the code is still there. Carry on from where you are: build
-the next line that isn't built, test first, or offer a choice, fold settled lines into
-a box, or stop on what only the person can give you. Then end with the reply described
-above.`;
+Whatever you changed in the code is still there. Carry on from where you are and keep
+building, test first, until every line is built. End sooner only on something the
+person needs to see in the plan: a decision worth offering as a choice, settled lines
+folded into a box, an answer to their comment, or a stop on what only they can give
+you. Then end with the reply described above.`;
 
 export function parseReply(text: string): Reply {
   const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);

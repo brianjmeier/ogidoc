@@ -40,7 +40,8 @@ What the person changed since your last turn:
 
 # Your reply
 
-Do the work first. Then end your reply with one JSON object in a ```json fenced block.
+Do the work first, and keep going until your turn can end the way the skill's "When
+your turn ends" says. Then end your reply with one JSON object in a ```json fenced block.
 Nothing in it is optional. Use empty arrays when there is nothing to say.
 
 ```json

@@ -10,9 +10,6 @@ export interface TurnLog {
   readonly commits: boolean;
   // The code as it is now; `record` commits what changes after this mark.
   begin(): Mark;
-  // Whether code other than the editor's own files changed since `mark`; null when
-  // there is no repository to tell.
-  codeChanged(mark: Mark): boolean | null;
   // Commit what changed since `mark`, plus the editor's own files when asked.
   record(mark: Mark, message: string, opts: { ownFiles: boolean }): string | null;
   // Take a recorded turn's code back out of the working tree. The editor's own files
@@ -36,13 +33,12 @@ export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ow
   const root = repoRoot(cwd);
   if (!root) return noLog;
   const log = gitLog(root, ownFiles.map((f) => relative(root, f)), saved);
-  return commit ? log : { ...noLog, begin: log.begin, codeChanged: log.codeChanged, revert: log.revert };
+  return commit ? log : { ...noLog, revert: log.revert };
 }
 
 const noLog: TurnLog = {
   commits: false,
   begin: () => new Map(),
-  codeChanged: () => null,
   record: () => null,
   revert() {},
   drift: () => [],
@@ -58,10 +54,6 @@ function gitLog(root: string, own: string[], saved: LogState): TurnLog {
   return {
     commits: true,
     begin: () => dirtyFiles(root),
-    codeChanged(before) {
-      const after = dirtyFiles(root);
-      return [...new Set([...before.keys(), ...after.keys()])].some((p) => !isOwn(p) && before.get(p) !== after.get(p));
-    },
     record(before, message, { ownFiles }) {
       const after = dirtyFiles(root);
       const changed = [...after.keys()].filter((p) => before.get(p) !== after.get(p));

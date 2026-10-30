@@ -3,8 +3,9 @@
 These are the defaults for how turns feel. Edit this file to change them for your
 project. The agent reads it on every turn.
 
-Keep turns small. A small turn is easy to follow and can't hide an assumption. When
-the work is simple and clear, it's fine to keep building until you reach a gap.
+Build in small steps, and keep going until the plan shows the person something: every
+line built, a choice, a box, a change to the plan, an answer, or what you need from
+them. Code alone never ends a turn.
 
 Decide the small things yourself. For a decision that is expensive to undo or that
 the person would notice, build your best pick and offer the alternatives as a choice,

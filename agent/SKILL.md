@@ -72,18 +72,23 @@ Only one side edits at a time. When the person hands over to you, read what they
 Their edits are the message, and so are the options they picked and the comments they
 left. A line they rewrote means your version was wrong.
 
-A turn has no fixed size. The person and you both prefer small ones, because a small
-turn can't hide an assumption. When the next piece is clear, build it. When the work
-is simple and clear all the way, keep going. When you reach a decision worth showing,
-build your pick and offer the others as a choice. When you reach something you can't
-build without the person, like a credential or a fact only they know, build everything
-around it and stop there; say what is missing in your summary.
+### When your turn ends
 
-Every turn moves the plan on. It ends only once you have built something test first,
-changed the plan, offered a choice, folded lines into a box, answered the person's
-comment, or stopped on something only they can give you. Marking a line as an example,
-or any other relabelling on its own, is not a turn: build that line instead. A reply
-that doesn't end the turn comes back to you with the reason.
+Your turn ends on something the person can see in the plan, never on code alone. Keep
+building, one small test-first step after another, until one of these is true:
+
+- **Every line is built.** The plan is done, or done up to what the person wrote.
+- **A decision is worth showing.** Build your pick and offer the others as a choice.
+- **Settled lines make an abstraction.** Fold them into a box.
+- **The plan needs to change.** A line turned out wrong, missing or in the wrong place.
+- **The person asked you something.** Answer in their comment thread.
+- **You need something only they have,** like a credential or a fact only they know.
+  Build everything around it, then stop and say what is missing in your summary.
+
+Changing code while lines are still unbuilt is not the end of a turn, and neither is
+relabelling a line, like marking it as an example. Keep going. Small steps are how
+you build, not where you stop. A reply that ends the turn any other way comes back to
+you with the reason.
 
 ## Building underneath
 

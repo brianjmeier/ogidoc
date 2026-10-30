@@ -208,11 +208,27 @@ test("a reply that only relabels lines goes back to the agent, and the person ne
   await s.pass({ text: "hi -> hello" });
   assert.equal(prompts.length, 2, "the agent was asked again");
   assert.match(prompts[1], /Your turn isn't over/);
-  assert.match(prompts[1], /nothing in the plan but how lines are labelled/);
+  assert.match(prompts[1], /still not built/);
   assert.equal(view().last!.error, undefined, "no error reaches the person");
   assert.equal(view().last!.summary, "built it");
   assert.equal(view().lines[0].status, "built");
   assert.equal(view().turn, 2);
+});
+
+test("a turn that only changes code, with lines still to build, goes back to the agent", async () => {
+  const { dir } = repo();
+  const plan = (second: string) => '```json\n{"plan":[{"text":"draw the board","status":"built"},{"text":"click a cell","status":"' + second + '"}],"summary":"x"}\n```';
+  let n = 0;
+  const agent = fakeAgent("code-only", async ({ cwd }) => {
+    writeFileSync(join(cwd, `step${n}.js`), "x\n");
+    return plan(n++ === 0 ? "stale" : "built");
+  });
+  const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
+  s.edit({ text: "draw the board\nclick a cell" });
+  await s.pass();
+  assert.equal(prompts.length, 2, "code alone, with a line still to build, is not the end of a turn");
+  assert.deepEqual(view().lines.map((l) => l.status), ["built", "built"]);
+  assert.equal(view().last!.error, undefined);
 });
 
 test("an agent that keeps not ending its turn fails it after a few tries", async () => {
@@ -221,7 +237,7 @@ test("an agent that keeps not ending its turn fails it after a few tries", async
   const { session: s, view, prompts } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
   assert.equal(prompts.length, 3);
-  assert.match(view().last!.error!, /changed no code/);
+  assert.match(view().last!.error!, /still not built/);
   assert.equal(view().turn, 1, "the turn is the person's again");
 });
 
@@ -311,7 +327,7 @@ test("an agent's renames, deletions and staged edits all land in its turn's comm
       git("rm", "-q", "gone.js");
       writeFileSync(join(dir, "staged.js"), "c2\n");
       git("add", "staged.js");
-      return '```json\n{"plan":[{"text":"hello"}],"summary":"moved things"}\n```';
+      return '```json\n{"plan":[{"text":"hello","status":"built"}],"summary":"moved things"}\n```';
     });
   const { session: s } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
