@@ -27,7 +27,8 @@ try {
     await page.goto(url);
 
     const brandFonts = await page.$$eval(".brand", (els) => els.map((e) => getComputedStyle(e).fontFamily));
-    assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith('"Bradley Hand"')), `${colorScheme}: "Underpaint" is handwritten everywhere on the page, got ${brandFonts}`);
+    assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("Caveat")), `${colorScheme}: "Underpaint" is handwritten everywhere on the page, got ${brandFonts}`);
+    assert.ok(await page.evaluate(() => document.fonts.load('700 17px Caveat', "Underpaint").then((f) => f.length > 0)), `${colorScheme}: the handwriting ships with the site, not from the visitor's computer`);
 
     await count(`${scene(1)} .ln`, 3);
     assert.deepEqual(await marks(1), ["built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
