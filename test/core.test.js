@@ -1,0 +1,79 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { diffLines, carryMeta } from "../src/shared/diff.js";
+import { buildPrompt, parseReply, readAgentFile } from "../src/prompt.js";
+
+test("diffLines keeps equal lines and pairs similar edits", () => {
+  const ops = diffLines(["a", "every sunday", "c"], ["a", "every sunday, my timezone", "c", "d"]);
+  assert.deepEqual(ops.map((o) => o.op), ["eq", "mod", "eq", "ins"]);
+});
+
+test("diffLines treats unrelated replacements as delete and insert", () => {
+  const ops = diffLines(["look at my week"], ["zzzz"]);
+  assert.deepEqual(ops.map((o) => o.op).sort(), ["del", "ins"]);
+});
+
+test("carryMeta keeps what it knows and marks the person's edits", () => {
+  const old = [
+    { text: "weekly reflection", by: "h", kind: null, status: "built" },
+    { text: "  top = keep 3", by: "a", kind: null, status: "built" },
+  ];
+  const out = carryMeta(old, ["weekly reflection", "  top = keep 2", "  what about weekends?"], { anyBuilt: true });
+  assert.equal(out[0].status, "built");
+  assert.equal(out[0].chg, undefined);
+  assert.equal(out[1].by, "h");
+  assert.equal(out[1].status, "stale");
+  assert.equal(out[2].kind, "question");
+  assert.equal(out[2].status, null);
+});
+
+test("carryMeta doesn't mark anything stale before anything is built", () => {
+  const out = carryMeta([], ["weekly reflection"], { anyBuilt: false });
+  assert.equal(out[0].status, null);
+});
+
+test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
+  const p = buildPrompt({
+    skill: readAgentFile("SKILL.md"),
+    rules: "Keep turns small.",
+    turn: 2,
+    planPath: "weekly.plan",
+    cwd: "/tmp/x",
+    lines: [{ text: "weekly reflection", by: "h", kind: null, status: null }],
+    boxes: [],
+    humanDiff: { lines: [{ op: "add", text: "weekly reflection" }], boxes: [] },
+    drift: ["src/other.js"],
+    last: { summary: "Asked about the timezone." },
+  });
+  assert.match(p, /# Underpaint/);
+  assert.doesNotMatch(p, /^---/);
+  assert.match(p, /Keep turns small\./);
+  assert.match(p, /\{"text":"weekly reflection","kind":null,"status":null,"by":"h"\}/);
+  assert.match(p, /\+ weekly reflection/);
+  assert.match(p, /src\/other\.js/);
+  assert.match(p, /Asked about the timezone\./);
+  assert.doesNotMatch(p, /\{\{/);
+});
+
+test("parseReply takes the last JSON block and normalizes it", () => {
+  const text = 'I did things.\n```json\n{"plan": []}\n```\nThen more.\n```json\n' + JSON.stringify({
+    plan: [{ text: "a  ", kind: "question", status: "built" }, "  plain", { text: "", status: "built" }],
+    boxes: [{ name: "summarize week!", lines: ["x"], status: "nope", uses: ["a", 3] }],
+    checks: [{ name: "vitest", ok: false }],
+  }) + "\n```";
+  const r = parseReply(text);
+  assert.equal(r.plan.length, 3);
+  assert.equal(r.plan[0].text, "a");
+  assert.equal(r.plan[0].kind, "question");
+  assert.equal(r.plan[1].text, "  plain");
+  assert.equal(r.plan[2].status, null);
+  assert.equal(r.boxes[0].name, "summarizeweek");
+  assert.equal(r.boxes[0].status, "stale");
+  assert.deepEqual(r.boxes[0].uses, ["a"]);
+  assert.equal(r.checks[0].ok, false);
+  assert.deepEqual(r.suggestions, []);
+});
+
+test("parseReply fails clearly without a plan", () => {
+  assert.throws(() => parseReply("no json here"), /no JSON block/);
+});

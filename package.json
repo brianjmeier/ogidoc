@@ -1,0 +1,21 @@
+{
+  "name": "underpaint",
+  "version": "0.1.0",
+  "description": "Build software by taking turns with an agent on one pseudocode file. The real code is built underneath.",
+  "type": "module",
+  "bin": {
+    "underpaint": "bin/underpaint.js"
+  },
+  "files": ["bin", "src", "web", "agent"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/underpaint.js",
+    "demo": "node bin/underpaint.js demo.plan --agent mock --script test/fixtures/weekly.json --no-commit",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e.mjs",
+    "test:real": "node test/real-agent.mjs"
+  },
+  "license": "MIT"
+}

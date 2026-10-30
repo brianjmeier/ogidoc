@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Underpaint</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <span class="brand">Underpaint</span>
+    <span class="file" id="file"></span>
+    <span class="spacer"></span>
+    <button class="btn ghost-btn" id="undo" type="button" hidden>Undo agent turn</button>
+    <span class="pen" id="pen"><i class="dot"></i><span id="pen-label">your pen</span></span>
+    <button class="btn primary" id="pass" type="button">Pass the pen <kbd id="pass-kbd">⌘↵</kbd></button>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main class="panes">
+    <section class="pane text-pane" aria-label="Plan">
+      <div class="editor" id="editor">
+        <div class="scroller" id="scroller">
+          <div class="sheet">
+            <div class="gutter" id="gutter" aria-hidden="true"></div>
+            <div class="code">
+              <div class="hl" id="hl" aria-hidden="true"></div>
+              <textarea id="ta" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Plan text"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="activity" id="activity" hidden></div>
+      </div>
+      <div class="statusbar">
+        <span class="key"><i class="m m-built"></i>built</span>
+        <span class="key"><i class="m m-stale"></i>needs a build</span>
+        <span class="key"><i class="m m-blocked"></i>waiting on a question</span>
+        <span class="hint" id="hint"></span>
+      </div>
+      <details class="under" id="under">
+        <summary><span class="lab">Underneath</span><span id="under-sum">No code yet</span></summary>
+        <div class="under-body" id="under-body"></div>
+      </details>
+    </section>
+
+    <section class="pane box-pane" aria-label="Boxes">
+      <div class="pane-label">Boxes</div>
+      <p class="empty" id="boxes-empty">No boxes yet. When the agent decides a piece is settled, it moves it here under a name that says what it does, and the plan keeps only a reference.</p>
+      <div class="canvas" id="canvas"></div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

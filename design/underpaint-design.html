@@ -1,0 +1,899 @@
+<title>Underpaint Walkthrough</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working-doc page. One shared editor is the hero; turns run down a rail beside it, notes on the right. Sections below are plain reading. */
+:root {
+  --paper: #f3f4f1;
+  --surface: #ffffff;
+  --surface-2: #f8f9f7;
+  --ink: #17191d;
+  --muted: #5c626c;
+  --line: #dcdfe1;
+  --human: #3044c4;
+  --human-tint: rgba(48, 68, 196, 0.08);
+  --agent: #0b7a5b;
+  --agent-tint: rgba(11, 122, 91, 0.09);
+  --sym: #8a5300;
+  --sym-tint: rgba(138, 83, 0, 0.08);
+  --gone: #a33a3a;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101215; --surface: #171a1f; --surface-2: #1c2026; --ink: #e6e8eb; --muted: #9aa1ab; --line: #2b3039;
+    --human: #9aa6ff; --human-tint: rgba(154, 166, 255, 0.11); --agent: #52d0a5; --agent-tint: rgba(82, 208, 165, 0.10);
+    --sym: #e2b660; --sym-tint: rgba(226, 182, 96, 0.10); --gone: #f08a8a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101215; --surface: #171a1f; --surface-2: #1c2026; --ink: #e6e8eb; --muted: #9aa1ab; --line: #2b3039;
+  --human: #9aa6ff; --human-tint: rgba(154, 166, 255, 0.11); --agent: #52d0a5; --agent-tint: rgba(82, 208, 165, 0.10);
+  --sym: #e2b660; --sym-tint: rgba(226, 182, 96, 0.10); --gone: #f08a8a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--paper); color: var(--ink); font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.05; font-weight: 700; }
+h2 { font-size: 28px; font-weight: 700; }
+h3 { font-size: 18px; font-weight: 500; }
+p { margin: 0; }
+.prose { max-width: 66ch; display: grid; gap: 12px; color: var(--ink); }
+.muted { color: var(--muted); }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+.h { color: var(--human); } .a { color: var(--agent); }
+
+header { display: grid; gap: 16px; }
+header .pitch { font-size: 18px; max-width: 62ch; color: var(--muted); }
+header .pitch b { color: var(--ink); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* walkthrough */
+.walk { display: grid; grid-template-columns: 210px minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.rail { display: grid; gap: 4px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.rail button {
+  all: unset; cursor: pointer; display: grid; grid-template-columns: 22px 1fr; gap: 2px 10px; padding: 9px 10px; border-radius: 6px;
+  font-size: 13.5px; line-height: 1.3; color: var(--muted);
+}
+.rail button:hover { background: var(--surface); }
+.rail button:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
+.rail button[aria-current="step"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.rail .n { font: 500 12px/1.6 var(--font-mono); grid-row: span 2; }
+.rail .who { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.rail .who.h { color: var(--human); } .rail .who.a { color: var(--agent); }
+
+.editor { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; display: grid; }
+.ed-top { display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface-2); flex-wrap: wrap; }
+.pen { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--font-mono); padding: 6px 10px; border-radius: 999px; }
+.pen.h { color: var(--human); background: var(--human-tint); } .pen.a { color: var(--agent); background: var(--agent-tint); }
+.pen .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pen.a .dot { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+.doc { overflow-x: auto; padding: 12px 0 16px; font: 13.5px/24px var(--font-mono); }
+.ln { display: grid; grid-template-columns: 4px 34px 22px max-content; align-items: stretch; white-space: pre; padding-right: 20px; }
+.ln .bar { background: transparent; }
+.ln.h .bar { background: var(--human); opacity: 0.35; } .ln.a .bar { background: var(--agent); opacity: 0.35; }
+.ln.chg.h { background: var(--human-tint); } .ln.chg.a { background: var(--agent-tint); }
+.ln.chg .bar { opacity: 1; }
+.ln .no { color: var(--muted); opacity: 0.55; text-align: right; padding-right: 14px; font-size: 12px; user-select: none; }
+.ln.gone { opacity: 0.6; } .ln.gone .tx { text-decoration: line-through; text-decoration-color: var(--gone); }
+.ln.gone .no::before { content: "−"; color: var(--gone); margin-right: 4px; }
+.ln.blank { min-height: 24px; }
+.st-mark { display: flex; align-items: center; justify-content: center; }
+.m { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid; }
+.m-ok { background: var(--agent); border-color: var(--agent); }
+.m-stale { border-color: var(--human); }
+.m-blocked { border-radius: 1px; background: var(--gone); border-color: var(--gone); }
+.gutter-key { display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.gutter-key span { display: inline-flex; gap: 6px; align-items: center; }
+.under { border-top: 1px solid var(--line); background: var(--surface-2); font-size: 13px; }
+.under summary { cursor: pointer; padding: 10px 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; list-style: none; }
+.under summary::-webkit-details-marker { display: none; }
+.under summary::before { content: "▸"; color: var(--muted); }
+.under[open] summary::before { content: "▾"; }
+.under summary:focus-visible { outline: 2px solid var(--human); outline-offset: -2px; }
+.under .lab { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.under .hidden-note { margin-left: auto; font-size: 12px; color: var(--muted); }
+.under-body { padding: 0 14px 12px 32px; display: grid; gap: 8px; }
+.under-body ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.under-body li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; font-size: 12.5px; }
+.under-body .op { font-family: var(--font-mono); color: var(--agent); }
+.under-body .path { font-family: var(--font-mono); color: var(--sym); overflow-wrap: anywhere; }
+.under-body .why { color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.check { font: 500 11.5px/1 var(--font-mono); padding: 4px 7px; border-radius: 4px; background: var(--agent-tint); color: var(--agent); }
+.q { font-weight: 500; }
+.ln.a .q, .ln.a .ans { color: var(--agent); } .ln.h .q { color: var(--human); }
+.chip.k-q { border-color: currentColor; }
+.boxname { font-weight: 600; }
+.prop { border: 1px dashed var(--agent); border-radius: 4px; padding: 1px 6px; color: var(--agent); }
+.chip { font: 500 10.5px/1 var(--font-body); padding: 3px 6px; border-radius: 4px; margin-left: 8px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; }
+.sym { color: var(--sym); background: var(--sym-tint); border-radius: 3px; padding: 0 2px; text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.kw { color: var(--human); font-weight: 500; }
+.ln.a .kw { color: var(--agent); }
+.cm { color: var(--muted); font-style: italic; }
+.bind { color: var(--sym); font-size: 12px; }
+.ghost { color: var(--muted); opacity: 0.65; font-style: italic; }
+.caret { display: inline-block; width: 2px; height: 1.15em; background: var(--human); vertical-align: -0.2em; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.tabkey { font: 500 10.5px/1 var(--font-body); padding: 3px 6px; border-radius: 4px; background: var(--human-tint); color: var(--human); margin-left: 10px; font-style: normal; }
+
+.canvas-wrap { overflow-x: auto; padding: 12px 14px 16px; border-top: 1px solid var(--line); background: var(--surface-2); display: grid; gap: 10px; }
+.pane-label { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.canvas-empty { font-size: 13px; color: var(--muted); max-width: 60ch; }
+.fname { font: 500 12.5px/1 var(--font-mono); padding: 7px 10px; }
+.canvas { position: relative; width: 760px; transform-origin: 0 0; }
+.canvas-holder { position: relative; }
+.canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.canvas svg path { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.canvas svg path.wrap { stroke-dasharray: 4 4; stroke: var(--sym); }
+.canvas svg .lbl { fill: var(--muted); font: 11px var(--font-mono); }
+.box { position: absolute; width: 220px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 9px 11px; font: 12px/1.5 var(--font-mono); display: grid; gap: 4px; }
+.box .bt { font-weight: 500; font-size: 12.5px; display: flex; justify-content: space-between; gap: 6px; }
+.box .bb { color: var(--muted); white-space: normal; display: grid; gap: 2px; }
+.box .bb .chg { color: var(--human); background: var(--human-tint); border-radius: 3px; padding: 0 3px; }
+.ln.moved { opacity: 0.55; } .ln.moved .tx { text-decoration: line-through; text-decoration-color: var(--muted); }
+.chip.mv { text-decoration: none; display: inline-block; }
+.mvbtn { all: unset; cursor: pointer; font: 500 12px/1 var(--font-body); color: var(--muted); padding: 4px 8px; border-radius: 4px; border: 1px dashed var(--line); }
+.mvbtn:hover { color: var(--ink); border-color: var(--muted); }
+.mvbtn:focus-visible { outline: 2px solid var(--human); }
+.box .st { font: 500 10px/1 var(--font-body); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.box.ok { border-color: var(--agent); }
+.box.ok .st { color: var(--agent); }
+.box.stale { border-color: var(--human); }
+.box.stale .st { color: var(--human); }
+.box.blocked { border-color: var(--gone); }
+.box.blocked .st { color: var(--gone); }
+.box.ext { border-style: dashed; border-color: var(--sym); background: var(--sym-tint); }
+.box.ext .bt { color: var(--sym); }
+.box.ext .st { color: var(--sym); }
+.box.new { box-shadow: 0 0 0 3px var(--human-tint); border-color: var(--human); }
+.box .file { color: var(--sym); font-size: 11px; }
+
+.ed-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface-2); flex-wrap: wrap; }
+.btn { all: unset; cursor: pointer; font: 500 13px/1 var(--font-body); padding: 9px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
+.btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn[disabled] { opacity: 0.4; cursor: default; }
+.ed-foot .hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+kbd { font: 500 11px/1 var(--font-mono); padding: 3px 5px; border-radius: 4px; border: 1px solid currentColor; opacity: 0.75; margin-left: 2px; }
+
+.notes { display: grid; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); min-width: 0; }
+.notes h3 { font-size: 21px; font-weight: 700; }
+.notes .who { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: 14px; }
+.notes .ui { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+.baby { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+.baby li { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: baseline; }
+.tdd { display: inline-flex; gap: 3px; font: 500 10.5px/1 var(--font-mono); }
+.tdd b { font-weight: 500; padding: 3px 5px; border-radius: 3px; }
+.tdd .r { color: var(--gone); background: color-mix(in srgb, var(--gone) 12%, transparent); }
+.tdd .g { color: var(--agent); background: var(--agent-tint); }
+.tdd .q2 { color: var(--human); background: var(--human-tint); }
+.baby-note { font-size: 12.5px; color: var(--muted); }
+
+/* reference sections */
+section { display: grid; gap: 22px; }
+.marks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .marks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .marks { grid-template-columns: minmax(0, 1fr); } }
+.mark { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.mark .kind { font: 600 15px/1.2 var(--font-display); }
+.mark .kind.prop { border: 0; padding: 0; }
+.mark .ex { font: 12.5px/1.5 var(--font-mono); background: var(--surface-2); padding: 8px 10px; border-radius: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mark p { font-size: 14px; color: var(--muted); }
+
+.loop { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.loop > div { padding: 16px 18px; display: grid; gap: 8px; align-content: start; border-right: 1px solid var(--line); }
+.loop > div:last-child { border-right: 0; }
+.loop .who { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.loop ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 5px; }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+th { font: 500 11.5px/1.3 var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+tr.pick td { background: var(--agent-tint); }
+td b { font-weight: 600; }
+td a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+td a:hover { text-decoration-color: currentColor; }
+.pill { display: inline-block; font: 500 11px/1 var(--font-body); padding: 4px 7px; border-radius: 999px; background: var(--agent-tint); color: var(--agent); margin-left: 6px; vertical-align: 1px; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.qlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.qlist li { display: grid; grid-template-columns: 24px 1fr; gap: 8px; font-size: 14.5px; }
+.qlist.done li::before { content: "✓"; color: var(--agent); background: var(--agent-tint); }
+.qlist li::before { content: "?"; font: 600 13px/1.6 var(--font-mono); color: var(--human); background: var(--human-tint); border-radius: 4px; text-align: center; height: 22px; }
+.names { display: grid; gap: 10px; }
+.name { display: grid; grid-template-columns: 130px 1fr; gap: 10px; font-size: 14.5px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.name b { font-family: var(--font-display); font-size: 18px; font-weight: 500; }
+
+@media (max-width: 1100px) {
+  .walk { grid-template-columns: 180px minmax(0, 1fr); }
+  .notes { grid-column: 1 / -1; position: static; }
+}
+@media (max-width: 720px) {
+  .walk { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); overflow-x: auto; padding-bottom: 4px; }
+  .doc { font-size: 12.5px; }
+  .name { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .pen.a .dot, .caret { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Underpaint · design draft</div>
+    <h1>One file, two pens</h1>
+    <p class="pitch">You and the agent build software by <b>editing the same pseudocode in place</b>, taking turns. There is no chat. Turns stay small, like <b>TDD baby steps</b>: the agent <b>builds what it understands underneath</b>, test first and out of sight, and leaves anything it would have to assume as a question for you. Each line shows whether it is built, so <b>when the pseudocode looks done, the software is done</b>. Questions and proposals live inside the file. As pieces get settled, the agent moves them into <b>named boxes</b> beside the text, so the text stays short and holds only what's still open.</p>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--human)"></i>Human wrote it</span>
+      <span><i class="swatch" style="background:var(--agent)"></i>Agent wrote it</span>
+      <span><i class="swatch" style="background:var(--sym)"></i>Real symbol in the repo</span>
+      <span><i class="swatch" style="background:var(--gone)"></i>Removed this turn</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="walk-h">
+    <div class="prose">
+      <div class="eyebrow">Example session</div>
+      <h2 id="walk-h">Planning a weekly reflection card for Brújula</h2>
+      <p class="muted">The real codebase here is <code>registro/</code> in this monorepo (Next.js, Supabase, an emotion journal). Step through the turns. Highlighted lines changed on that turn; the margin mark says whether the line is built, needs a build, or waits on a question. Open “Underneath” to see the code changes the user normally doesn't look at.</p>
+    </div>
+
+    <div class="walk">
+      <nav class="rail" id="rail" aria-label="Turns"></nav>
+
+      <div class="editor">
+        <div class="ed-top">
+          <span class="fname">weekly-reflection.plan</span>
+          <span class="pen" id="pen"><i class="dot"></i><span id="pen-label"></span></span>
+        </div>
+        <div class="doc" id="doc"></div>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <div class="pane-label">Boxes</div>
+          <p class="canvas-empty" id="canvas-empty">No boxes yet. When the agent decides a piece is settled, it moves it here under a name that says what it does, and the text keeps only a reference.</p>
+          <div class="canvas-holder" id="canvas-holder"><div class="canvas" id="canvas"></div></div>
+        </div>
+        <div class="gutter-key" aria-label="Margin marks">
+          <span><i class="m m-ok"></i>built and tested</span>
+          <span><i class="m m-stale"></i>needs a build</span>
+          <span><i class="m m-blocked"></i>waiting on a question</span>
+        </div>
+        <details class="under" id="under">
+          <summary><span class="lab">Underneath</span><span id="under-sum"></span><span class="hidden-note">closed by default · the user rarely opens this</span></summary>
+          <div class="under-body" id="under-body"></div>
+        </details>
+        <div class="ed-foot">
+          <button class="btn" id="prev">← Previous turn</button>
+          <button class="btn primary" id="next">Pass the pen <kbd>⌘↵</kbd></button>
+          <span class="hint"><kbd>⌘</kbd><kbd>↵</kbd> passes the pen · arrow keys step back and forth</span>
+        </div>
+      </div>
+
+      <aside class="notes" id="notes" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="marks-h">
+    <div class="prose">
+      <div class="eyebrow">Notation</div>
+      <h2 id="marks-h">There is no syntax. Write any pseudocode.</h2>
+      <p class="muted">A plan is as big or as small as you make it: one function, one feature, a whole app. The tool has no idea of a project. The agent copies whatever style you start in: lowercase prose, Python-ish, arrows, YAML. Nothing is reserved. The agent works out what each line is from what it says and where it sits, and the editor shows it. The file stays plain text that diffs in git and opens in any editor.</p>
+    </div>
+    <div class="marks">
+      <div class="mark"><span class="kind h">Questions</span><div class="ex">sunday in whose timezone, yours or a fixed one?</div><p>From either side, about the line above. The agent doesn't build anything that depends on an open question. The pen chip counts them.</p></div>
+      <div class="mark"><span class="kind a">Answers</span><div class="ex">yes, same gate as the journal</div><p>Written under the question. The asker folds the answer into the plan and deletes both.</p></div>
+      <div class="mark"><span class="kind prop">Proposals</span><div class="ex">maybe a 7-day strip of colored dots</div><p>Ideas that aren't code yet: a feature, a scope cut, a refactor. Accept keeps the words as a plain line; reject deletes them.</p></div>
+      <div class="mark"><span class="kind" style="color:var(--sym)">Code names</span><div class="ex">inside SubscriptionGate, above JournalWorkspace</div><p>The agent finds which names exist in the repo and the editor underlines them. Hover for file and line.</p></div>
+      <div class="mark"><span class="kind h">Examples</span><div class="ex">ansiedad, ansiedad, alegría → tristeza, alegría</div><p>Each concrete example becomes a test case. Write the whole plan as examples and you have a TDD tool.</p></div>
+      <div class="mark"><span class="kind h">Boxes</span><div class="ex">WeeklyCard(summarizeWeek(loadWeek(…)))</div><p>When the agent decides a piece is settled, it moves it into a box with a name that says what it does, and the text keeps only a reference. The text gets shorter and decided things stop getting in the way. Open a box and edit it to disagree.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="loop-h">
+    <div class="prose">
+      <div class="eyebrow">Turn loop</div>
+      <h2 id="loop-h">Turns, made of baby steps</h2>
+      <p class="muted">Turns are strict: only one side holds the pen, and passing it is a keybind (<code>⌘↵</code>), so you never leave the keyboard. It isn't a TDD tool, but it has the rhythm of one. Each agent step is the smallest next piece: write a test from the line, watch it fail, make it pass, mark the line built, hand the pen back. Turns aren't a fixed size. Both sides decide how much a turn covers, and the defaults steer both toward small turns so nothing gets assumed. When the work is simple and clear, the agent may keep going until it reaches a gap.</p>
+    </div>
+    <div class="loop">
+      <div>
+        <span class="who h">Human turn</span>
+        <ul>
+          <li>Edit anything, including the agent's lines. Open any box and edit inside it to disagree with the abstraction. Code doesn't change on your turn.</li>
+          <li>Ghost-text autocomplete whenever the agent judges it has something useful to suggest. There is no fixed rule.</li>
+          <li>Accept or reject the agent's last turn per hunk, or wholesale. Rejecting also reverts the code it built for those lines.</li>
+          <li>Pass the pen with <code>⌘↵</code>. You can say nothing: the edits are the message. With no edits it just means “go on”.</li>
+        </ul>
+      </div>
+      <div>
+        <span class="who a">Agent turn</span>
+        <ul>
+          <li>Reads the file, the diff of your last turn, and the repo.</li>
+          <li>Thinks as much as it needs, in the background. Only its edits, questions and proposals reach the file.</li>
+          <li>Edits in place: adds detail, rewrites vague lines, asks questions, makes proposals, answers yours.</li>
+          <li>Moves settled pieces into named boxes whenever it decides to, so the text keeps only what's still open.</li>
+          <li>Works in baby steps: picks a line it understands, writes a failing test, makes it pass, refactors if needed. As many steps as the turn calls for. What kind of test a line needs comes from context; if that isn't enough, it asks.</li>
+          <li>Never guesses. It either stops at the first gap, or builds everything else that's clear and leaves the open decisions marked for your turn. Some turns build nothing.</li>
+          <li>Matches your notation and indentation.</li>
+          <li>Returns the pen. It may write a one-line note in the margin explaining a large rewrite.</li>
+        </ul>
+      </div>
+      <div>
+        <span class="who">Your rules</span>
+        <ul>
+          <li>Turn size, whether to stop at the first gap or build around it, how strict the tests are: all of it lives in a set of skills and prompts.</li>
+          <li>They ship with defaults that favor small turns. You and the agent can change them per person or per codebase.</li>
+        </ul>
+      </div>
+      <div>
+        <span class="who" style="color:var(--sym)">Underneath</span>
+        <ul>
+          <li>When the agent builds, it changes real code on a branch, runs checks, and commits once per agent turn. Every turn can be undone on its own.</li>
+          <li>Plan and code are mapped to each other, and the margin mark is that mapping's status. Its size isn't fixed: a line, a block, or a box, whatever helps you and the agent understand each other. It varies with the person, the agent and the project.</li>
+          <li>Done is defined on the plan: no open question, no line waiting or needing a build, checks green. Then the code is done too.</li>
+          <li>If the hidden code is edited outside a turn, the agent flags the drift: a question on each affected line, which turns those lines red. It never quietly rewrites the plan or the code to match.</li>
+          <li>You see results by running the app. Reading the code is optional.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="prior-h">
+    <div class="prose">
+      <div class="eyebrow">Prior art</div>
+      <h2 id="prior-h">Who is near this, and what is still open</h2>
+      <p class="muted">Spec-as-source with hidden code is an active space, but every tool found imposes its own spec format, steers through chat, and regenerates code in one direction. A user-invented notation, in-file questions with turn-taking, and live per-line build status on free pseudocode did not turn up anywhere.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Project</th><th>What it shares</th><th>Where it differs</th></tr></thead>
+        <tbody>
+          <tr><td><b><a href="https://codespeak.dev/docs/reference/build">CodeSpeak</a></b></td><td>Structured-English specs are the source; code is built from them, tests run on build</td><td>Batch compile from a CLI. Fixed format. Status lives in the terminal, not on the spec</td></tr>
+          <tr><td><b><a href="https://kiro.dev/blog/introducing-kiro/">Kiro</a></b>, <b><a href="https://github.com/github/spec-kit">Spec Kit</a></b></td><td>Spec documents tied to the codebase, regenerated tasks</td><td>Agent writes fixed templates, chat steers. Status is per task. Hand code edits break the link</td></tr>
+          <tr><td><b><a href="https://www.augmentcode.com/intent">Augment Intent</a></b></td><td>A living spec with a verifier agent that watches for drift</td><td>Agent-written spec; drift is reported, not shown on lines</td></tr>
+          <tr><td><b>Lovable, Bolt, v0</b></td><td>Code stays hidden; you judge by a live preview</td><td>No durable source document. The chat log is the only spec</td></tr>
+          <tr><td><b><a href="https://arxiv.org/abs/2408.04820">NL Outlines</a></b> (Google), <b><a href="https://arxiv.org/abs/2510.06452">CodeZoom</a></b></td><td>Prose and code kept in sync both ways, per section</td><td>Start from existing code. No co-planning</td></tr>
+          <tr><td><b><a href="https://arxiv.org/abs/2412.10999">Cocoa</a></b> (CHI ’26)</td><td>Human and agent co-edit one plan document, steps assigned to either</td><td>Research plans in prose, not software</td></tr>
+          <tr><td><b><a href="https://aider.chat/docs/usage/watch.html">aider watch mode</a></b></td><td><code>AI?</code> and <code>AI!</code> comments in any editor instead of chat</td><td>One way, human to agent, inside code</td></tr>
+          <tr><td><b>FitNesse, Concordion</b></td><td>The spec is re-rendered with green and red marks after tests run</td><td>Only for test tables; no agent</td></tr>
+          <tr><td><b><a href="https://github.com/inkeep/visimer">visimer</a></b>, <b>Enso</b></td><td>Text and box views edit one source, both ways</td><td>No agent, no build</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <h3>Worth borrowing</h3>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:6px">
+        <li><b>Ownership.</b> Each box owns a set of files (CodeSpeak's managed files, Tessl's targets). Anything not owned is protected; the agent asks before touching it.</li>
+        <li><b>Stability.</b> Don't touch code for unchanged lines, and patch rather than regenerate. Nondeterministic rewrites are the main complaint about every spec-as-source tool.</li>
+        <li><b>Line-to-code tracing.</b> Keep a map from each plan line to the code and tests behind it, as literate-programming tools do. It drives the margin marks and lets a failing test turn the right line red.</li>
+        <li><b>Drift as a question.</b> If the hidden code changes outside a turn, raise it as a question on the affected line instead of overwriting.</li>
+        <li><b>Small visible edits.</b> Studies on AI co-writing found people lose track of large AI rewrites and keep more control with suggestions they have to act on. That supports strict turns and small proposals.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="host-h">
+    <div class="prose">
+      <div class="eyebrow">Where it runs</div>
+      <h2 id="host-h">Host options</h2>
+      <p class="muted">The deciding needs are a real text editor with ghost text, a canvas for boxes, and an agent that can read the repo. Chat-first hosts fight the core idea.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Option</th><th>Editor + ghost text</th><th>Boxes canvas</th><th>Agent + repo</th><th>Cost to prototype</th></tr></thead>
+        <tbody>
+          <tr class="pick"><td><b>Local web app</b><span class="pill">Start here</span><br><span class="muted">CodeMirror + SVG, plan file on disk, agent behind a small server</span></td><td>CodeMirror has inline suggestions and per-line decorations</td><td>Full control</td><td>Drive pi in RPC mode or the Claude Agent SDK; either can read the repo</td><td>Low. One page, one server.</td></tr>
+          <tr><td><b>VS Code extension</b></td><td>Native inline completions and decorations</td><td>Webview panel</td><td>Agent runs in the extension host</td><td>Medium. Good second home once the format settles.</td></tr>
+          <tr><td><b>Pi extension</b></td><td>Terminal only; no ghost text in a TUI editor</td><td>ASCII at best</td><td>Native, and the repo already has pi extensions</td><td>Low for the agent side, poor for the UI. Good as the agent backend.</td></tr>
+          <tr><td><b>Claude Code mod</b></td><td>A side panel next to chat</td><td>Possible in a panel</td><td>Native</td><td>Medium. The chat stays the main surface, which is the thing this avoids.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose muted">Recommendation: keep the <code>.plan</code> file format host-neutral, build the editor as a local web app, and use pi (RPC) or Claude Code as the agent behind it. Then a pi command or Claude Code slash command just opens the editor on a plan file.</p>
+  </section>
+
+  <section class="two" aria-label="Decisions and names">
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="eyebrow">Decided so far</div>
+      <ul class="qlist done">
+        <li>Strict turns. Passing the pen is a keybind.</li>
+        <li>No syntax. The agent recognizes questions, answers, proposals, examples, boxes and code names.</li>
+        <li>Turns have no fixed size. Defaults steer toward small ones; the rules are skills and prompts you can edit.</li>
+        <li>The agent decides when to autocomplete, when to make a box, and what kind of test a line needs. It works from context, or asks.</li>
+        <li>Text and boxes are always on screen together. Boxes keep the text short.</li>
+        <li>The size of the plan-to-code mapping varies with the person, agent and codebase.</li>
+        <li>Drift in the hidden code is flagged, never synced silently.</li>
+        <li>One commit per agent turn.</li>
+        <li>No project concept. A plan is any size.</li>
+        <li>Reasoning stays in the background. No traces in the UI.</li>
+      </ul>
+    </div>
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="eyebrow">Name</div>
+      <div class="names">
+        <div class="name"><b>Underpaint</b><span class="muted">Chosen. Painters block in a rough layer first and paint over it until it becomes the picture. The rough layer is all you touch here; the finished paint goes on underneath.</span></div>
+        <div class="name"><b>Surface</b><span class="muted">You work on the surface; the code lives underneath.</span></div>
+        <div class="name"><b>Two Pens</b><span class="muted">Plain description of the interaction model.</span></div>
+        <div class="name"><b>plancoding</b><span class="muted">The working name. Dropped because it undersells it: this builds, not only plans.</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const SYMS = {
+  "journal_entries": "supabase/migrations/202607160001_create_journal.sql:1 (table)",
+  "emotion_path": "journal_entries.emotion_path text[] (family is the first step)",
+  "emotion_color": "journal_entries.emotion_color text, hex",
+  "JournalWorkspace": "src/components/journal/journal-workspace.tsx",
+  "SubscriptionGate": "src/components/billing/subscription-gate.tsx:34",
+  "dictionary.journal.weekly": "src/lib/i18n/dictionaries.ts (new key)",
+  "JournalEntry": "src/lib/journal/journal.ts:13",
+  "findEmotion": "src/lib/emotions/emotion-tree.ts",
+};
+
+// line format: author (h|a), flag (' ' unchanged, '+' added, '~' edited, '-' removed, 'm' moved into a box), '|', text.
+// A moved line ends with ⇒boxName. Empty string = blank line.
+// Text prefixes "? ", "> ", "~ ", "e.g. ", "box " record what the agent recognized a line to be (question, answer,
+// proposal, example, box). Nobody types them; they are stripped when rendering.
+// {{...}} = ghost text, ^ before it = caret.
+// gutter: build status of each plain line after this turn. base applies to every plain line; over matches substrings.
+//   ok = built and tested, stale = needs a build (new or changed), blocked = waiting on a question, null = no mark
+//   On human turns, once something has been built, lines changed this turn need a build automatically.
+// under: what the agent did to the real code this turn. Hidden unless the drawer is opened.
+const STEPS = [
+  {
+    who: "h", title: "Dump the idea", short: "Dump the idea",
+    gutter: { base: null },
+    lines: [
+      "h+|weekly reflection",
+      "h+|  every sunday",
+      "h+|    look at my week",
+      "h+|    tell me what i felt most",
+      "h+|    maybe a little chart?",
+      "h+|  send it somehow",
+    ],
+    under: { summary: "No code yet", files: [], checks: [] },
+    note: "You open a blank plan and write the idea the way it sits in your head. No syntax to learn. The indentation is the only structure.",
+    ui: ["The pen is yours. Nothing else on screen asks for input.", "⌘↵ passes the pen. There is no message box.", "No margin marks: nothing is built."],
+  },
+  {
+    who: "a", title: "Fill in and ask", short: "Fill in and ask",
+    gutter: { base: null },
+    lines: [
+      "h |weekly reflection",
+      "h |  every sunday",
+      "a+|    ? sunday in whose timezone, yours or a fixed one?",
+      "h |    look at my week",
+      "a+|      entries = my entries from the last 7 days",
+      "h |    tell me what i felt most",
+      "a+|      top = count entries per emotion, keep 3",
+      "a+|      ? the exact emotion (“ansiedad”) or its family (“tristeza”)?",
+      "h |    maybe a little chart?",
+      "a+|      ~ maybe a 7-day strip: one dot per entry, in its emotion's color",
+      "h |  send it somehow",
+      "a+|    ? email, or a card waiting in the app on sunday?",
+    ],
+    under: { summary: "No code. Every part depends on an open question", files: [], checks: [] },
+    note: "The agent edits your file, not a reply box. It adds a line of detail under each of yours and asks about what it can't know. It writes no code yet: every part would need a guess, and it doesn't guess. A turn without code is normal.",
+    ui: ["Questions sit under the line they are about.", "The agent recognized the proposal; the editor gives it a dashed outline and accept / reject.", "Three open questions show on the pen chip."],
+  },
+  {
+    who: "h", title: "Answer by editing", short: "Answer by editing",
+    gutter: { base: null },
+    lines: [
+      "h |weekly reflection",
+      "h~|  every sunday, my timezone",
+      "a-|    ? sunday in whose timezone, yours or a fixed one?",
+      "h |    look at my week",
+      "a |      entries = my entries from the last 7 days",
+      "h |    tell me what i felt most",
+      "h~|      top = count entries per family, keep 3",
+      "h+|        e.g. ansiedad, ansiedad, alegría → tristeza, alegría",
+      "a-|      ? the exact emotion (“ansiedad”) or its family (“tristeza”)?",
+      "h+|      and one line on how it differs from last week",
+      "h-|    maybe a little chart?",
+      "a-|      ~ maybe a 7-day strip: one dot per entry, in its emotion's color",
+      "h+|    7-day strip",
+      "a+|      one dot per entry, in its emotion's color",
+      "h~|  card in the app, no email yet",
+      "a-|    ? email, or a card waiting in the app on sunday?",
+      "h+|  ? does this need to be behind the paywall?",
+    ],
+    under: { summary: "No code yet", files: [], checks: [] },
+    note: "You answer questions by changing the plan, then delete them. You accepted the chart proposal, so it became an ordinary line. You added a requirement, wrote one concrete example, and asked the agent something back.",
+    ui: ["Accepting a proposal keeps the agent's words as a plain line.", "Struck lines are this turn's deletions; they vanish on the next turn.", "The agent recognizes your example and turns it into a test case word for word."],
+  },
+  {
+    who: "a", title: "Build what's clear, stop at the rest", short: "Build what's clear",
+    gutter: { base: "ok", over: [["weekly reflection", null], ["every sunday", "blocked"], ["look at my week", "blocked"], ["entries = journal_entries", "blocked"], ["prev = same query", "blocked"]] },
+    lines: [
+      "h |weekly reflection",
+      "h |  every sunday, my timezone",
+      "a+|    ? there's no timezone stored today. use the browser's when the card renders, or add a column?",
+      "h |    look at my week",
+      "a~|      entries = journal_entries where occurred_at in the last 7 days",
+      "a+|        // RLS already limits rows to the signed-in user",
+      "h |    tell me what i felt most",
+      "a~|      top = group by family (first step of emotion_path), count, keep 3",
+      "h |        e.g. ansiedad, ansiedad, alegría → tristeza, alegría",
+      "h |      and one line on how it differs from last week",
+      "a+|        prev = same query for the 7 days before",
+      "h |    7-day strip",
+      "a~|      one dot per entry, color = emotion_color",
+      "h |  card in the app, no email yet",
+      "a+|    on the journal page, above JournalWorkspace",
+      "a+|    text from dictionary.journal.weekly, es and en",
+      "h |  ? does this need to be behind the paywall?",
+      "a+|  > yes. same SubscriptionGate as the journal itself.",
+    ],
+    under: {
+      summary: "4 baby steps, 4 files, 6 tests. Stopped before loading entries",
+      files: [
+        ["+", "src/lib/journal/weekly.ts", "summarizeWeek: group by emotion_path[0], compare weeks, 7-day strip"],
+        ["+", "src/lib/journal/weekly.test.ts", "6 tests on sample entries"],
+        ["+", "src/components/journal/weekly-card.tsx", "card inside SubscriptionGate, above JournalWorkspace; takes entries as props"],
+        ["~", "src/lib/i18n/dictionaries.ts", "journal.weekly copy, es and en"],
+      ],
+      checks: [["typecheck", true], ["lint", true], ["vitest 6/6", true]],
+    },
+    baby: [
+      ["rg", "top families, tested with your example"],
+      ["rg", "week-over-week shift"],
+      ["rg", "7-day strip"],
+      ["rg", "card inside the gate, with es and en copy"],
+      ["stop", "loading the week needs the timezone"],
+    ],
+    note: "Now the agent understands most of it. It maps the plan onto Brújula and builds the counting, the comparison, the strip and the card. Loading the week needs the week's start and end, and those depend on the timezone, so it stops there and asks.",
+    ui: ["Filled circles: built, and tests cover it.", "Red squares: waiting on a question. Everything that depends on the timezone stays unbuilt.", "Amber names exist in the repo. Nobody marked them: the agent recognized them. Hover for file and line."],
+  },
+  {
+    who: "h", title: "Answer, and autocomplete joins in", short: "Answer, autocomplete",
+    gutter: { base: "ok", over: [["weekly reflection", null], ["every sunday", "stale"], ["look at my week", "stale"], ["entries = journal_entries", "stale"], ["prev = same query", "stale"]] },
+    lines: [
+      "h |weekly reflection",
+      "h |  every sunday, my timezone",
+      "a-|    ? there's no timezone stored today. use the browser's when the card renders, or add a column?",
+      "h+|    browser timezone is fine, it's only a card",
+      "h |    look at my week",
+      "a |      entries = journal_entries where occurred_at in the last 7 days",
+      "a |        // RLS already limits rows to the signed-in user",
+      "h |    tell me what i felt most",
+      "a |      top = group by family (first step of emotion_path), count, keep 3",
+      "h |        e.g. ansiedad, ansiedad, alegría → tristeza, alegría",
+      "h |      and one line on how it differs from last week",
+      "a |        prev = same query for the 7 days before",
+      "h |    7-day strip",
+      "a |      one dot per entry, color = emotion_color",
+      "h |  card in the app, no email yet",
+      "a |    on the journal page, above JournalWorkspace",
+      "h+|    inside SubscriptionGate",
+      "a |    text from dictionary.journal.weekly, es and en",
+      "h+|    dismiss^{{: hide until next sunday, per account}}",
+      "h-|  ? does this need to be behind the paywall?",
+      "a-|  > yes. same SubscriptionGate as the journal itself.",
+    ],
+    under: { summary: "Untouched. 8 lines need a build", files: [], checks: [["vitest 6/6", true]] },
+    note: "Answering the timezone question unblocks the lines that waited on it; they now need a build. No questions are open near your cursor, so the agent suggests as you type: you write “dismiss” and it offers the rest.",
+    ui: ["Empty blue circles: needs a build, because it is new, changed, or no longer blocked.", "Ghost text appears only on your turn, only where the plan is settled. Tab accepts.", "You folded the paywall answer into the card as a plain line."],
+  },
+  {
+    who: "a", title: "Move settled pieces into boxes", short: "Settled pieces to boxes",
+    gutter: { base: "ok", over: [["dismiss", "blocked"]] },
+    lines: [
+      "h |weekly reflection",
+      "a+|  WeeklyCard(summarizeWeek(loadWeek(weekWindow(now, browser tz))))",
+      "hm|  every sunday, my timezone⇒weekWindow",
+      "hm|    browser timezone is fine, it's only a card⇒weekWindow",
+      "hm|    look at my week⇒loadWeek",
+      "am|      entries = journal_entries where occurred_at in the last 7 days⇒loadWeek",
+      "am|        // RLS already limits rows to the signed-in user⇒loadWeek",
+      "hm|    tell me what i felt most⇒summarizeWeek",
+      "am|      top = group by family (first step of emotion_path), count, keep 3⇒summarizeWeek",
+      "hm|        e.g. ansiedad, ansiedad, alegría → tristeza, alegría⇒summarizeWeek",
+      "hm|      and one line on how it differs from last week⇒summarizeWeek",
+      "am|        prev = same query for the 7 days before⇒loadWeek",
+      "hm|    7-day strip⇒summarizeWeek",
+      "am|      one dot per entry, color = emotion_color⇒summarizeWeek",
+      "hm|  card in the app, no email yet⇒WeeklyCard",
+      "am|    on the journal page, above JournalWorkspace⇒WeeklyCard",
+      "hm|    inside SubscriptionGate⇒WeeklyCard",
+      "am|    text from dictionary.journal.weekly, es and en⇒WeeklyCard",
+      "h |    dismiss: hide until next sunday, per account",
+      "a+|      ? per account means storing it. a new table, or a column on an existing one?",
+    ],
+    under: {
+      summary: "4 baby steps, 4 files, 10 tests. Stopped at dismiss",
+      files: [
+        ["+", "src/lib/journal/week-window.ts", "weekWindow with the browser time zone"],
+        ["+", "src/app/journal/weekly.ts", "loadWeek(window): one query, split at start"],
+        ["~", "src/components/journal/weekly-card.tsx", "wired to loadWeek and summarizeWeek; shown on the journal page"],
+        ["~", "src/lib/journal/weekly.test.ts", "10 tests"],
+      ],
+      checks: [["typecheck", true], ["lint", true], ["vitest 10/10", true]],
+    },
+    baby: [
+      ["rg", "weekWindow in the browser time zone"],
+      ["rg", "loadWeek: one query, split at start"],
+      ["rg", "card wired to real data"],
+      ["ref", "split the code into four named pieces"],
+      ["stop", "dismiss per account needs a storage decision"],
+    ],
+    note: "With the timezone settled, the agent builds the rest of the data path. Four pieces are now decided, so it moves each into a box with a name that says what it does. The text keeps one line that uses them. What's left in the text is only what's still open: dismiss.",
+    ui: ["Struck lines with a box name moved into that box. They disappear next turn.", "Text and boxes are always on screen together. The text shrinks as things get decided.", "The agent decides when to make a box. There's no proposal step."],
+  },
+  {
+    who: "h", title: "Disagree inside a box", short: "Disagree inside a box",
+    gutter: { base: "ok", over: [["dismiss", "stale"]] },
+    lines: [
+      "h |weekly reflection",
+      "a |  WeeklyCard(summarizeWeek(loadWeek(weekWindow(now, browser tz))))",
+      "h |    dismiss: hide until next sunday, per account",
+      "a-|      ? per account means storing it. a new table, or a column on an existing one?",
+      "h+|      new table weekly_dismissals. i use phone and laptop",
+    ],
+    under: { summary: "Untouched. 1 box and 2 lines need a build", files: [], checks: [["vitest 10/10", true]] },
+    note: "You open summarizeWeek and change one decision inside it: three families is too many on a phone. Then you answer the storage question in the text. Editing a box is how you disagree with an abstraction the agent made.",
+    ui: ["Open any box and edit its lines directly. The box turns “needs build”.", "The text stays three lines long. You only see what's still open.", "Code doesn't change on your turn."],
+  },
+  {
+    who: "a", title: "Done means done", short: "Done means done",
+    gutter: { base: "ok" },
+    lines: [
+      "h |weekly reflection",
+      "a~|  WeeklyCard(summarizeWeek(loadWeek(weekWindow(now, browser tz))), dismiss: dismissWeek)",
+      "hm|    dismiss: hide until next sunday, per account⇒dismissWeek",
+      "hm|      new table weekly_dismissals. i use phone and laptop⇒dismissWeek",
+      "",
+      "a+|~ every line is built and checks pass. try it at localhost:3000 with a week of demo entries, or open a PR?",
+    ],
+    under: {
+      summary: "4 baby steps, 5 files, all checks pass. Plan and code are both done",
+      files: [
+        ["~", "src/lib/journal/weekly.ts", "top 2 families"],
+        ["+", "supabase/migrations/202610300001_weekly_dismissals.sql", "table, RLS by user_id"],
+        ["+", "src/app/journal/dismiss-week.ts", "server action"],
+        ["~", "src/components/journal/weekly-card.tsx", "dismiss button calls dismissWeek(window.start)"],
+        ["~", "src/lib/journal/weekly.test.ts", "13 tests"],
+      ],
+      checks: [["typecheck", true], ["lint", true], ["vitest 13/13", true], ["playwright smoke", true]],
+    },
+    baby: [
+      ["rg", "top 2 families instead of 3"],
+      ["rg", "weekly_dismissals table with RLS"],
+      ["rg", "dismissWeek server action"],
+      ["rg", "dismiss button on the card"],
+      ["done", "every line built, nothing open"],
+    ],
+    note: "The agent rebuilds the box you changed and builds dismiss. Dismiss is now decided too, so it goes into its own box. The text is a single line that composes five boxes. Nothing is open and nothing waits, so the plan looks finished and the feature is finished.",
+    ui: ["The pen chip says “done” when every line is built and nothing is open.", "Done is visible from the plan alone. You never have to open the code to know.", "Any later edit, in the text or in a box, marks it again and reopens the loop."],
+  },
+];
+
+// Boxes view per step. Box bodies hold the decided lines that left the text. chg = body lines changed this turn.
+const EXT = {
+  je: { id: "je", x: 10, y: 360, t: "journal_entries", body: ["supabase table, RLS by user"], ext: 1 },
+  sg: { id: "sg", x: 530, y: 10, t: "SubscriptionGate", body: ["components/billing"], ext: 1 },
+};
+const WW = { id: "ww", x: 10, y: 10, t: "weekWindow", s: "ok", body: ["now, tz → start, end, prevStart", "last sunday 00:00 in tz, 7 days back, 7 more for prev"] };
+const LW = { id: "lw", x: 10, y: 190, t: "loadWeek", s: "ok", body: ["window → entries, prev", "journal_entries from prevStart to end, split at start"] };
+const SW = (keep, s, chg) => ({ id: "sw", x: 270, y: 120, t: "summarizeWeek", s, chg, body: ["entries, prev → top, shift, strip", `top = family counts (emotion_path), keep ${keep}`, "for example, ansiedad, ansiedad, alegría → tristeza, alegría", "shift = “more X than last week” | “about the same”", "strip = 7 days of dots in emotion_color"] });
+const WC = (s) => ({ id: "wc", x: 530, y: 120, t: "WeeklyCard", s, body: ["shows summarizeWeek", "inside SubscriptionGate, above JournalWorkspace", "text from dictionary.journal.weekly"] });
+const EDGES = [["ww", "lw"], ["je", "lw"], ["lw", "sw"], ["sw", "wc"], ["sg", "wc", "wraps"]];
+const BOXES = {
+  5: { nodes: [WW, LW, EXT.je, SW(3, "ok"), WC("ok"), EXT.sg], edges: EDGES },
+  6: { nodes: [WW, LW, EXT.je, SW("2, three is too many on a phone", "stale", [1]), WC("ok"), EXT.sg], edges: EDGES },
+  7: {
+    nodes: [WW, LW, EXT.je, SW(2, "ok"), WC("ok"), EXT.sg,
+      { id: "dw", x: 530, y: 330, t: "dismissWeek", s: "ok", body: ["weekStart", "hide until next sunday, per account", "table weekly_dismissals (user_id, week_start), RLS like journal_entries"] }],
+    edges: [...EDGES, ["wc", "dw", "dismiss"]],
+  },
+};
+
+// The agent recognizes repo names on its own; the editor only highlights what it found.
+const SYM_RE = new RegExp("(?<![\\w.])(" + Object.keys(SYMS).sort((x, y) => y.length - x.length).map((k) => k.replace(/\./g, "\\.")).join("|") + ")(?!\\w)", "g");
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+let step = 0;
+
+function highlight(raw, author) {
+  let ghost = "";
+  let caret = false;
+  const gm = raw.match(/\^?\{\{(.*)\}\}/);
+  if (gm) { caret = raw.includes("^{{"); ghost = gm[1]; raw = raw.replace(gm[0], ""); }
+  const indent = raw.match(/^ */)[0];
+  let body = raw.slice(indent.length);
+  let html;
+  const sym = (s) => s.replace(SYM_RE, (m, name) => {
+    const where = SYMS[name];
+    return `<span class="sym" title="${esc(where)}">${name}</span>`;
+  });
+  const comment = (s) => s.replace(/(\/\/.*)$/, '<span class="cm">$1</span>');
+  if (body.startsWith("? ")) {
+    html = `<span class="q">${sym(esc(body.slice(2)))}</span><span class="chip k-q">${author === "a" ? "agent asks" : "you ask"}</span>`;
+  } else if (body.startsWith("> ")) {
+    html = `<span class="ans">${sym(esc(body.slice(2)))}</span><span class="chip">answer</span>`;
+  } else if (body.startsWith("~ ")) {
+    html = `<span class="prop">${sym(esc(body.slice(2)))}</span><span class="chip">proposal · accept or reject</span>`;
+  } else if (body.startsWith("e.g. ")) {
+    html = `${sym(esc("for example, " + body.slice(5)))}<span class="chip">becomes a test</span>`;
+  } else {
+    let e = esc(body);
+    e = e.replace(/(→ [\w.\-]*\/[\w/.\-]+)/, '<span class="bind">$1</span>');
+    const isBox = /^box /.test(e);
+    if (isBox) e = e.replace(/^box ([\w]+)/, '<span class="boxname">$1</span>');
+    e = e.replace(/\b(export|function|const|return|table)\b/g, '<span class="kw">$1</span>');
+    html = comment(sym(e)) + (isBox ? '<span class="chip">box</span>' : "");
+  }
+  if (caret) html += '<span class="caret"></span>';
+  if (ghost) html += `<span class="ghost">${esc(ghost)}</span><span class="tabkey">Tab</span>`;
+  return indent + html;
+}
+
+const MARK_TITLE = { ok: "built and tested", stale: "needs a build", blocked: "waiting on a question" };
+function lineStatus(s, flag, text) {
+  const body = text.trim();
+  if (/^(\? |> |~ |\/\/)/.test(body)) return null;
+  if (s.who === "h" && s.gutter.base && (flag === "+" || flag === "~")) return "stale";
+  for (const [needle, st] of s.gutter.over || []) if (body.includes(needle)) return st;
+  return s.gutter.base;
+}
+
+function foldMoved() {
+  const rows = [...$("doc").children];
+  let i = 0;
+  while (i < rows.length) {
+    if (!rows[i].classList.contains("moved")) { i++; continue; }
+    let j = i;
+    while (j < rows.length && rows[j].classList.contains("moved")) j++;
+    const run = rows.slice(i, j);
+    const targets = [...new Set(run.map((r) => r.querySelector(".mv").textContent.replace("moved to ", "")))];
+    const sum = document.createElement("div");
+    sum.className = "ln movedsum";
+    sum.innerHTML = `<span class="bar"></span><span class="no"></span><span></span><span class="tx"><button type="button" class="mvbtn" aria-expanded="false">${run.length} line${run.length > 1 ? "s" : ""} moved into ${targets.join(", ")} ▸</button></span>`;
+    run.forEach((r) => { r.hidden = true; });
+    sum.querySelector("button").addEventListener("click", (e) => {
+      const open = e.currentTarget.getAttribute("aria-expanded") !== "true";
+      e.currentTarget.setAttribute("aria-expanded", open);
+      e.currentTarget.textContent = e.currentTarget.textContent.replace(/[▸▾]$/, open ? "▾" : "▸");
+      run.forEach((r) => { r.hidden = !open; });
+    });
+    run[0].before(sum);
+    i = j;
+  }
+}
+
+function renderDoc(s) {
+  let n = 0;
+  $("doc").innerHTML = s.lines.map((l) => {
+    if (l === "") { n++; return `<div class="ln blank"><span class="bar"></span><span class="no">${n}</span><span></span><span class="tx"></span></div>`; }
+    const author = l[0], flag = l[1], text = l.slice(3);
+    let text2 = text, target = "";
+    if (flag === "m") { [text2, target] = text.split("⇒"); }
+    const gone = flag === "-" || flag === "m";
+    if (!gone) n++;
+    const cls = ["ln", author, flag === "+" || flag === "~" ? "chg" : "", flag === "-" ? "gone" : "", flag === "m" ? "moved" : ""].join(" ");
+    const st = gone ? null : lineStatus(s, flag, text2.replace(/\^?\{\{.*\}\}/, ""));
+    const mark = st ? `<span class="st-mark" title="${MARK_TITLE[st]}"><i class="m m-${st}"></i></span>` : "<span></span>";
+    return `<div class="${cls}"><span class="bar"></span><span class="no">${gone ? "" : n}</span>${mark}<span class="tx">${highlight(text2, author)}${target ? `<span class="chip mv">moved to ${esc(target)}</span>` : ""}</span></div>`;
+  }).join("");
+  foldMoved();
+}
+
+function symHtml(t) {
+  return esc(t).replace(SYM_RE, (m, name) => `<span class="sym" title="${esc(SYMS[name])}">${name}</span>`);
+}
+
+function renderCanvas(i) {
+  const g = BOXES[i];
+  $("canvas-empty").hidden = !!g;
+  $("canvas-holder").hidden = !g;
+  if (!g) { $("canvas").innerHTML = ""; return; }
+  const boxes = g.nodes.map((n) => {
+    const cls = ["box", n.ext ? "ext" : n.s, n.isNew ? "new" : ""].join(" ");
+    const st = n.ext ? "in repo" : { ok: "built", stale: "needs build", blocked: "waiting" }[n.s];
+    const body = n.body.map((l, j) => `<span class="${(n.chg || []).includes(j) ? "chg" : ""}">${symHtml(l)}</span>`).join("");
+    return `<div class="${cls}" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px"><div class="bt"><span>${esc(n.t)}</span><span class="st">${st}</span></div><div class="bb">${body}</div></div>`;
+  }).join("");
+  $("canvas").innerHTML = boxes;
+  // Edges are drawn after layout so they meet each box's real edge.
+  const r = {};
+  $("canvas").querySelectorAll(".box").forEach((el) => { r[el.dataset.id] = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }; });
+  const H = Math.max(...Object.values(r).map((b) => b.y + b.h)) + 16;
+  const paths = g.edges.map(([a, b, label]) => {
+    const A = r[a], B = r[b];
+    let d, mx, my;
+    if (B.x >= A.x + A.w || A.x >= B.x + B.w) {
+      const right = B.x >= A.x + A.w;
+      const x1 = right ? A.x + A.w : A.x, x2 = right ? B.x : B.x + B.w;
+      const y1 = A.y + Math.min(A.h / 2, 40), y2 = B.y + Math.min(B.h / 2, 40);
+      const c = (x1 + x2) / 2;
+      d = `M${x1},${y1} C${c},${y1} ${c},${y2} ${x2},${y2}`; mx = c; my = (y1 + y2) / 2;
+    } else {
+      const down = B.y >= A.y + A.h;
+      const x1 = A.x + A.w / 2, x2 = B.x + B.w / 2;
+      const y1 = down ? A.y + A.h : A.y, y2 = down ? B.y : B.y + B.h;
+      d = `M${x1},${y1} L${x2},${y2}`; mx = (x1 + x2) / 2; my = (y1 + y2) / 2;
+    }
+    const cls = label === "wraps" ? "wrap" : "";
+    return `<path class="${cls}" d="${d}" marker-end="url(#arr)"></path>` + (label ? `<text class="lbl" x="${mx + 6}" y="${my + 4}">${label}</text>` : "");
+  }).join("");
+  $("canvas").style.height = H + "px";
+  $("canvas").insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 760 ${H}" aria-hidden="true"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted);stroke:none"></path></marker></defs>${paths}</svg>`);
+  fitCanvas();
+}
+
+function fitCanvas() {
+  const avail = $("canvas-wrap").clientWidth - 28;
+  const k = Math.max(0.55, Math.min(1, avail / 760));
+  const h = parseFloat($("canvas").style.height) || 0;
+  $("canvas").style.transform = `scale(${k})`;
+  $("canvas-holder").style.height = h * k + "px";
+  $("canvas-holder").style.width = 760 * k + "px";
+}
+window.addEventListener("resize", fitCanvas);
+
+const BABY = {
+  rg: '<b class="r">red</b><b class="g">green</b>',
+  ref: '<b class="g">green</b><b class="g">green</b>',
+  stop: '<b class="q2">? stop</b>',
+  done: '<b class="g">done</b>',
+};
+
+function go(i) {
+  step = Math.max(0, Math.min(STEPS.length - 1, i));
+  const s = STEPS[step];
+  [...$("rail").children].forEach((b, j) => { if (j === step) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+  renderDoc(s);
+  renderCanvas(step);
+  const pen = $("pen");
+  pen.className = "pen " + s.who;
+  const openQ = s.lines.filter((l) => l && l[1] !== "-" && l[1] !== "m" && l.slice(3).trimStart().startsWith("? ")).length;
+  const marks = s.lines.filter((l) => l && l[1] !== "-" && l[1] !== "m").map((l) => lineStatus(s, l[1], l.slice(3)));
+  const done = s.gutter.base && !openQ && marks.every((m) => m === null || m === "ok");
+  $("pen-label").textContent = (s.who === "h" ? "your pen" : "agent's pen") + (done ? " · done, every line built" : openQ ? ` · ${openQ} open question${openQ > 1 ? "s" : ""}` : "");
+  $("notes").innerHTML = `
+    <span class="who ${s.who}">Turn ${step + 1} · ${s.who === "h" ? "Human" : "Agent"}</span>
+    <h3>${esc(s.title)}</h3>
+    <p>${esc(s.note)}</p>
+    ${s.baby ? `<div class="ui"><span class="eyebrow">Baby steps this turn</span><ol class="baby">${s.baby.map(([k, t]) => `<li><span class="tdd">${BABY[k]}</span><span>${esc(t)}</span></li>`).join("")}</ol><p class="baby-note">Each red→green is one baby step inside this turn. The work was clear, so the agent built everything it could and left the open decision marked.</p></div>` : ""}
+    <div class="ui"><span class="eyebrow">What the UI does</span><ul>${s.ui.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>`;
+  const u = s.under;
+  $("under-sum").textContent = u.summary;
+  $("under-body").innerHTML = (u.files.length ? `<ul>${u.files.map(([op, path, why]) => `<li><span class="op">${op}</span><span><span class="path">${esc(path)}</span> <span class="why">${esc(why)}</span></span></li>`).join("")}</ul>` : `<p class="why">${s.who === "h" ? "Code doesn't change on your turn." : "Nothing to build yet."}</p>`)
+    + (u.checks.length ? `<div class="checks">${u.checks.map(([c]) => `<span class="check">✓ ${esc(c)}</span>`).join("")}</div>` : "");
+  $("prev").disabled = step === 0;
+  $("next").disabled = step === STEPS.length - 1;
+  $("next").innerHTML = step === STEPS.length - 1 ? "End of example" : "Pass the pen <kbd>⌘↵</kbd>";
+}
+
+$("rail").innerHTML = STEPS.map((s, i) => `<button type="button"><span class="n">${i + 1}</span><span class="who ${s.who}">${s.who === "h" ? "Human" : "Agent"}</span><span>${esc(s.short)}</span></button>`).join("");
+[...$("rail").children].forEach((b, i) => b.addEventListener("click", () => go(i)));
+$("prev").addEventListener("click", () => go(step - 1));
+$("next").addEventListener("click", () => go(step + 1));
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea")) return;
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(step + 1); }
+  if (e.key === "ArrowRight") go(step + 1);
+  if (e.key === "ArrowLeft") go(step - 1);
+});
+go(0);
+</script>
