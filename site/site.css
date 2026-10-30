@@ -1,49 +1,53 @@
 /* The site is a scrolling page around small copies of the editor; app/style.css gives
    them the editor's own colours, marks and animation. Everything here is the page
    around them, plus the few places a small, read-only copy needs less room. */
-/* The wordmark's handwriting ships with the site (Patrick Hand, SIL OFL, fonts/OFL.txt). */
-@font-face { font-family: "Patrick Hand"; src: url("./fonts/patrick-hand-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+/* The wordmark's mono ships with the site (JetBrains Mono Bold, SIL OFL, fonts/OFL.txt). */
+@font-face { font-family: "Ogidoc Wordmark"; src: url("./fonts/jetbrains-mono-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
 
 :root {
-  /* The underpainting: burnt sienna, the colour painters block in with. */
-  --wash-ink: #a2522a;
   --font-display: var(--font-brand);
+  --font-mark: "Ogidoc Wordmark", var(--font-mono);
   --side: clamp(16px, 4vw, 48px);
-}
-@media (prefers-color-scheme: dark) {
-  :root { --wash-ink: #e2925f; }
-  .wordmark::before { opacity: 0.3; }
 }
 
 html, body { height: auto; }
 body, #root { display: block; }
 body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-/* A faint canvas grain under everything. */
-body::before {
-  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.35 0 0 0 0 0.2 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
 a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-a:hover { color: var(--wash-ink); }
+a:hover { color: var(--human); }
 a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-offset: 3px; border-radius: 4px; }
 
 .site { max-width: 1240px; margin: 0 auto; padding: 0 var(--side); }
-.site .brand { font-family: "Patrick Hand", cursive; font-style: normal; font-weight: 400; letter-spacing: 0; }
+.site .brand { font-family: var(--font-mark); font-style: normal; font-weight: 700; letter-spacing: -0.03em; }
 
 /* ---------- hero ---------- */
-.hero { position: relative; display: grid; gap: 22px; padding: clamp(40px, 8vh, 96px) 0 clamp(48px, 7vh, 80px); max-width: 1080px; }
-.wordmark { position: relative; justify-self: start; margin: 0 0 4px; font-size: clamp(68px, 12vw, 136px); line-height: 0.95; isolation: isolate; }
-/* A loose brush wash behind the word, the first layer of a painting. */
-.wordmark::before {
-  content: ""; position: absolute; z-index: -1; left: -0.08em; right: -0.22em; top: 0.38em; bottom: 0.02em;
-  background: var(--wash-ink); opacity: 0.18; border-radius: 46% 54% 42% 58% / 58% 40% 60% 42%;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'%3E%3Cpath d='M6 58 C 60 20, 140 26, 210 30 S 340 18, 396 40 L 392 74 C 320 92, 240 80, 170 86 S 40 96, 10 84 Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'%3E%3Cpath d='M6 58 C 60 20, 140 26, 210 30 S 340 18, 396 40 L 392 74 C 320 92, 240 80, 170 86 S 40 96, 10 84 Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+.hero { position: relative; display: grid; gap: 22px; padding: clamp(40px, 8vh, 96px) 0 clamp(48px, 7vh, 80px); max-width: 1080px; isolation: isolate; }
+/* A faint editor grid behind the hero, fading out to the right and down. */
+.hero::before {
+  content: ""; position: absolute; z-index: -1; inset: 0 0 0 calc(-1 * var(--side)); pointer-events: none;
+  background-image: radial-gradient(var(--line) 1.2px, transparent 1.4px); background-size: 24px 24px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 80% at 18% 30%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 80% at 18% 30%, #000 20%, transparent 75%);
+}
+.wordmark { position: relative; justify-self: start; margin: 0 0 6px; font-size: clamp(64px, 11vw, 128px); line-height: 1; }
+/* The word types itself from its last letter back to its first, with the agent's caret. */
+.wordmark .word { display: inline-block; animation: typeBack 780ms steps(6, end) 250ms both; }
+.wordmark::after {
+  content: ""; position: absolute; top: 0.12em; bottom: 0.08em; left: 0; width: 0.07em; margin-left: -0.12em; border-radius: 2px; background: var(--agent);
+  animation: caret 780ms steps(6, end) 250ms both, blink 1.1s step-end 1.2s infinite;
+}
+@keyframes typeBack { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+@keyframes caret { from { left: 100%; } to { left: 0; } }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .wordmark .word, .wordmark::after { animation: none; }
 }
 .lede { margin: 0; font: 500 clamp(27px, 3.4vw, 42px)/1.16 var(--font-display); letter-spacing: -0.01em; max-width: 24em; text-wrap: balance; }
 .sub { margin: 0; font-size: clamp(16.5px, 1.4vw, 18.5px); line-height: 1.6; color: var(--muted); max-width: 34em; text-wrap: pretty; }
 .get { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 10px; }
 .repo { font: 500 15px/1 var(--font-ui); }
+.run { margin: -10px 0 0; font-size: 14px; color: var(--muted); }
+.run code { font: 13.5px/1 var(--font-mono); color: var(--ink); }
 
 .install { display: inline-flex; align-items: stretch; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03); overflow: hidden; }
 .install code { font: 13.5px/1.4 var(--font-mono); padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; user-select: all; }
@@ -62,12 +66,16 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 }
 
 /* ---------- the editor copies ---------- */
-.scene { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(40, 30, 20, 0.16); }
+.scene { position: relative; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
 @media (prefers-color-scheme: dark) { .scene { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }
 .scene-top { display: flex; align-items: center; gap: 12px; padding: 9px 12px 9px 16px; border-bottom: 1px solid var(--line); }
-.scene-top .brand { font-size: 20px; line-height: 1; }
+.scene-top .brand { font-size: 15px; line-height: 1; }
 .scene-top .btn { cursor: default; padding: 7px 11px; font-size: 12.5px; transition: transform 160ms ease-out, box-shadow 160ms ease-out, opacity 300ms; }
 .scene-top .btn.pressed { transform: scale(0.95); box-shadow: 0 0 0 4px var(--human-tint); }
+/* The plan takes the room Underneath will need until it arrives, so the card never resizes. */
+.scene-main { display: flex; flex-direction: column; }
+.scene-body { flex: 1; }
+.under-measure { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; pointer-events: none; }
 .scene-body.split { display: grid; grid-template-columns: minmax(0, 1fr) 286px; }
 .scene-body.split .box-pane { border-left: 1px solid var(--line); background: var(--surface-2); }
 .scene .rows { padding-bottom: 14px; }
@@ -97,4 +105,4 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 .end { display: grid; gap: 26px; justify-items: start; padding: clamp(56px, 10vh, 112px) 0 72px; border-top: 1px solid var(--line); }
 .note { margin: 0; font: 500 clamp(21px, 2.2vw, 27px)/1.4 var(--font-display); max-width: 30em; text-wrap: pretty; }
 .links { margin: 12px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; font-size: 14px; color: var(--muted); }
-.links .brand { font-size: 24px; color: var(--ink); }
+.links .brand { font-size: 18px; color: var(--ink); }

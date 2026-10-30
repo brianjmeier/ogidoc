@@ -5,8 +5,8 @@ import { abstractions, choices, frames, promptWithCode, styles } from "./scenes.
 import "../app/style.css";
 import "./site.css";
 
-const INSTALL = "npm install -g github:brianjmeier/underpaint";
-const REPO = "https://github.com/brianjmeier/underpaint";
+const INSTALL = "npm install -g github:brianjmeier/ogidoc";
+const REPO = "https://github.com/brianjmeier/ogidoc";
 
 function Install() {
   const [copied, setCopied] = createSignal(false);
@@ -31,18 +31,19 @@ function Page() {
   return (
     <main class="site">
       <header class="hero">
-        <h1 class="brand wordmark">Underpaint</h1>
-        <p class="lede">Take turns with an agent on one pseudocode file. The real code gets built&nbsp;underneath.</p>
-        <p class="sub">There is no chat. You write the idea the way it sits in your head, the agent edits the same file, and every line gets built test first.</p>
+        <h1 class="brand wordmark"><span class="word">ogidoc</span></h1>
+        <p class="lede">Write code that wouldn't compile. Get a program that&nbsp;does.</p>
+        <p class="sub">You and an agent take turns on one pseudocode file. You make the structure and architecture decisions; the agent turns each line into real code, test first, and marks it built.</p>
         <div class="get">
           <Install />
           <a class="repo" href={REPO}>Source on GitHub</a>
         </div>
+        <p class="run">then <code>ogidoc tic_tac_toe.plan</code></p>
       </header>
       <section class="beat">
         <div class="copy-col">
           <h2>Coding is slow but fun. You can prompt with code.</h2>
-          <p>Write a line of pseudocode and hand over. The agent writes a failing test, makes it pass, and the real code lands underneath.</p>
+          <p>Write a line of pseudocode and hand over. The agent writes a failing test, makes it pass, and the line is built.</p>
         </div>
         <Scene label="A pseudocode line gets built" start={promptWithCode.start} frames={frames(promptWithCode.start, promptWithCode.beats)} />
       </section>
@@ -72,9 +73,9 @@ function Page() {
         </div>
       </section>
       <footer class="end">
-        <p class="note">Painters block in a rough layer called the underpainting and keep painting until it becomes the picture. Here the rough layer is the only part you touch. The finished work goes on underneath it.</p>
+        <p class="note">Code is more precise than prose for software. That's the whole reason it exists. So keep writing code, leave out the parts that bore you, and let the agent make it&nbsp;run.</p>
         <Install />
-        <p class="links"><span class="brand">Underpaint</span><a href={REPO}>GitHub</a><a href={`${REPO}#readme`}>Read the docs</a><span>MIT licensed</span></p>
+        <p class="links"><span class="brand">ogidoc</span><a href={REPO}>GitHub</a><a href={`${REPO}#readme`}>Read the docs</a><span>MIT licensed</span></p>
       </footer>
     </main>
   );

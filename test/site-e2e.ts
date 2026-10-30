@@ -28,15 +28,23 @@ try {
     await page.goto(url);
 
     const brandFonts = await page.$$eval(".brand", (els) => els.map((e) => getComputedStyle(e).fontFamily));
-    assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("\"Patrick Hand\"")), `${colorScheme}: "Underpaint" is handwritten everywhere on the page, got ${brandFonts}`);
-    assert.ok(await page.evaluate(() => document.fonts.load('400 17px "Patrick Hand"', "Underpaint").then((f) => f.length > 0)), `${colorScheme}: the handwriting ships with the site, not from the visitor's computer`);
+    assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("\"Ogidoc Wordmark\"")), `${colorScheme}: "ogidoc" is set in the same mono everywhere on the page, got ${brandFonts}`);
+    assert.ok(await page.evaluate(() => document.fonts.load('700 17px "Ogidoc Wordmark"', "ogidoc").then((f) => f.length > 0)), `${colorScheme}: the wordmark's font ships with the site, not from the visitor's computer`);
+    assert.equal(await page.title(), "Ogidoc", `${colorScheme}: the page is called Ogidoc`);
+    assert.doesNotMatch((await page.textContent("body")) ?? "", /underpaint|paint/i, `${colorScheme}: nothing on the page still uses the old name or the painting idea`);
 
+    const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);
     await count(`${scene(1)} .ln`, 4);
     assert.deepEqual(await marks(1), ["built", "built", "built", "stale"], `${colorScheme}: the typed line needs a build`);
-    assert.equal(await page.$(`${scene(1)} .under`), null, `${colorScheme}: no code before the turn`);
+    assert.equal(await page.$(`${scene(1)} .scene-main .under`), null, `${colorScheme}: no code before the turn`);
+    const before = await height(1);
     await count(`${scene(1)} .m-built`, 4);
-    assert.match((await page.textContent(`${scene(1)} .under`)) ?? "", /src\/game\.ts/, `${colorScheme}: code lands underneath`);
-    console.log(`· ${colorScheme}: a line types itself, gets built, code lands underneath`);
+    await page.waitForSelector(`${scene(1)} .scene-main .under`, { timeout: 20000 });
+    assert.match((await page.textContent(`${scene(1)} .scene-main .under`)) ?? "", /src\/game\.ts/, `${colorScheme}: code lands underneath`);
+    assert.ok(Math.abs((await height(1)) - before) <= 1, `${colorScheme}: the scene keeps its size when Underneath appears, ${before} -> ${await height(1)}`);
+    await page.waitForFunction((s) => !document.querySelector(s), `${scene(1)} .scene-main .under`, { timeout: 20000 });
+    assert.ok(Math.abs((await height(1)) - before) <= 1, `${colorScheme}: the scene keeps its size when the loop starts over`);
+    console.log(`· ${colorScheme}: a line types itself, gets built, code lands underneath, and the scene never resizes`);
 
     await page.locator(scene(2)).scrollIntoViewIfNeeded();
     await count(`${scene(2)} .box[data-name="winner"]`, 1);

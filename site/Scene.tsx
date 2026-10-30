@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
@@ -28,6 +28,11 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
   // Tall enough for the longest plan the scene reaches, so the page doesn't jump
   // (unless lines wrap on a narrow screen).
   const rows = Math.max(props.start.lines.length, ...props.frames.map((f) => f.plan.lines.length));
+  // Room for the tallest Underneath the scene will show, measured from hidden copies at
+  // the scene's own width, so the card keeps its size when one appears or the loop resets.
+  const lasts = props.under === false ? [] : props.frames.flatMap((f) => (f.kind === "turn" ? [f.last] : []));
+  const [reserve, setReserve] = createSignal(0);
+  let measure: HTMLDivElement | undefined;
   const [visible, setVisible] = createSignal(false);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let stopped = false;
@@ -78,6 +83,12 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
       if (e.isIntersecting && wake) { wake(); wake = null; }
     }, { threshold: 0.4 });
     io.observe(el);
+    if (measure) {
+      const m = measure;
+      const ro = new ResizeObserver(() => setReserve(Math.ceil(Math.max(0, ...[...m.children].map((c) => c.getBoundingClientRect().height)))));
+      ro.observe(m);
+      onCleanup(() => ro.disconnect());
+    }
     shown().then(play);
     onCleanup(() => { stopped = true; io.disconnect(); });
   });
@@ -85,7 +96,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
   return (
     <div class="scene" ref={el} aria-label={props.label}>
       <div class="scene-top">
-        <span class="brand">Underpaint</span>
+        <span class="brand">ogidoc</span>
         <span class="file">{props.file ?? "tic_tac_toe.plan"}</span>
         <span class="spacer" />
         <span class={`turn ${whose()}`} classList={{ passing: passing() }}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
@@ -93,17 +104,24 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           Hand over <kbd>{passKey} ↵</kbd>
         </span>
       </div>
-      <div class="scene-body" classList={{ split: boxes().length > 0 }}>
-        <div class="editor" style={{ "min-height": `${rows * 24 + 28}px` }}>
-          <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onSettle={() => {}} onPass={() => {}} onHint={() => {}} />
-        </div>
-        <Show when={boxes().length}>
-          <div class="box-pane">
-            <Boxes ref={() => {}} boxes={boxes()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
+      <div class="scene-main" style={{ "min-height": `${rows * 24 + 28 + reserve()}px` }}>
+        <div class="scene-body" classList={{ split: boxes().length > 0 }}>
+          <div class="editor" style={{ "min-height": `${rows * 24 + 28}px` }}>
+            <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onSettle={() => {}} onPass={() => {}} onHint={() => {}} />
           </div>
-        </Show>
+          <Show when={boxes().length}>
+            <div class="box-pane">
+              <Boxes ref={() => {}} boxes={boxes()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
+            </div>
+          </Show>
+        </div>
+        <Show when={props.under !== false && last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>
       </div>
-      <Show when={props.under !== false && last()}>{(l) => <div class="slide-in"><Underneath last={l()} open /></div>}</Show>
+      <Show when={lasts.length}>
+        <div class="under-measure" ref={measure} aria-hidden="true">
+          <For each={lasts}>{(l) => <Underneath last={l} open />}</For>
+        </div>
+      </Show>
     </div>
   );
 }
