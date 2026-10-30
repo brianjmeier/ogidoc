@@ -80,8 +80,8 @@ const commands: Record<string, () => Promise<void> | void> = {
     for (const [name, dir] of Object.entries(targets)) {
       if (which !== "both" && which !== name) continue;
       mkdirSync(dir, { recursive: true });
-      copyFileSync(join(AGENT_DIR, "SKILL.md"), join(dir, "SKILL.md"));
-      console.log(`Installed the Ogidoc skill for ${name} in ${dir}`);
+      copyFileSync(join(AGENT_DIR, "chat", "SKILL.md"), join(dir, "SKILL.md"));
+      console.log(`Installed the Ogidoc chat skill for ${name} in ${dir}`);
     }
   },
   list() {

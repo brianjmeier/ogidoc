@@ -18,7 +18,7 @@ Node 22.18 or newer. Installing builds the editor once.
 
 ```bash
 npm install -g github:brianjmeier/ogidoc
-ogidoc install-skill        # optional: teach Claude Code and pi the tool
+ogidoc install-skill        # optional: teach your Claude Code and pi chat to work beside a session
 ```
 
 Run the same install again to update. Working on Ogidoc itself? Clone it and run
@@ -66,9 +66,9 @@ folder, or the only one running.
 To see it without an agent, run `npm run demo` in a clone (a scripted agent plays four
 turns).
 
-`ogidoc install-skill [claude|pi|both]` (default both) copies the skill into
-`~/.claude/skills` and `~/.pi/agent/skills`, so an agent in a normal session knows the
-tool and how to start it.
+`ogidoc install-skill [claude|pi|both]` (default both) copies the chat skill into
+`~/.claude/skills` and `~/.pi/agent/skills`, so your chat knows how to start a session,
+read it, and stay out of the plan.
 
 ## How a session goes
 
@@ -119,8 +119,10 @@ feature.plan                         the plan
 
 ## What the agent reads
 
-- `agent/SKILL.md` teaches the agent what Ogidoc is: the shared plan, taking turns,
+- `agent/SKILL.md` teaches the plan agent what Ogidoc is: the shared plan, taking turns,
   building underneath, boxes, honest build status.
+- `agent/chat/SKILL.md` is the other side: the skill `install-skill` gives your chat, so
+  it reads a session, works beside it, and never takes a turn.
 - `agent/rules.md` is the default for `.ogidoc/rules.md`: how big turns are, what
   to decide alone and what to offer as options, what earns a built mark.
 - `agent/turn.md` is the prompt for one turn: the skill, the rules, the plan, the open

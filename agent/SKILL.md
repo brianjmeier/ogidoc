@@ -1,6 +1,6 @@
 ---
 name: ogidoc
-description: How to work inside Ogidoc, where a person and an agent build software by taking turns on one pseudocode file while the agent writes the real code underneath. Use when you are the agent in an Ogidoc session, or when someone wants to start one.
+description: How to take a turn in Ogidoc, where a person and you build software by taking turns on one pseudocode plan while you write the real code underneath. Given to the plan agent with every turn.
 ---
 
 # Ogidoc
@@ -136,12 +136,8 @@ editor can link it to the code.
 Code that changed outside a turn is the person's work. Build on it as it is, and don't
 ask about it. Mention it in your summary only when it changed what you did.
 
-## Starting a session
+## A chat beside the session
 
-From the project directory:
-
-    ogidoc feature.plan --agent claude --open   # or --agent pi
-
-This opens the editor in the browser. If `ogidoc` is not on the path, install it
-with `npm install -g github:brianjmeier/ogidoc`. The plan file and its boxes live
-next to the code as plain text, so they diff in git like everything else.
+The person may have a chat agent open next to this session. It runs the tests, runs the
+app and opens pull requests, and it never edits the plan or takes a turn. Code it
+changes reaches you as code that changed outside a turn: the person's work.

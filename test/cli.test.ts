@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { emptyDir, repo } from "./support/index.ts";
 
 const BIN = new URL("../bin/ogidoc.ts", import.meta.url).pathname;
@@ -50,4 +51,15 @@ test("without a name or a terminal, the session takes the folder's name", () => 
   const name = r.stdout.match(/Ogidoc session (\S+) is open/)?.[1];
   assert.match(name!, /^ogidoc-/, "the test repo's folder is named ogidoc-…");
   spawnSync(process.execPath, [BIN, "stop", name!], { cwd: dir, env });
+});
+
+test("install-skill gives the chat its own skill, not the plan agent's", () => {
+  const home = emptyDir();
+  const r = spawnSync(process.execPath, [BIN, "install-skill", "both"], { env: { ...process.env, HOME: home }, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  for (const dir of [".claude/skills/ogidoc", ".pi/agent/skills/ogidoc"]) {
+    const skill = readFileSync(`${home}/${dir}/SKILL.md`, "utf8");
+    assert.match(skill, /# Ogidoc, from the chat/);
+    assert.match(skill, /never post to the session's server/i);
+  }
 });
