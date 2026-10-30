@@ -1,0 +1,21 @@
+/* The site is a scrolling page around small copies of the editor; app/style.css gives
+   them the editor's own colours, marks and animation. */
+html, body { height: auto; }
+body { display: block; }
+.site { max-width: 860px; margin: 0 auto; padding: 72px 20px 120px; display: grid; gap: 96px; }
+.hero { display: grid; gap: 16px; }
+.hero h1 { margin: 0; font-size: 44px; }
+.hero p { margin: 0; font-size: 19px; line-height: 1.5; color: var(--muted); max-width: 36em; }
+.hero code { justify-self: start; font: 13.5px/1 var(--font-mono); padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+section h2 { font: 600 20px/1.35 var(--font-ui); margin: 0 0 18px; }
+
+.scene { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.06); }
+.scene-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.scene-top .brand { font-size: 17px; }
+.scene .editor { height: 132px; }
+.scene .rows { padding-bottom: 14px; }
+.scene .code > textarea { padding-bottom: 14px; pointer-events: none; }
+.scene .under summary { pointer-events: none; }
+.under-slot { min-height: 154px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.under-slot .under { border-top: 0; }
+.slide-in { animation: rowIn 420ms ease-out both; }

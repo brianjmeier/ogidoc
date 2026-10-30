@@ -1,13 +1,13 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { Button } from "@kobalte/core/button";
-import type { AnimationOp, LastTurn, Snapshot } from "../src/types.ts";
+import type { Snapshot } from "../src/types.ts";
 import { listen, notice, post, state, type TurnChanges } from "./api.ts";
 import { Boxes, type BoxAnimation, type BoxesApi } from "./Boxes.tsx";
 import { Editor, type EditorApi } from "./Editor.tsx";
 import { TopBar } from "./TopBar.tsx";
+import { Underneath } from "./Underneath.tsx";
 import { sendAll, setOpenId, waitingOnYou } from "./threads.ts";
-import { STATUS_LABEL, isPassKey } from "./text.ts";
-import type { Status } from "../src/types.ts";
+import { isPassKey } from "./text.ts";
 
 export function App() {
   let editor!: EditorApi;
@@ -111,12 +111,9 @@ export function App() {
                 />
                 <StatusCard state={s()} />
               </div>
-              <div class="statusbar">
-                <For each={Object.entries(STATUS_LABEL)}>
-                  {([st, label]) => <span class="key"><i class={`m m-${st as Status}`} />{label}</span>}
-                </For>
-                <span class="hint">{hint()}</span>
-              </div>
+              <Show when={hint()}>
+                <div class="statusbar">{hint()}</div>
+              </Show>
               <Underneath last={s().last} />
             </section>
             <Show when={s().boxes.length}>
@@ -157,45 +154,4 @@ function StatusCard(props: { state: Snapshot }) {
       </div>
     </Show>
   );
-}
-
-function Underneath(props: { last: LastTurn | null }) {
-  const has = () => !!props.last && !!(props.last.summary || props.last.files?.length);
-  return (
-    <details class="under">
-      <summary>
-        <span class="lab">Underneath</span>
-        <span>{has() ? `${props.last!.summary || ""}${props.last!.seconds ? ` · ${props.last!.seconds}s` : ""}` : "No code yet"}</span>
-      </summary>
-      <div class="under-body">
-        <Show when={has()} fallback={<p class="why">Nothing has been built yet.</p>}>
-          <Show when={props.last!.steps?.length}>
-            <div class="tags">
-              <For each={props.last!.steps}>{(st) => <><StepTag kind={st.kind} /><span class="why">{st.what}</span></>}</For>
-            </div>
-          </Show>
-          <Show when={props.last!.files?.length}>
-            <ul>
-              <For each={props.last!.files}>
-                {(f) => <li><span class="op">{f.op}</span><span><span class="path">{f.path}</span> <span class="why">{f.why}</span></span></li>}
-              </For>
-            </ul>
-          </Show>
-          <Show when={props.last!.checks?.length}>
-            <div class="tags">
-              <For each={props.last!.checks}>{(c) => <span class="tag" classList={{ bad: !c.ok }}>{c.ok ? "✓" : "✕"} {c.name}</span>}</For>
-            </div>
-          </Show>
-        </Show>
-      </div>
-    </details>
-  );
-}
-
-function StepTag(props: { kind: string }) {
-  if (props.kind === "red-green") return <><span class="tag r">red</span><span class="tag">green</span></>;
-  if (props.kind === "refactor") return <span class="tag">refactor</span>;
-  if (props.kind === "stop") return <span class="tag q">? stop</span>;
-  if (props.kind === "done") return <span class="tag">done</span>;
-  return <span class="tag">{props.kind}</span>;
 }

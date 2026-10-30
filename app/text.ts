@@ -3,6 +3,8 @@ import type { Status, Symbol } from "../src/types.ts";
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export const STATUS_LABEL: Record<Status, string> = { built: "built", stale: "needs a build", blocked: "waiting on a comment" };
+// Shapes people already read: done, not yet, paused (the pause bars are drawn in CSS).
+export const STATUS_MARK: Record<Status, string> = { built: "✓", stale: "◌", blocked: "" };
 
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const passKey = isMac ? "⌘" : "Ctrl";

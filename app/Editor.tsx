@@ -2,7 +2,7 @@ import { For, Index, Show, createMemo, createSignal } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, joinLines, splitLines } from "../src/shared/diff.ts";
 import type { AnimationOp, Line, Snapshot, Thread } from "../src/types.ts";
 import { state } from "./api.ts";
-import { STATUS_LABEL, decorate, isPassKey, symbolPattern } from "./text.ts";
+import { STATUS_LABEL, STATUS_MARK, decorate, isPassKey, symbolPattern } from "./text.ts";
 import { ThreadPin } from "./Threads.tsx";
 import { draftLine, openId, startThread } from "./threads.ts";
 
@@ -23,8 +23,8 @@ interface Row {
 }
 
 export interface EditorApi {
-  adopt(next: Snapshot): void;
-  animate(ops: AnimationOp[], oldLines: Line[], next: Snapshot): Promise<void>;
+  adopt(next: Pick<Snapshot, "lines">): void;
+  animate(ops: AnimationOp[], oldLines: Line[], next: Pick<Snapshot, "lines">): Promise<void>;
   text(): string;
   lines(): Line[];
   takeAccepted(): number[];
@@ -139,7 +139,7 @@ export function Editor(props: Props) {
 
   // ---------- the agent's turn, animated ----------
 
-  function animate(ops: AnimationOp[], oldLines: Line[], next: Snapshot): Promise<void> {
+  function animate(ops: AnimationOp[], oldLines: Line[], next: Pick<Snapshot, "lines">): Promise<void> {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const changed = ops.filter((o) => o.op !== "keep").length;
     const step = reduce ? 0 : Math.min(70, 1100 / Math.max(1, changed));
@@ -163,7 +163,7 @@ export function Editor(props: Props) {
     return new Promise((resolve) => setTimeout(() => { setAnim(null); resolve(); }, k * step + 1150));
   }
 
-  function adopt(next: Snapshot) {
+  function adopt(next: Pick<Snapshot, "lines">) {
     setLines(next.lines);
     accepted.clear();
     const text = joinLines(next.lines);
@@ -202,7 +202,7 @@ export function Editor(props: Props) {
                       </button>
                     </Show>
                     <span class="mk" classList={{ pop: !!r().pop }}>
-                      <Show when={st()}>{(s) => <i class={`m m-${s()}`} title={STATUS_LABEL[s()]} />}</Show>
+                      <Show when={st()}>{(s) => <i class={`m m-${s()}`} title={STATUS_LABEL[s()]} aria-label={STATUS_LABEL[s()]}>{STATUS_MARK[s()]}</i>}</Show>
                     </span>
                   </div>
                   <div class={`ln ${l().kind ? `k-${l().kind}` : ""}`}>
