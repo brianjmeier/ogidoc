@@ -78,6 +78,9 @@ export function App() {
       const first = next.threads.find(waitingOnYou);
       if (first) setOpenId(first.id);
     }
+    // Whatever just closed or went away (a card, a button, the agent's turn), typing goes
+    // back to the plan.
+    if (!next.working && document.activeElement === document.body) editor.focus();
   }
 
   onCleanup(listen(onEvent));

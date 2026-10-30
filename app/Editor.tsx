@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, joinLines, splitLines } from "../src/shared/diff.ts";
 import { choose, follow } from "../src/choices.ts";
 import type { AnimationOp, Choice, Line, Thread } from "../src/types.ts";
@@ -111,6 +111,10 @@ export function Editor(props: Props) {
       return first && last ? [{ choice, top: first.offsetTop, height: last.offsetTop + last.offsetHeight - first.offsetTop }] : [];
     }));
   });
+  // When a comment card closes, typing goes back to the plan, where the caret was.
+  createEffect(on(openId, (id, prev) => {
+    if (prev && !id) setTimeout(() => { if (document.activeElement === document.body && props.editable) ta.focus({ preventScroll: true }); });
+  }, { defer: true }));
   const openOn = createMemo(() => {
     const by = new Map<number, Thread[]>();
     for (const t of props.threads) if (!t.resolved) by.set(t.line, [...(by.get(t.line) ?? []), t]);

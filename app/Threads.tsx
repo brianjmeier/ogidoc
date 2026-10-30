@@ -37,7 +37,8 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
         </Show>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content class="card">
+        {/* Focus goes back to the plan, not to the pin (the editor does that). */}
+        <Popover.Content class="card" onCloseAutoFocus={(e: Event) => e.preventDefault()}>
           <For each={props.thread?.messages ?? []}>{(m) => <Msg by={m.by} text={m.text} />}</For>
           <For each={pending(key(), props.thread)}>{(m) => <Msg by="h" text={m.text} sending />}</For>
           <Show when={props.editable}>

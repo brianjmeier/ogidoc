@@ -48,12 +48,16 @@ const planText = () =>
     c.querySelectorAll(".pin-btn").forEach((p) => p.remove());
     return c.textContent ?? "";
   }));
+// Where typing goes right now, by the focused element's label.
+const focused = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName);
+const typingInPlan = async (why: string) => { await page.waitForTimeout(50); assert.equal(await focused(), "Plan text", why); };
 const handOver = () => page.keyboard.press("Control+Enter");
 const step = (s: string) => console.log(`· ${s}`);
 
 try {
   await page.goto(url);
   await page.waitForSelector(TA);
+  await typingInPlan("the plan has the keyboard on load");
   await shot("01-empty");
 
   step("the person writes the idea");
@@ -202,11 +206,18 @@ try {
   await page.fill(".card textarea", "could this also go out by email?");
   await page.keyboard.press("Enter");
   await page.waitForSelector('.pin-btn[aria-label="Comment from You"]');
+  await typingInPlan("sending a new comment gives the keyboard back to the plan");
   assert.match(await turn(), /your turn$/, "the person's own comment isn't waiting on them");
   await shot("10-own-comment");
   await page.click('.pin-btn[aria-label="Comment from You"]');
+  await page.waitForSelector(".card textarea");
+  await page.waitForTimeout(300); // a card listens for Esc a moment after it opens
+  await page.keyboard.press("Escape");
+  await typingInPlan("Esc on a card gives the keyboard back to the plan");
+  await page.click('.pin-btn[aria-label="Comment from You"]');
   await page.click('.card button:has-text("Resolve")');
   await page.waitForFunction(() => !document.querySelector(".pin-btn"), null, { timeout: 5000 });
+  await typingInPlan("resolving gives the keyboard back to the plan");
 
   step("the person disagrees inside a box and rejects a proposal");
   await page.click('.canvas .box[data-name="summarizeWeek"] .bb');
