@@ -10,7 +10,6 @@
       "plan": [
         { "text": "weekly reflection", "kind": null, "status": null },
         { "text": "  every sunday", "kind": null, "status": "blocked" },
-        { "text": "    sunday in whose timezone, yours or a fixed one?", "kind": "question", "status": null },
         { "text": "    look at my week", "kind": null, "status": "blocked" },
         { "text": "      entries = journal_entries from the last 7 days", "kind": null, "status": "blocked" },
         { "text": "    tell me what i felt most", "kind": null, "status": "built" },
@@ -19,12 +18,26 @@
         { "text": "    maybe also a 7-day strip of colored dots", "kind": "proposal", "status": null }
       ],
       "boxes": [],
-      "symbols": [{ "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }],
-      "suggestions": ["    browser timezone is fine, it's only a card"],
-      "steps": [{ "kind": "red-green", "what": "top families, from your example" }, { "kind": "stop", "what": "loading the week needs the timezone" }],
-      "files": [{ "op": "+", "path": "src/summarize.js", "why": "topFamilies" }, { "op": "+", "path": "src/summarize.test.js", "why": "your example as a test" }],
-      "checks": [{ "name": "node --test", "ok": true }],
-      "summary": "Built the family count from your example. Loading the week waits on the timezone."
+      "symbols": [
+        { "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }
+      ],
+      "suggestions": ["      prev = the 7 days before"],
+      "steps": [
+        { "kind": "red-green", "what": "top families, from your example" },
+        { "kind": "stop", "what": "loading the week needs the timezone" }
+      ],
+      "files": [
+        { "op": "+", "path": "src/summarize.js", "why": "topFamilies" },
+        { "op": "+", "path": "src/summarize.test.js", "why": "your example as a test" }
+      ],
+      "checks": [
+        { "name": "node --test", "ok": true }
+      ],
+      "summary": "Built the family count from your example. Loading the week waits on the timezone.",
+      "comments": [
+        { "line": 1, "text": "sunday in whose timezone, yours or a fixed one?" }
+      ],
+      "replies": []
     }
   },
   {
@@ -46,12 +59,27 @@
         { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 3", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
         { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
       ],
-      "symbols": [{ "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }],
+      "symbols": [
+        { "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }
+      ],
       "suggestions": [],
-      "steps": [{ "kind": "red-green", "what": "weekWindow in the browser time zone" }, { "kind": "red-green", "what": "loadWeek" }, { "kind": "refactor", "what": "moved settled pieces into four boxes" }],
-      "files": [{ "op": "+", "path": "src/week.js", "why": "weekWindow" }, { "op": "+", "path": "src/card.js", "why": "WeeklyCard" }],
-      "checks": [{ "name": "node --test", "ok": true }],
-      "summary": "Built the week window and loading, and moved four settled pieces into boxes."
+      "steps": [
+        { "kind": "red-green", "what": "weekWindow in the browser time zone" },
+        { "kind": "red-green", "what": "loadWeek" },
+        { "kind": "refactor", "what": "moved settled pieces into four boxes" }
+      ],
+      "files": [
+        { "op": "+", "path": "src/week.js", "why": "weekWindow" },
+        { "op": "+", "path": "src/card.js", "why": "WeeklyCard" }
+      ],
+      "checks": [
+        { "name": "node --test", "ok": true }
+      ],
+      "summary": "Built the week window and loading, and moved four settled pieces into boxes.",
+      "comments": [],
+      "replies": [
+        { "thread": "t1", "text": "browser timezone it is; it's in weekWindow now.", "resolve": true }
+      ]
     }
   },
   {
@@ -71,12 +99,23 @@
         { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 2", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
         { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
       ],
-      "symbols": [{ "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }],
+      "symbols": [
+        { "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }
+      ],
       "suggestions": [],
-      "steps": [{ "kind": "red-green", "what": "top 2 families instead of 3" }, { "kind": "done", "what": "every line built, nothing open" }],
-      "files": [{ "op": "~", "path": "src/summarize.js", "why": "keep 2" }],
-      "checks": [{ "name": "node --test", "ok": true }],
-      "summary": "Rebuilt summarizeWeek with two families. Everything is built."
+      "steps": [
+        { "kind": "red-green", "what": "top 2 families instead of 3" },
+        { "kind": "done", "what": "every line built, nothing open" }
+      ],
+      "files": [
+        { "op": "~", "path": "src/summarize.js", "why": "keep 2" }
+      ],
+      "checks": [
+        { "name": "node --test", "ok": true }
+      ],
+      "summary": "Rebuilt summarizeWeek with two families. Everything is built.",
+      "comments": [],
+      "replies": []
     }
   }
 ]

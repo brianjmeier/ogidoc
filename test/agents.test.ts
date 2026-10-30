@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeAgent } from "../src/agents.js";
-import { parseReply } from "../src/prompt.js";
+import { makeAgent } from "../src/agents.ts";
+import { parseReply } from "../src/prompt.ts";
 
 // Fake CLIs that speak each tool's JSON event format, so the adapters are tested
 // against the real wire shapes without calling a model.
 
 const REPLY = '```json\n{"plan":[{"text":"hello","kind":null,"status":"built"}],"summary":"ok"}\n```';
 
-function fake(name, body) {
+function fake(name: string, body: string) {
   const dir = mkdtempSync(join(tmpdir(), `fake-${name}-`));
   const bin = join(dir, name);
   writeFileSync(bin, `#!/usr/bin/env node\n${body}`);
@@ -32,7 +32,7 @@ out({ type: "assistant", message: { content: [{ type: "text", text: "partial" }]
 out({ type: "result", subtype: "success", result: ${JSON.stringify(REPLY)} });
 `);
   process.env.CLAUDECODE = "1";
-  const activity = [];
+  const activity: string[] = [];
   const agent = makeAgent("claude", { bin, args: ["--model", "sonnet"] });
   const out = await agent.run({ prompt: "PROMPT TEXT", cwd: dir, onActivity: (a) => activity.push(a) });
   assert.equal(parseReply(out).plan[0].text, "hello");
@@ -57,7 +57,7 @@ const msg = { role: "assistant", content: [{ type: "text", text: ${JSON.stringif
 out({ type: "message_end", message: msg });
 out({ type: "agent_end", messages: [{ role: "user", content: "p" }, msg] });
 `);
-  const activity = [];
+  const activity: string[] = [];
   const out = await makeAgent("pi", { bin }).run({ prompt: "PROMPT TEXT", cwd: dir, onActivity: (a) => activity.push(a) });
   assert.equal(parseReply(out).summary, "ok");
   assert.deepEqual(activity, ["reading weekly.plan", "running node --test"]);

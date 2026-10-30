@@ -4,10 +4,10 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { makeAgent, defaultAgent } from "../src/agents.js";
-import { AGENT_DIR } from "../src/prompt.js";
-import { Session } from "../src/session.js";
-import { startServer } from "../src/server.js";
+import { makeAgent, defaultAgent } from "../src/agents.ts";
+import { AGENT_DIR } from "../src/paths.ts";
+import { Session } from "../src/session.ts";
+import { startServer } from "../src/server.ts";
 
 const HELP = `underpaint: build software by taking turns on one pseudocode file
 

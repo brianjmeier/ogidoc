@@ -1,0 +1,23 @@
+import type { Status, Symbol } from "../src/types.ts";
+
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+export const STATUS_LABEL: Record<Status, string> = { built: "built", stale: "needs a build", blocked: "waiting on a comment" };
+
+export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+export const passKey = isMac ? "⌘" : "Ctrl";
+// ⌘/Ctrl Enter passes the pen from anywhere.
+export const isPassKey = (e: KeyboardEvent) => e.key === "Enter" && (e.metaKey || e.ctrlKey);
+
+// Real names from the codebase, longest first so a longer name wins over its prefix.
+export function symbolPattern(symbols: Symbol[]): RegExp | null {
+  if (!symbols.length) return null;
+  const names = symbols.map((s) => s.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length);
+  return new RegExp(`(?<![\\w.])(${names.join("|")})(?!\\w)`, "g");
+}
+
+// Escaped HTML for a line, with known names marked.
+export function decorate(s: string, re: RegExp | null): string {
+  const e = esc(s);
+  return re ? e.replace(re, (m) => `<span class="sym">${m}</span>`) : e;
+}

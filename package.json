@@ -4,25 +4,27 @@
   "description": "Build software by taking turns with an agent on one pseudocode file. The real code is built underneath.",
   "type": "module",
   "bin": {
-    "underpaint": "bin/underpaint.js"
+    "underpaint": "dist/bin/underpaint.js"
   },
   "files": [
-    "bin",
-    "src",
-    "web",
+    "dist",
     "agent",
     "README.md",
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18"
   },
   "scripts": {
-    "start": "node bin/underpaint.js",
-    "demo": "node bin/underpaint.js demo.plan --agent mock --script test/fixtures/weekly.json --no-commit",
-    "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e.mjs",
-    "test:real": "node test/real-agent.mjs"
+    "start": "node bin/underpaint.ts",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "dev": "vite build --watch",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p . && tsc -p app",
+    "demo": "node bin/underpaint.ts demo.plan --agent mock --script test/fixtures/weekly.json --no-commit",
+    "test": "node --test test/*.test.ts",
+    "test:e2e": "node test/e2e.ts",
+    "test:real": "node test/real-agent.ts"
   },
   "license": "MIT",
   "keywords": [
@@ -33,7 +35,15 @@
     "tdd",
     "pair-programming"
   ],
+  "dependencies": {
+    "@kobalte/core": "0.13.14",
+    "solid-js": "1.9.17"
+  },
   "devDependencies": {
-    "playwright": "1.63.0"
+    "@types/node": "22.20.5",
+    "playwright": "1.63.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vite-plugin-solid": "2.11.14"
   }
 }

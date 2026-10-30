@@ -1,29 +1,51 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { Agent } from "./types.ts";
+
+interface AgentOpts {
+  bin?: string;
+  args?: string[];
+  script?: string;
+}
+
+// What a CLI's event stream has told us so far.
+interface Acc {
+  text: string;
+  final: string;
+  error: string;
+}
 
 // An agent takes a prompt, works in the project directory with its own tools,
 // and returns its final message as text. Progress arrives through onActivity.
+// `choices` lists the models and efforts the browser offers; an empty model or
+// effort leaves the CLI's own default in place.
 
-export function makeAgent(name, opts = {}) {
+export function makeAgent(name: string, opts: AgentOpts = {}): Agent {
   if (name === "claude") return claudeAgent(opts);
   if (name === "pi") return piAgent(opts);
-  if (name === "mock") return mockAgent(opts);
+  if (name === "mock") {
+    if (!opts.script) throw new Error("The mock agent needs --script.");
+    return mockAgent({ script: opts.script });
+  }
   throw new Error(`Unknown agent "${name}". Use claude, pi or mock.`);
 }
 
-export function defaultAgent() {
+export function defaultAgent(): string {
   for (const name of ["claude", "pi"]) {
     if (spawnSync(process.platform === "win32" ? "where" : "which", [name]).status === 0) return name;
   }
   return "claude";
 }
 
-function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [] }) {
+function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
   return {
     name: "claude",
-    run({ prompt, cwd, onActivity, signal }) {
+    choices: { models: ["fable", "opus", "sonnet", "haiku"], efforts: ["low", "medium", "high", "xhigh", "max"] },
+    run({ prompt, cwd, onActivity, signal, model, effort }) {
       const argv = [
+        ...(model ? ["--model", model] : []),
+        ...(effort ? ["--effort", effort] : []),
         "-p",
         "--output-format", "stream-json",
         "--verbose",
@@ -47,11 +69,17 @@ function claudeAgent({ bin = process.env.UNDERPAINT_CLAUDE || "claude", args = [
   };
 }
 
-function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }) {
+function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }: AgentOpts): Agent {
   return {
     name: "pi",
-    run({ prompt, cwd, onActivity, signal }) {
-      const argv = ["-p", "--mode", "json", "--no-session", ...args, prompt];
+    choices: { models: [], efforts: ["off", "minimal", "low", "medium", "high", "xhigh", "max"] },
+    run({ prompt, cwd, onActivity, signal, model, effort }) {
+      const argv = [
+        "-p", "--mode", "json", "--no-session",
+        ...(model ? ["--model", model] : []),
+        ...(effort ? ["--thinking", effort] : []),
+        ...args, prompt,
+      ];
       return runJsonLines(bin, argv, { cwd, signal }, (ev, acc) => {
         if (ev.type === "tool_execution_start") onActivity(describeTool(ev.toolName, ev.args));
         if (ev.type === "message_end" && ev.message?.role === "assistant") {
@@ -60,7 +88,7 @@ function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }) {
           if (text) acc.text = text;
         }
         if (ev.type === "agent_end") {
-          const last = [...(ev.messages || [])].reverse().find((m) => m.role === "assistant" && textOf(m));
+          const last = [...(ev.messages || [])].reverse().find((m: any) => m.role === "assistant" && textOf(m));
           if (last) acc.final = textOf(last);
         }
       });
@@ -68,19 +96,25 @@ function piAgent({ bin = process.env.UNDERPAINT_PI || "pi", args = [] }) {
   };
 }
 
-function textOf(message) {
+function textOf(message: any): string {
   const c = message.content;
   if (typeof c === "string") return c;
-  return (c || []).filter((p) => p.type === "text").map((p) => p.text).join("\n");
+  return (c || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
 }
 
-function runJsonLines(bin, argv, { cwd, stdin, signal }, onEvent) {
+// Each CLI prints one JSON event per line; `onEvent` reads them into `acc`.
+function runJsonLines(
+  bin: string,
+  argv: string[],
+  { cwd, stdin, signal }: { cwd: string; stdin?: string; signal?: AbortSignal },
+  onEvent: (ev: any, acc: Acc) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     // Claude Code refuses to start inside another Claude Code session unless told otherwise.
     delete env.CLAUDECODE;
     const child = spawn(bin, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
-    const acc = { text: "", final: "", error: "" };
+    const acc: Acc = { text: "", final: "", error: "" };
     let buf = "";
     let err = "";
     child.stdout.on("data", (d) => {
@@ -107,7 +141,7 @@ function runJsonLines(bin, argv, { cwd, stdin, signal }, onEvent) {
   });
 }
 
-export function describeTool(name, input = {}) {
+export function describeTool(name: string, input: Record<string, unknown> = {}): string {
   const n = String(name).toLowerCase();
   const path = input.file_path || input.path || "";
   if (n === "edit" || n === "write" || n === "multiedit") return `editing ${path}`;
@@ -119,11 +153,19 @@ export function describeTool(name, input = {}) {
 
 // A scripted agent for tests and demos. The script is a JSON array of turns; each turn
 // has the reply object, optional files to write, activity lines and a delay.
-function mockAgent({ script }) {
-  const turns = JSON.parse(readFileSync(script, "utf8"));
+interface MockTurn {
+  reply: unknown;
+  writes?: Record<string, string>;
+  activity?: string[];
+  delay?: number;
+}
+
+function mockAgent({ script }: { script: string }): Agent {
+  const turns: MockTurn[] = JSON.parse(readFileSync(script, "utf8"));
   let i = 0;
   return {
     name: "mock",
+    choices: { models: [], efforts: [] },
     async run({ cwd, onActivity }) {
       const t = turns[Math.min(i++, turns.length - 1)];
       for (const a of t.activity || []) {
@@ -140,4 +182,4 @@ function mockAgent({ script }) {
   };
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

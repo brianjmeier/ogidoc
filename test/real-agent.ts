@@ -1,19 +1,19 @@
 // One real turn against an installed agent CLI, to check the whole contract end to end:
 // the prompt, the agent's own edits and test run, the JSON reply, and the commit.
 //
-//   node test/real-agent.mjs [claude|pi]
+//   node test/real-agent.ts [claude|pi]
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { makeAgent } from "../src/agents.js";
-import { Session } from "../src/session.js";
+import { makeAgent } from "../src/agents.ts";
+import { Session } from "../src/session.ts";
 
 const name = process.argv[2] || "claude";
 const dir = mkdtempSync(join(tmpdir(), `underpaint-real-${name}-`));
-const g = (...a) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
 g("init", "-q");
 g("config", "user.email", "t@example.com");
 g("config", "user.name", "Test");
@@ -33,13 +33,14 @@ console.log(`Running one ${name} turn in ${dir}`);
 const t0 = Date.now();
 await s.pass({ text: plan });
 console.log(`Turn took ${Math.round((Date.now() - t0) / 1000)}s`);
-if (s.last?.error) throw new Error(s.last.error);
+if (!s.last || s.last.error) throw new Error(s.last?.error ?? "no reply");
+const last = s.last;
 
 console.log("\nPlan after the agent's turn:");
 for (const l of s.lines) console.log(`  ${(l.status || "").padEnd(8)} ${(l.kind || "").padEnd(9)} ${l.by} | ${l.text}`);
-console.log(`\nSummary: ${s.last.summary}`);
-console.log(`Files: ${s.last.files.map((f) => `${f.op} ${f.path}`).join(", ")}`);
-console.log(`Checks: ${s.last.checks.map((c) => `${c.ok ? "✓" : "✕"} ${c.name}`).join(", ")}`);
+console.log(`\nSummary: ${last.summary}`);
+console.log(`Files: ${(last.files ?? []).map((f) => `${f.op} ${f.path}`).join(", ")}`);
+console.log(`Checks: ${(last.checks ?? []).map((c) => `${c.ok ? "✓" : "✕"} ${c.name}`).join(", ")}`);
 console.log(`Commit: ${g("log", "-1", "--format=%s")}`);
 console.log(`Files in repo: ${readdirSync(dir).join(", ")}`);
 

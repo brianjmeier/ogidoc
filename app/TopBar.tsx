@@ -1,0 +1,101 @@
+import { Show, createMemo, createSignal } from "solid-js";
+import { Button } from "@kobalte/core/button";
+import { Select } from "@kobalte/core/select";
+import type { Snapshot } from "../src/types.ts";
+import { post } from "./api.ts";
+import { passKey } from "./text.ts";
+const DEFAULT = "default";
+
+interface Props {
+  state: Snapshot;
+  pen: { cls: string; label: string };
+  passing: boolean;
+  onPass: () => void;
+}
+
+export function TopBar(props: Props) {
+  const [undoArmed, setUndoArmed] = createSignal(false);
+  let disarm: ReturnType<typeof setTimeout> | undefined;
+
+  async function undo() {
+    if (!undoArmed()) {
+      setUndoArmed(true);
+      disarm = setTimeout(() => setUndoArmed(false), 3000);
+      return;
+    }
+    clearTimeout(disarm);
+    setUndoArmed(false);
+    await post("/api/undo");
+  }
+
+  return (
+    <header class="top">
+      <span class="brand">Underpaint</span>
+      <span class="file">{props.state.planPath} · {props.state.agent}</span>
+      <span class="spacer" />
+      <Show when={props.state.choices.models.length}>
+        <Model state={props.state} />
+      </Show>
+      <Show when={props.state.choices.efforts.length}>
+        <Effort state={props.state} />
+      </Show>
+      <Show when={props.state.canUndo}>
+        <Button class="btn ghost-btn" onClick={undo}>{undoArmed() ? "Undo it? Click again" : "Undo agent turn"}</Button>
+      </Show>
+      <span class={`pen ${props.pen.cls}`} classList={{ passing: props.passing }}>
+        <i class="dot" />
+        <span>{props.pen.label}</span>
+      </span>
+      <Button class="btn primary" disabled={props.state.working} onClick={props.onPass}>
+        Pass the pen <kbd>{passKey} ↵</kbd>
+      </Button>
+    </header>
+  );
+}
+
+const LABEL: Record<string, string> = { xhigh: "Extra high" };
+const label = (v: string) => LABEL[v] ?? v.charAt(0).toUpperCase() + v.slice(1);
+
+// The model the next turn runs with, from the aliases the agent CLI knows. A full
+// model name set elsewhere still shows, so picking never loses it.
+function Model(props: { state: Snapshot }) {
+  const current = () => props.state.settings.model;
+  const options = createMemo(() => [...new Set([DEFAULT, ...props.state.choices.models, ...(current() ? [current()] : [])])]);
+  return <Picker name="model" state={props.state} options={options()} value={current()} />;
+}
+
+// How hard the next turn thinks, in the agent CLI's own levels.
+function Effort(props: { state: Snapshot }) {
+  const efforts = createMemo(() => [DEFAULT, ...props.state.choices.efforts]);
+  return <Picker name="effort" state={props.state} options={efforts()} value={props.state.settings.effort} />;
+}
+
+// Empty means the CLI's own default.
+function Picker(props: { name: "model" | "effort"; state: Snapshot; options: string[]; value: string }) {
+  return (
+    <Select<string>
+      class="pick"
+      options={props.options}
+      value={props.value || DEFAULT}
+      onChange={(v) => v && post("/api/settings", { [props.name]: v === DEFAULT ? "" : v })}
+      disabled={props.state.working}
+      gutter={4}
+      itemComponent={(p) => (
+        <Select.Item item={p.item} class="option">
+          <Select.ItemLabel>{label(p.item.rawValue)}</Select.ItemLabel>
+        </Select.Item>
+      )}
+    >
+      <Select.Label>{props.name}</Select.Label>
+      <Select.Trigger class="select" aria-label={props.name}>
+        <Select.Value<string>>{(s) => label(s.selectedOption())}</Select.Value>
+        <Select.Icon class="caret">▾</Select.Icon>
+      </Select.Trigger>
+      <Select.Portal>
+        <Select.Content class="menu">
+          <Select.Listbox />
+        </Select.Content>
+      </Select.Portal>
+    </Select>
+  );
+}
