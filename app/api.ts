@@ -34,7 +34,7 @@ export function listen(onEvent: (next: Snapshot, prev: Prev | null, turn?: TurnC
     setStore("s", reconcile(structuredClone(next), { key: "id" }));
     onEvent(next, prev, animation && { animation, boxChanges: boxChanges ?? {} });
   };
-  events.onerror = () => setNotice("Lost the connection to the Underpaint server. Is it still running?");
+  events.onerror = () => setNotice("Lost the connection to the Ogidoc server. Is it still running?");
   events.onopen = () => setNotice("");
   return () => events.close();
 }

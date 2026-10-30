@@ -22,7 +22,7 @@ export function testClock(start = 0): Clock & { advance(ms: number): void } {
 export const scripted = (clock: Clock = testClock()) => makeAgent("mock", { env: {}, script: SCRIPT, sleep: clock.sleep });
 
 export function emptyDir(): string {
-  return mkdtempSync(join(tmpdir(), "underpaint-"));
+  return mkdtempSync(join(tmpdir(), "ogidoc-"));
 }
 
 export function repo() {

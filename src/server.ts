@@ -53,7 +53,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
-    if (!trusted(req)) return json(res, { error: "Underpaint only takes requests from its own page on this machine." }, 403);
+    if (!trusted(req)) return json(res, { error: "Ogidoc only takes requests from its own page on this machine." }, 403);
     try {
       if (url.pathname === "/api/state") return json(res, session.snapshot());
       if (url.pathname === "/api/events") {
@@ -67,7 +67,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
       if (req.method === "POST" && url.pathname === "/api/pass") {
         const b = await body(req);
         if (session.working) return json(res, { error: "It's already the agent's turn." }, 409);
-        session.pass(b).catch((e: Error) => console.error(`Underpaint: the turn could not finish: ${e.message}`));
+        session.pass(b).catch((e: Error) => console.error(`Ogidoc: the turn could not finish: ${e.message}`));
         return json(res, { ok: true }, 202);
       }
       const action = req.method === "POST" ? actions[url.pathname] : undefined;

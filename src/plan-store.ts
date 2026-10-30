@@ -12,11 +12,11 @@ import type { Box, Choice, LastTurn, Line, Settings, Symbol, Thread } from "./ty
 // git ignores.
 //
 //   weekly.plan
-//   .underpaint/rules.md               the house rules the agent reads every turn
-//   .underpaint/weekly/boxes/*.plan
-//   .underpaint/weekly/comments.json
-//   .underpaint/weekly/state.json      local
-//   .underpaint/weekly/history.json    local
+//   .ogidoc/rules.md               the house rules the agent reads every turn
+//   .ogidoc/weekly/boxes/*.plan
+//   .ogidoc/weekly/comments.json
+//   .ogidoc/weekly/state.json      local
+//   .ogidoc/weekly/history.json    local
 
 // Everything a session remembers.
 export interface SessionState {
@@ -57,7 +57,7 @@ export function planStore(cwd: string, planFile: string) {
   const root = realpathSync(resolve(cwd));
   const planPath = resolve(root, planFile);
   const name = basename(planPath).replace(/\.[^.]+$/, "");
-  const shared = join(dirname(planPath), ".underpaint");
+  const shared = join(dirname(planPath), ".ogidoc");
   const dir = join(shared, name);
   const boxDir = join(dir, "boxes");
   const rulesPath = join(shared, "rules.md");

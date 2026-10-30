@@ -7,7 +7,7 @@ function packageRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   while (!existsSync(join(dir, "package.json"))) {
     const up = dirname(dir);
-    if (up === dir) throw new Error("Couldn't find Underpaint's package.json.");
+    if (up === dir) throw new Error("Couldn't find Ogidoc's package.json.");
     dir = up;
   }
   return dir;

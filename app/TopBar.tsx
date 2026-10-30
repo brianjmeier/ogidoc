@@ -23,7 +23,7 @@ export function TopBar(props: Props) {
 
   return (
     <header class="top">
-      <span class="brand">Underpaint</span>
+      <span class="brand">Ogidoc</span>
       <span class="file">{props.state.planPath} · {props.state.agent}</span>
       <span class="spacer" />
       <Show when={props.state.settingOptions.models.length}>

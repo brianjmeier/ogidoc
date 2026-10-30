@@ -4,7 +4,7 @@
 // accept a proposal, ask about a line and pass from the comment, watch pieces move into
 // boxes, comment on a line, disagree inside a box, reach done, undo.
 //
-//   npm run build && node test/e2e.ts      (screenshots go to $UNDERPAINT_SHOTS or the temp dir)
+//   npm run build && node test/e2e.ts      (screenshots go to $OGIDOC_SHOTS or the temp dir)
 
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -14,10 +14,10 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const SHOTS = process.env.UNDERPAINT_SHOTS || mkdtempSync(join(tmpdir(), "underpaint-shots-"));
+const SHOTS = process.env.OGIDOC_SHOTS || mkdtempSync(join(tmpdir(), "ogidoc-shots-"));
 mkdirSync(SHOTS, { recursive: true });
 
-const dir = mkdtempSync(join(tmpdir(), "underpaint-e2e-"));
+const dir = mkdtempSync(join(tmpdir(), "ogidoc-e2e-"));
 const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
 g("init", "-q");
 g("config", "user.email", "t@example.com");
@@ -26,7 +26,7 @@ writeFileSync(join(dir, "README.md"), "journal\n");
 g("add", ".");
 g("commit", "-qm", "init");
 
-const server = spawn("node", [join(ROOT, "bin/underpaint.ts"), "weekly.plan", "--agent", "mock", "--script", join(ROOT, "test/fixtures/weekly.json"), "--port", "0"], { cwd: dir });
+const server = spawn("node", [join(ROOT, "bin/ogidoc.ts"), "weekly.plan", "--agent", "mock", "--script", join(ROOT, "test/fixtures/weekly.json"), "--port", "0"], { cwd: dir });
 const url = await new Promise<string>((resolve, reject) => {
   server.stdout.on("data", (d) => { const m = String(d).match(/http:\/\/[\d.:]+/); if (m) resolve(m[0]); });
   server.stderr.on("data", (d) => process.stderr.write(d));
@@ -236,7 +236,7 @@ try {
   assert.equal(await page.inputValue(TA), afterTurn, "the browser's undo doesn't reach back into the agent's turn");
   assert.equal((await page.evaluate(() => fetch("/api/state").then((r) => r.json()))).lines.length, afterTurn.split("\n").length);
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
-  const thread = JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8"))[0];
+  const thread = JSON.parse(readFileSync(join(dir, ".ogidoc/weekly/comments.json"), "utf8"))[0];
   assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["h", "a"], "the comment reached the agent and it answered");
   assert.equal(await page.$$eval(".canvas .box", (b) => b.length), 4);
   assert.equal((await planText()).length, 3, "the plan got shorter");
@@ -309,10 +309,10 @@ try {
 
   step("one commit per agent turn, code and plan together");
   const log = g("log", "--format=%s").trim().split("\n");
-  assert.deepEqual(log.slice(0, 3), ["underpaint: turn 3 on weekly", "underpaint: turn 2 on weekly", "underpaint: turn 1 on weekly"]);
+  assert.deepEqual(log.slice(0, 3), ["ogidoc: turn 3 on weekly", "ogidoc: turn 2 on weekly", "ogidoc: turn 1 on weekly"]);
   const files = g("show", "--name-only", "--format=", "HEAD~1").trim().split("\n");
-  assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".underpaint/weekly/boxes/weekWindow.plan"), files.join(", "));
-  assert.ok(files.includes(".underpaint/weekly/comments.json"), "the thread is committed with the turn");
+  assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".ogidoc/weekly/boxes/weekWindow.plan"), files.join(", "));
+  assert.ok(files.includes(".ogidoc/weekly/comments.json"), "the thread is committed with the turn");
 
   step("undo the last agent turn from the keyboard, pressing the key twice");
   await page.focus(TA);

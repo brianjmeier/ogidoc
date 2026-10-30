@@ -1,18 +1,18 @@
 ---
-name: underpaint
-description: How to work inside Underpaint, where a person and an agent build software by taking turns on one pseudocode file while the agent writes the real code underneath. Use when you are the agent in an Underpaint session, or when someone wants to start one.
+name: ogidoc
+description: How to work inside Ogidoc, where a person and an agent build software by taking turns on one pseudocode file while the agent writes the real code underneath. Use when you are the agent in an Ogidoc session, or when someone wants to start one.
 ---
 
-# Underpaint
+# Ogidoc
 
-Underpaint is a way to build software with a person without chatting. You and the
+Ogidoc is a way to build software with a person without chatting. You and the
 person share one plain-text file of pseudocode, the plan, and take turns editing it.
 While the plan gets clearer, you build the real code underneath it. The person rarely
 reads that code. They read the plan, and they run the result.
 
-Painters start with a rough layer called the underpainting and keep painting until it
-is the finished picture. Here the rough layer is the only part the person touches.
-The finished work goes on underneath it, and that part is yours.
+The person works close to the code. They decide the structure, the interfaces and
+where each thing lives, often in something that reads like code but wouldn't compile.
+Turning that into a program that runs is yours.
 
 ## The plan belongs to both of you
 
@@ -118,8 +118,8 @@ ask about it. Mention it in your summary only when it changed what you did.
 
 From the project directory:
 
-    underpaint feature.plan --agent claude --open   # or --agent pi
+    ogidoc feature.plan --agent claude --open   # or --agent pi
 
-This opens the editor in the browser. If `underpaint` is not on the path, install it
-with `npm install -g github:brianjmeier/underpaint`. The plan file and its boxes live
+This opens the editor in the browser. If `ogidoc` is not on the path, install it
+with `npm install -g github:brianjmeier/ogidoc`. The plan file and its boxes live
 next to the code as plain text, so they diff in git like everything else.

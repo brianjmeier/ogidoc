@@ -156,7 +156,7 @@ export class Session extends EventEmitter {
     const mark = this.log.begin();
     this.store.remove();
     this.finished = true;
-    this.log.record(mark, `underpaint: remove the built plan ${this.name}`, { ownFiles: true });
+    this.log.record(mark, `ogidoc: remove the built plan ${this.name}`, { ownFiles: true });
     this.emit("change", {});
   }
 
@@ -215,7 +215,7 @@ export class Session extends EventEmitter {
     // Whatever the turn changed gets a commit, even when it failed, so it can be undone.
     // A turn that failed before replying commits only the code the agent touched.
     let commit: string | null = null;
-    const title = `underpaint: ${error ? "failed turn" : "turn"} ${s.turn} on ${this.name}`;
+    const title = `ogidoc: ${error ? "failed turn" : "turn"} ${s.turn} on ${this.name}`;
     try {
       commit = this.log.record(mark, `${title}\n\n${reply?.summary || error || ""}`.trim(), { ownFiles: !!reply });
     } catch (e) {
@@ -248,7 +248,7 @@ export class Session extends EventEmitter {
     this.s = { ...this.s, ...state, history: this.s.history.slice(0, -1) };
     this.save();
     if (commit) {
-      this.log.record(mark, `underpaint: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
+      this.log.record(mark, `ogidoc: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
       this.save();
     }
     this.emit("change", {});

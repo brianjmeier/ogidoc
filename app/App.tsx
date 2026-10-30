@@ -54,7 +54,7 @@ export function App() {
   }
 
   async function onEvent(next: Snapshot, prev: Pick<Snapshot, "turn" | "working"> | null, turn?: TurnChanges) {
-    document.title = `${next.name} · Underpaint`;
+    document.title = `${next.name} · Ogidoc`;
     const turnChanged = !prev || prev.turn !== next.turn;
     const agentFinished = !!prev && prev.working && !next.working;
     if (turn) {
@@ -165,7 +165,7 @@ export function App() {
 function Finished(props: { state: Snapshot }) {
   return (
     <main class="finished">
-      <span class="brand">Underpaint</span>
+      <span class="brand">Ogidoc</span>
       <p>{props.state.planPath} was built and is removed. The code it built stays in your repository.</p>
       <p class="muted">You can close this tab.</p>
     </main>

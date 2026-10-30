@@ -13,7 +13,7 @@ import { openSession } from "../src/session.ts";
 import { systemClock } from "../src/clock.ts";
 
 const name = process.argv[2] || "claude";
-const dir = mkdtempSync(join(tmpdir(), `underpaint-real-${name}-`));
+const dir = mkdtempSync(join(tmpdir(), `ogidoc-real-${name}-`));
 const g = (...a: string[]) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
 g("init", "-q");
 g("config", "user.email", "t@example.com");
@@ -47,6 +47,6 @@ console.log(`Files in repo: ${readdirSync(dir).join(", ")}`);
 
 assert.ok(lines.length >= 3, "the agent returned a plan");
 assert.ok(lines.some((l) => l.status === "built"), "something is built");
-assert.match(g("log", "-1", "--format=%s"), /underpaint: turn 1 on slug/);
+assert.match(g("log", "-1", "--format=%s"), /ogidoc: turn 1 on slug/);
 execFileSync("npm", ["test", "--silent"], { cwd: dir, stdio: "inherit" });
 console.log("\nReal agent turn checks passed.");

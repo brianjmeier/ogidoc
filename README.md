@@ -1,4 +1,4 @@
-# Underpaint
+# Ogidoc
 
 Build software with an agent by taking turns on one pseudocode file. There is no
 chat. You write the idea the way it sits in your head; the agent edits the same file
@@ -6,9 +6,9 @@ in place, builds its best pick where a decision matters and shows the other ways
 there, and builds the real code underneath, test first, in small steps. Each line shows whether it is built, so
 when the plan looks done, the software is done.
 
-Painters block in a rough layer called the underpainting and keep painting until it
-becomes the picture. Here the rough layer is the only part you touch. The finished
-work goes on underneath it.
+You work close to the code: the structure, the interfaces, where each thing lives.
+Code is more precise than prose, so the plan can read like code that wouldn't compile
+yet. The agent turns it into a program that does.
 
 ![The plan on the left, settled pieces in boxes on the right](docs/boxes.png)
 
@@ -17,19 +17,19 @@ work goes on underneath it.
 Node 22.18 or newer. Installing builds the editor once.
 
 ```bash
-npm install -g github:brianjmeier/underpaint
-underpaint install-skill        # optional: teach Claude Code and pi the tool
+npm install -g github:brianjmeier/ogidoc
+ogidoc install-skill        # optional: teach Claude Code and pi the tool
 ```
 
-Run the same install again to update. Working on Underpaint itself? Clone it and run
-`npm install && npm link` inside the checkout instead, so `underpaint` runs your copy,
+Run the same install again to update. Working on Ogidoc itself? Clone it and run
+`npm install && npm link` inside the checkout instead, so `ogidoc` runs your copy,
 and `npm run dev` to rebuild the editor as you change it.
 
 ## Run it
 
 ```bash
 cd your-project
-underpaint feature.plan --open
+ogidoc feature.plan --open
 ```
 
 | Option | |
@@ -43,7 +43,7 @@ underpaint feature.plan --open
 To see it without an agent, run `npm run demo` in a clone (a scripted agent plays four
 turns).
 
-`underpaint install-skill [claude|pi|both]` (default both) copies the skill into
+`ogidoc install-skill [claude|pi|both]` (default both) copies the skill into
 `~/.claude/skills` and `~/.pi/agent/skills`, so an agent in a normal session knows the
 tool and how to start it.
 
@@ -88,17 +88,17 @@ Everything stays plain text next to your code:
 
 ```
 feature.plan                         the plan
-.underpaint/rules.md                 house rules for turns; edit freely
-.underpaint/feature/boxes/*.plan     one file per box
-.underpaint/feature/comments.json    comment threads, pinned to plan lines
-.underpaint/feature/state.json       what the editor knows per line (git-ignored)
+.ogidoc/rules.md                 house rules for turns; edit freely
+.ogidoc/feature/boxes/*.plan     one file per box
+.ogidoc/feature/comments.json    comment threads, pinned to plan lines
+.ogidoc/feature/state.json       what the editor knows per line (git-ignored)
 ```
 
 ## What the agent reads
 
-- `agent/SKILL.md` teaches the agent what Underpaint is: the shared plan, taking turns,
+- `agent/SKILL.md` teaches the agent what Ogidoc is: the shared plan, taking turns,
   building underneath, boxes, honest build status.
-- `agent/rules.md` is the default for `.underpaint/rules.md`: how big turns are, what
+- `agent/rules.md` is the default for `.ogidoc/rules.md`: how big turns are, what
   to decide alone and what to offer as options, what earns a built mark.
 - `agent/turn.md` is the prompt for one turn: the skill, the rules, the plan, the open
   comment threads and options, what the person changed, drift, and the JSON reply the editor
@@ -112,7 +112,7 @@ activity.
 ## Layout
 
 ```
-bin/underpaint.ts     the CLI
+bin/ogidoc.ts     the CLI
 src/session.ts        one session: the person's actions, the agent's turn, undo
 src/plan.ts           the plan's lines, boxes, threads and choices through each edit
 src/threads.ts        comment threads pinned to plan lines

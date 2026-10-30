@@ -56,7 +56,7 @@ test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
     drift: ["src/other.js"],
     last: { summary: "Asked about the timezone." },
   });
-  assert.match(p, /# Underpaint/);
+  assert.match(p, /# Ogidoc/);
   assert.doesNotMatch(p, /^---/);
   assert.match(p, /Keep turns small\./);
   assert.match(p, /\{"text":"weekly reflection","kind":null,"status":null,"by":"h"\}/);

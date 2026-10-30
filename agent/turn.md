@@ -1,4 +1,4 @@
-It is your turn in an Underpaint session. The skill below explains what that means.
+It is your turn in an Ogidoc session. The skill below explains what that means.
 
 {{skill}}
 

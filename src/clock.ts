@@ -1,4 +1,4 @@
-// Time, injected: the real one is bound in bin/underpaint.ts, tests pass their own.
+// Time, injected: the real one is bound in bin/ogidoc.ts, tests pass their own.
 export interface Clock {
   now(): number;
   sleep(ms: number): Promise<void>;

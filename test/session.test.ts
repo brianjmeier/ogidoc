@@ -22,7 +22,7 @@ test("a full session: build with a choice, comment, move into boxes, disagree in
   assert.ok(!view().lines.some((l) => l.status === "blocked"), "a choice doesn't hold anything up");
   assert.equal(view().lines[0].by, "h");
   assert.ok(existsSync(join(dir, "src/summarize.js")), "the agent's code is on disk");
-  assert.equal(log()[0], "underpaint: turn 1 on weekly");
+  assert.equal(log()[0], "ogidoc: turn 1 on weekly");
   assert.equal(view().done, false);
   const anim = events.find((e) => e.animation)!.animation!;
   assert.ok(anim.some((o) => o.op === "add"));
@@ -42,11 +42,11 @@ test("a full session: build with a choice, comment, move into boxes, disagree in
   const moved = events.at(-1)!.animation!.filter((o) => o.op === "move");
   assert.ok(moved.length >= 6, `expected moved lines, got ${moved.length}`);
   assert.ok(moved.some((m) => m.to === "weekWindow"));
-  assert.ok(existsSync(join(dir, ".underpaint/weekly/boxes/summarizeWeek.plan")));
+  assert.ok(existsSync(join(dir, ".ogidoc/weekly/boxes/summarizeWeek.plan")));
   assert.equal(view().lines.length, 3);
 
   // Disagree inside a box, reject the dismiss proposal.
-  s.edit({ boxes: { summarizeWeek: readFileSync(join(dir, ".underpaint/weekly/boxes/summarizeWeek.plan"), "utf8").replace("keep 3", "keep 2").trimEnd() } });
+  s.edit({ boxes: { summarizeWeek: readFileSync(join(dir, ".ogidoc/weekly/boxes/summarizeWeek.plan"), "utf8").replace("keep 3", "keep 2").trimEnd() } });
   assert.equal(view().boxes.find((b) => b.name === "summarizeWeek")!.status, "stale");
   await s.pass({ text: texts(view().lines.filter((l) => l.kind !== "proposal")).join("\n") });
   assert.match(prompts[2], /In box summarizeWeek:\n {2}- .*keep 3\n {2}\+ .*keep 2/, "the agent sees the person's change in the box");
@@ -137,15 +137,15 @@ test("drift: code changed outside a turn reaches the next prompt", async () => {
   assert.deepEqual(drift.trim().split("\n"), ["- src/summarize.js"], "only the hand edit, not earlier work or the editor's own files");
 });
 
-test("a repository that ignores .underpaint still gets one commit per turn", async () => {
+test("a repository that ignores .ogidoc still gets one commit per turn", async () => {
   const { dir, git, log } = repo();
-  writeFileSync(join(dir, ".gitignore"), ".underpaint/\n");
+  writeFileSync(join(dir, ".gitignore"), ".ogidoc/\n");
   git("add", ".gitignore");
-  git("commit", "-qm", "ignore underpaint");
+  git("commit", "-qm", "ignore ogidoc");
   const { session: s, view } = open(dir);
   await s.pass({ text: PLAN });
   assert.equal(view().last!.error, undefined);
-  assert.equal(log()[0], "underpaint: turn 1 on weekly");
+  assert.equal(log()[0], "ogidoc: turn 1 on weekly");
   s.undo();
   assert.match(log()[0], /undo turn 1/);
 });
@@ -165,7 +165,7 @@ test("a thread stays on its line while the person edits around it, and keeps the
   assert.equal(mine.by, "h");
   s.resolve({ thread: mine.id });
   assert.equal(view().threads.find((t) => t.id === mine.id)!.resolved, true);
-  assert.ok(JSON.parse(readFileSync(join(dir, ".underpaint/weekly/comments.json"), "utf8")).length === 2, "threads are saved beside the plan");
+  assert.ok(JSON.parse(readFileSync(join(dir, ".ogidoc/weekly/comments.json"), "utf8")).length === 2, "threads are saved beside the plan");
 });
 
 test("a failed turn that changed code can be undone", async () => {
@@ -177,7 +177,7 @@ test("a failed turn that changed code can be undone", async () => {
   const { session: s, view } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
   assert.match(view().last!.error!, /no JSON block/);
-  assert.equal(log()[0], "underpaint: failed turn 1 on p");
+  assert.equal(log()[0], "ogidoc: failed turn 1 on p");
   assert.equal(view().canUndo, true);
   s.undo();
   assert.equal(existsSync(join(dir, "half.js")), false, "the agent's half-done code is gone");
@@ -254,7 +254,7 @@ test("an agent's renames, deletions and staged edits all land in its turn's comm
     });
   const { session: s } = open(dir, { planFile: "p.plan", agent });
   await s.pass({ text: "hello" });
-  const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".underpaint"));
+  const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".ogidoc"));
   assert.deepEqual(files.sort(), ["A\tp.plan", "D\tgone.js", "M\tstaged.js", "R100\told.js\tnew.js"]);
   assert.equal(git("status", "--porcelain", "--", "new.js", "old.js", "gone.js", "staged.js"), "");
 });
@@ -292,7 +292,7 @@ test("a session saved by an older version still opens with its undo history", as
   await open(dir).session.pass({ text: PLAN });
   // Older versions kept history and the turn log's state inside state.json, and
   // ignored only state.json.
-  const at = (f: string) => join(dir, ".underpaint/weekly", f);
+  const at = (f: string) => join(dir, ".ogidoc/weekly", f);
   const state = JSON.parse(readFileSync(at("state.json"), "utf8"));
   const { log, ...rest } = state;
   writeFileSync(at("state.json"), JSON.stringify({ ...rest, ...log, history: JSON.parse(readFileSync(at("history.json"), "utf8")) }));
@@ -328,10 +328,10 @@ test("a done plan can be removed in one commit; the code stays and the session i
   assert.equal(view().done, true);
   s.finish();
   assert.equal(view().finished, true);
-  assert.ok(!existsSync(join(dir, "weekly.plan")) && !existsSync(join(dir, ".underpaint/weekly")), "the plan and its files are gone");
-  assert.ok(existsSync(join(dir, ".underpaint/rules.md")), "the house rules stay for the next plan");
+  assert.ok(!existsSync(join(dir, "weekly.plan")) && !existsSync(join(dir, ".ogidoc/weekly")), "the plan and its files are gone");
+  assert.ok(existsSync(join(dir, ".ogidoc/rules.md")), "the house rules stay for the next plan");
   assert.ok(existsSync(join(dir, "hi.js")), "the code stays");
-  assert.equal(log()[0], "underpaint: remove the built plan weekly");
+  assert.equal(log()[0], "ogidoc: remove the built plan weekly");
   assert.equal(git("status", "--porcelain").trim(), "", "nothing is left uncommitted");
   assert.throws(() => s.edit({ text: "again" }), /built and removed/);
   await assert.rejects(s.pass(), /built and removed/);

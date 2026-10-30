@@ -23,7 +23,7 @@ export interface Agent {
 type Env = Record<string, string | undefined>;
 
 interface AgentOpts {
-  // The environment the agent CLI runs in; UNDERPAINT_CLAUDE and UNDERPAINT_PI there
+  // The environment the agent CLI runs in; OGIDOC_CLAUDE and OGIDOC_PI there
   // point at a different executable.
   env: Env;
   bin?: string;
@@ -60,7 +60,7 @@ export const AGENTS = ["claude", "pi"];
 
 const CLAUDE_MODELS = ["fable", "opus", "sonnet", "haiku"];
 
-function claudeAgent({ env, bin = env.UNDERPAINT_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
+function claudeAgent({ env, bin = env.OGIDOC_CLAUDE || "claude", args = [] }: AgentOpts): Agent {
   // Claude Code refuses to start inside another Claude Code session unless told otherwise.
   const { CLAUDECODE: _, ...childEnv } = env;
   return {
@@ -94,7 +94,7 @@ function claudeAgent({ env, bin = env.UNDERPAINT_CLAUDE || "claude", args = [] }
   };
 }
 
-function piAgent({ env, bin = env.UNDERPAINT_PI || "pi", args = [] }: AgentOpts): Agent {
+function piAgent({ env, bin = env.OGIDOC_PI || "pi", args = [] }: AgentOpts): Agent {
   return {
     name: "pi",
     settingOptions: { models: [], efforts: ["off", "minimal", "low", "medium", "high", "xhigh", "max"] },
