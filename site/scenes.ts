@@ -15,7 +15,7 @@ export type Beat =
   | { agent: Partial<Reply> & Pick<Reply, "plan">; last: LastTurn };
 
 export type Frame =
-  | { kind: "type"; plan: Plan }
+  | { kind: "type"; plan: Plan; picked?: true }
   | { kind: "turn"; plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges; last: LastTurn };
 
 const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], choices: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
@@ -32,7 +32,7 @@ export function frames(start: Plan, beats: Beat[]): Frame[] {
       }
     } else if ("pick" in beat) {
       plan = { ...plan, ...choose(plan.lines, plan.choices, plan.choices[0].id, beat.pick) };
-      out.push({ kind: "type", plan });
+      out.push({ kind: "type", plan, picked: true });
     } else {
       const r = fromReply(plan, { ...NO_REPLY, ...beat.agent }, turn++);
       plan = r.plan;

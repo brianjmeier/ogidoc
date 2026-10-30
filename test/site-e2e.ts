@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 // Plays the website's scenes in Chromium, in light and dark: a line gets built, settled
 // lines fold into a box, a choice is offered, picked and built, and the agent writes in
-// three pseudocode styles.
+// three pseudocode styles; at phone width nothing scrolls sideways.
 //
 //   npm run build:site && node test/site-e2e.ts
 
@@ -69,6 +69,21 @@ try {
     console.log(`· ${colorScheme}: the agent writes in python-like, js-like and clojure-like pseudocode`);
     assert.deepEqual(errors, []);
     await page.close();
+
+    const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme });
+    await phone.goto(url);
+    await phone.locator(scene(3)).scrollIntoViewIfNeeded();
+    await phone.waitForSelector(`${scene(3)} .ways`, { timeout: 20000 });
+    const fit = await phone.evaluate((s) => {
+      const box = document.querySelector(s)!.getBoundingClientRect();
+      const rail = [...document.querySelectorAll(`${s} .ways button`)].map((b) => b.getBoundingClientRect());
+      return { sideways: document.documentElement.scrollWidth - innerWidth, gutter: box.left, railInside: rail.every((r) => r.right <= box.right && r.bottom <= box.bottom) };
+    }, scene(3));
+    assert.equal(fit.sideways, 0, `${colorScheme}: no sideways scroll at phone width`);
+    assert.ok(fit.gutter >= 16, `${colorScheme}: at least a 16px side gutter at phone width, got ${fit.gutter}`);
+    assert.ok(fit.railInside, `${colorScheme}: the choice switch fits inside the scene at phone width`);
+    console.log(`· ${colorScheme}: at phone width the page fits and the choice switch stays inside the scene`);
+    await phone.close();
   }
   console.log("\nAll site checks passed.");
 } finally {

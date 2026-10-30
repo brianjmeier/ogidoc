@@ -55,6 +55,7 @@ test("choices: the person switches to the other way, and the agent builds it and
   const all = frames(choices.start, choices.beats);
   const picked = all.at(-2)!;
   assert.equal(picked.kind, "type");
+  assert.equal(picked.kind === "type" && picked.picked, true, "the switch is marked, so the scene can hold on it before handing over");
   assert.equal(picked.plan.lines[5].text, "    clear board, loser goes first");
   const done = all.at(-1)!;
   assert.deepEqual(done.plan.choices, []);
