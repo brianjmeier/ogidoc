@@ -10,7 +10,7 @@ You work close to the code: the structure, the interfaces, where each thing live
 Code is more precise than prose, so the plan can read like code that wouldn't compile
 yet. The agent turns it into a program that does.
 
-![The plan on the left, settled pieces in boxes on the right](docs/boxes.png)
+![Write a plan, hand over, and the agent builds it, offers another way, and folds settled lines into boxes](docs/demo.gif)
 
 ## Install
 
@@ -63,8 +63,8 @@ ogidoc stop            # stops it, once no turn is running
 Each command takes a session name; without one it uses the session started in this
 folder, or the only one running.
 
-To see it without an agent, run `npm run demo` in a clone (a scripted agent plays four
-turns).
+To try it without an agent or an API key, run `ogidoc --demo`: a scripted agent plays
+three turns on a plan that is already written, in a throwaway folder.
 
 `ogidoc install-skill [claude|pi|both]` (default both) copies the chat skill into
 `~/.claude/skills` and `~/.pi/agent/skills`, so your chat knows how to start a session,

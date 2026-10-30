@@ -58,6 +58,11 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
   .copy-col { position: sticky; top: 96px; padding-top: 8px; }
 }
 
+/* ---------- the clip under the hero ---------- */
+.clip { margin: 0 0 clamp(40px, 8vh, 88px); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
+@media (prefers-color-scheme: dark) { .clip { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }
+.clip video { display: block; width: 100%; height: auto; }
+
 /* ---------- the terminal beside the editor ---------- */
 .terminal { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
 @media (prefers-color-scheme: dark) { .terminal { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }

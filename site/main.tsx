@@ -63,6 +63,17 @@ function Beside() {
   );
 }
 
+// The whole loop in fifteen seconds: write, hand over, built, the other way, again.
+// Under reduced motion it waits for a click.
+function Clip() {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return (
+    <figure class="clip">
+      <video src="/demo.mp4" poster="/demo-poster.png" width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a plan and hands over; the agent builds it, offers another way for the timezone, and folds settled lines into boxes" />
+    </figure>
+  );
+}
+
 function Page() {
   return (
     <main class="site">
@@ -74,8 +85,9 @@ function Page() {
           <Install />
           <a class="repo" href={REPO}>Source on GitHub</a>
         </div>
-        <p class="run">then <code>ogidoc tic-tac-toe</code></p>
+        <p class="run">then <code>ogidoc --demo</code> to try it without an API key, or <code>ogidoc</code> in your&nbsp;project</p>
       </header>
+      <Clip />
       <section class="beat">
         <div class="copy-col">
           <h2><span>The agent codes in&nbsp;seconds.</span><span> You spend minutes describing what you&nbsp;want.</span></h2>
