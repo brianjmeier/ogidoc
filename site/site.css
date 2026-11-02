@@ -58,10 +58,21 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
   .copy-col { position: sticky; top: 96px; padding-top: 8px; }
 }
 
-/* ---------- the clip under the hero ---------- */
-.clip { margin: 0 0 clamp(40px, 8vh, 88px); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
-@media (prefers-color-scheme: dark) { .clip { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }
-.clip video { display: block; width: 100%; height: auto; }
+/* ---------- the demo under the hero, and the game it builds ---------- */
+.hero-demo { display: grid; gap: 18px; margin: 0 0 clamp(40px, 8vh, 88px); align-items: start; }
+@media (min-width: 1080px) { .hero-demo { grid-template-columns: minmax(0, 1fr) 260px; } }
+.built { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }
+@media (prefers-color-scheme: dark) { .built { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 50px -12px rgba(0, 0, 0, 0.6); } }
+.built-top { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.built-body { display: grid; justify-items: center; gap: 12px; padding: 20px 16px 16px; }
+.built .board { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; }
+.built .board button { all: unset; width: 56px; height: 56px; display: grid; place-items: center; font: 700 26px/1 var(--font-mono); color: var(--ink); border: 1px solid var(--line); border-radius: 9px; background: var(--paper); cursor: pointer; }
+.built .board button:hover { border-color: var(--muted); }
+.built .board button:focus-visible, .built .again:focus-visible { outline: 2px solid var(--human); outline-offset: 2px; }
+.built .status { margin: 0; font: 15px/1.3 var(--font-mono); }
+.built .again { all: unset; cursor: pointer; font: 500 13px/1 var(--font-ui); color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.scene-top .pick .select { cursor: default; transition: box-shadow 160ms ease-out; }
+.scene-top .pick .select.pressed { box-shadow: 0 0 0 4px var(--human-tint); }
 
 /* ---------- the terminal beside the editor ---------- */
 .terminal { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 50px -12px rgba(20, 24, 30, 0.16); }

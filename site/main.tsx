@@ -1,7 +1,8 @@
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { Scene } from "./Scene.tsx";
-import { abstractions, choices, frames, promptWithCode, styles } from "./scenes.ts";
+import { Game } from "./Game.tsx";
+import { abstractions, choices, demo, frames, promptWithCode, styles } from "./scenes.ts";
 import "../app/style.css";
 import "./site.css";
 
@@ -63,22 +64,6 @@ function Beside() {
   );
 }
 
-// The whole loop in fifteen seconds: write, hand over, built, the other way, again.
-// Recorded in both themes; it plays the one the page is in. Under reduced motion it waits
-// for a click.
-function Clip() {
-  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const theme = matchMedia("(prefers-color-scheme: dark)");
-  const [dark, setDark] = createSignal(theme.matches);
-  theme.addEventListener("change", (e) => setDark(e.matches));
-  const name = () => (dark() ? "demo-dark" : "demo");
-  return (
-    <figure class="clip">
-      <video src={`/${name()}.mp4`} poster={`/${name()}-poster.png`} width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a tic-tac-toe plan and hands over; the agent builds it, offers another way for a taken cell, and folds settled lines into boxes" />
-    </figure>
-  );
-}
-
 function Page() {
   return (
     <main class="site">
@@ -92,7 +77,10 @@ function Page() {
         </div>
         <p class="run">then <code>ogidoc --demo</code> to try it without an API key, or <code>ogidoc</code> in your project, with Claude Code, pi or any agent&nbsp;CLI</p>
       </header>
-      <Clip />
+      <div class="hero-demo">
+        <Scene label="The demo: a model is picked, a tic-tac-toe plan is written and handed over; the agent builds it, offers another way for a taken cell, and folds settled lines into boxes" model={demo.model} start={demo.start} frames={frames(demo.start, demo.beats)} />
+        <Game />
+      </div>
       <section class="beat">
         <div class="copy-col">
           <h2><span>The agent codes in&nbsp;seconds.</span><span> You spend minutes describing what you&nbsp;want.</span></h2>

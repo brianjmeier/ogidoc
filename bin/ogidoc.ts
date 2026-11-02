@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -68,7 +68,7 @@ if (values.help) {
 // scripted agent, so it needs no project and no API key.
 if (values.demo) {
   const dir = mkdtempSync(join(tmpdir(), "ogidoc-demo-"));
-  copyFileSync(join(DEMO_DIR, "tic-tac-toe.plan"), join(dir, "tic-tac-toe.plan"));
+  writeFileSync(join(dir, "tic-tac-toe.plan"), JSON.parse(readFileSync(join(DEMO_DIR, "tic-tac-toe.json"), "utf8")).plan.join("\n") + "\n");
   process.chdir(dir);
   positionals.splice(0, positionals.length, "tic-tac-toe");
   Object.assign(values, { agent: "mock", "agent-cmd": undefined, script: join(DEMO_DIR, "tic-tac-toe.json"), open: !values.detach || values.open });

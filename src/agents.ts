@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SettingOptions } from "./types.ts";
 import type { Clock } from "./clock.ts";
@@ -237,21 +237,26 @@ function describeTool(name: string, input: Record<string, unknown> = {}): string
 }
 
 // A scripted agent for tests and demos. The script is a JSON array of turns; each turn
-// has the reply object, optional files to write, activity lines and a delay.
+// has the reply object, optional files to write or copy from beside the script, activity
+// lines and a delay. A demo script also lists the models and efforts it offers.
 interface MockTurn {
   reply: unknown;
   writes?: Record<string, string>;
+  copy?: Record<string, string>;
   activity?: string[];
   delay?: number;
 }
 
 function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] }): Agent {
-  const turns: MockTurn[] = JSON.parse(readFileSync(script, "utf8"));
+  // A list of turns, or a demo: the plan it starts from and its turns.
+  const read = JSON.parse(readFileSync(script, "utf8"));
+  const turns: MockTurn[] = Array.isArray(read) ? read : read.turns;
+  const models: string[] = read.models ?? [];
   let i = 0;
   return {
     name: "mock",
-    settingOptions: { models: [], efforts: [] },
-    acceptsModel: () => false,
+    settingOptions: { models, efforts: read.efforts ?? [] },
+    acceptsModel: (m) => models.includes(m),
     async run({ cwd, onActivity }) {
       const t = turns[Math.min(i++, turns.length - 1)];
       for (const a of t.activity || []) {
@@ -262,6 +267,11 @@ function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] })
         const p = join(cwd, rel);
         mkdirSync(dirname(p), { recursive: true });
         writeFileSync(p, content);
+      }
+      for (const [rel, from] of Object.entries(t.copy || {})) {
+        const p = join(cwd, rel);
+        mkdirSync(dirname(p), { recursive: true });
+        copyFileSync(join(dirname(script), from), p);
       }
       return `Done.\n\n\`\`\`json\n${JSON.stringify(t.reply, null, 2)}\n\`\`\``;
     },

@@ -17,7 +17,8 @@ const LAST_HOLD_MS = 4200;
 // One looping scene: the real editor, read-only, playing a scripted session while it
 // is on screen. It pauses when scrolled away and picks up where it was.
 // `under` leaves out the Underneath drawer, for scenes that make their point in the plan.
-export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean }) {
+// `model` shows the model picker in the top bar, starting on that model.
+export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean; model?: string }) {
   let el!: HTMLDivElement;
   let editor!: EditorApi;
   const [whose, setWhose] = createSignal<"h" | "a">("h");
@@ -25,6 +26,8 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
   const [last, setLast] = createSignal<LastTurn | null>(null);
   const [boxes, setBoxes] = createSignal<Box[]>([]);
   const [boxAnim, setBoxAnim] = createSignal<BoxAnimation | null>(null);
+  const [model, setModel] = createSignal(props.model);
+  const [picking, setPicking] = createSignal(false);
   // Tall enough for the longest plan the scene reaches, so the page doesn't jump
   // (unless lines wrap on a narrow screen).
   const planHeight = `${Math.max(props.start.lines.length, ...props.frames.map((f) => f.plan.lines.length)) * 24 + 28}px`;
@@ -48,10 +51,17 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
       setBoxes(props.start.boxes);
       setLast(null);
       setWhose("h");
+      setModel(props.model);
       await wait(START_MS);
       for (const [i, f] of props.frames.entries()) {
         if (stopped) return;
-        if (f.kind === "type") {
+        if (f.kind === "model") {
+          setPicking(true);
+          await wait(PICK_MS / 2);
+          setModel(f.model);
+          setPicking(false);
+          await wait(PICK_MS / 2);
+        } else if (f.kind === "type") {
           if (reduce && props.frames[i + 1]?.kind === "type") continue;
           editor.adopt(f.plan);
           await wait(f.picked ? PICK_MS : KEY_MS);
@@ -91,6 +101,12 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
         <span class="brand">ogidoc</span>
         <span class="file">{props.file ?? "tic-tac-toe"}</span>
         <span class="spacer" />
+        <Show when={model()}>
+          <span class="pick" aria-hidden="true">
+            <span class="pick-name">model</span>
+            <span class="select" classList={{ pressed: picking() }}>{model()!.charAt(0).toUpperCase() + model()!.slice(1)}<span class="caret">▾</span></span>
+          </span>
+        </Show>
         <span class={`turn ${whose()}`} classList={{ passing: passing() }}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
         <span class="btn primary" classList={{ pressed: passing() }} data-disabled={whose() === "a" ? "" : undefined} aria-hidden="true">
           Hand over <kbd>{keys.pass.label}</kbd>

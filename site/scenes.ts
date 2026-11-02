@@ -2,20 +2,23 @@ import { diffLines, splitLines } from "../src/shared/diff.ts";
 import { choose } from "../src/choices.ts";
 import { agree, edit, fromReply, type Plan } from "../src/plan.ts";
 import type { AnimationOp, BoxChanges, LastTurn, Line, Reply } from "../src/types.ts";
+import demoScript from "../demo/tic-tac-toe.json" with { type: "json" };
 
 // The site's scenes are written as turns, and played through the same plan code the
 // editor runs: the person's typing goes through `edit`, the agent's reply through
 // `fromReply`, so marks, authorship and the turn animation are the real ones.
 
-// The person rewrites the plan to `person` or switches the first open choice to `pick`,
-// or the agent replies with `agent`.
+// The person rewrites the plan to `person`, switches the first open choice to `pick`, or
+// picks the `model` the turns run with, or the agent replies with `agent`.
 export type Beat =
   | { person: string }
   | { pick: number }
+  | { model: string }
   | { agent: Partial<Reply> & Pick<Reply, "plan">; last: LastTurn };
 
 export type Frame =
   | { kind: "type"; plan: Plan; picked?: true }
+  | { kind: "model"; plan: Plan; model: string }
   | { kind: "turn"; plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges; last: LastTurn };
 
 const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], choices: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
@@ -30,6 +33,8 @@ export function frames(start: Plan, beats: Beat[]): Frame[] {
         plan = edit(plan, { text });
         out.push({ kind: "type", plan });
       }
+    } else if ("model" in beat) {
+      out.push({ kind: "model", plan, model: beat.model });
     } else if ("pick" in beat) {
       plan = { ...plan, ...choose(plan.lines, plan.choices, plan.choices[0].id, beat.pick) };
       out.push({ kind: "type", plan, picked: true });
@@ -199,4 +204,18 @@ export const styles = {
     ["(defgame tic-tac-toe", "  (board (grid 3 3))", "  (turn :x)", "  (on-click [cell]", "    (place! cell @turn)", "    (swap! turn other)))"],
     ["(defgame tic-tac-toe", "  (board (grid 3 3))", "  (turn :x)", "  (on-click [cell]", "    (ignore-when (taken? cell))", "    (place! cell @turn)", "    (swap! turn other)))"],
   ),
+};
+
+// The hero: the very script `ogidoc --demo` plays, typed from an empty plan. The person
+// looks at the other way the agent offers and keeps its pick, since the script builds
+// the agent's own.
+const demoTurn = ({ reply }: (typeof demoScript.turns)[number]): Beat => ({
+  agent: reply as Partial<Reply> & Pick<Reply, "plan">,
+  last: { summary: reply.summary, steps: reply.steps as LastTurn["steps"], files: reply.files as LastTurn["files"], checks: reply.checks },
+});
+const empty: Plan = { lines: [], boxes: [], threads: [], choices: [] };
+export const demo = {
+  start: empty,
+  model: "default",
+  beats: [{ model: demoScript.models[1] }, { person: demoScript.plan.join("\n") }, demoTurn(demoScript.turns[0]), { pick: 1 }, { pick: 0 }, demoTurn(demoScript.turns[1]), demoTurn(demoScript.turns[2])] satisfies Beat[],
 };

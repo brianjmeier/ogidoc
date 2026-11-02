@@ -1,5 +1,0 @@
-game tic_tac_toe:
-  board = 3x3 grid, all empty
-  turn = X
-  click(cell) -> put turn's mark there, swap turn
-  game over when someone has three in a row

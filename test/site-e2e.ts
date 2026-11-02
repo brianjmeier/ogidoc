@@ -31,7 +31,13 @@ try {
     assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("\"Ogidoc Wordmark\"")), `${colorScheme}: "ogidoc" is set in the same mono everywhere on the page, got ${brandFonts}`);
     assert.ok(await page.evaluate(() => document.fonts.load('700 17px "Ogidoc Wordmark"', "ogidoc").then((f) => f.length > 0)), `${colorScheme}: the wordmark's font ships with the site, not from the visitor's computer`);
     assert.equal(await page.title(), "Ogidoc", `${colorScheme}: the page is called Ogidoc`);
-    assert.equal(await page.$eval(".clip video", (v) => v.getAttribute("src")), colorScheme === "dark" ? "/demo-dark.mp4" : "/demo.mp4", `${colorScheme}: the clip is recorded in the page's theme`);
+    assert.equal(await page.$eval(".hero-demo .scene-top .file", (f) => f.textContent), "tic-tac-toe", `${colorScheme}: under the hero, the live editor plays the demo`);
+    await page.waitForFunction(() => document.querySelectorAll(".hero-demo .ln").length >= 5, null, { timeout: 20000 });
+    assert.ok(await page.$(".hero-demo .scene-top .pick .select"), `${colorScheme}: the demo shows which model the turns run on`);
+    for (const c of [1, 4, 2, 5, 3]) await page.click(`.built button[aria-label^="Cell ${c}"]`);
+    assert.equal(await page.textContent(".built .status"), "X wins", `${colorScheme}: the game the demo builds plays, and X takes the top row`);
+    await page.click(".built .again");
+    assert.equal(await page.textContent(".built .status"), "X's turn", `${colorScheme}: and starts again`);
     assert.doesNotMatch((await page.textContent("body")) ?? "", /underpaint|paint/i, `${colorScheme}: nothing on the page still uses the old name or the painting idea`);
 
     const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);

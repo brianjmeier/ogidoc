@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -474,8 +475,11 @@ test("stopping a turn stops the agent and keeps the turn as a failed one", async
 test("the demo plays its three turns cleanly: a choice, then boxes, then everything built", async () => {
   const demo = new URL("../demo/tic-tac-toe.json", import.meta.url).pathname;
   const clock = testClock();
-  const { session: s, view } = open(repo().dir, { name: "tic-tac-toe", agent: makeAgent("mock", { env: {}, script: demo, sleep: clock.sleep }), clock });
-  await s.pass({ text: readFileSync(new URL("../demo/tic-tac-toe.plan", import.meta.url), "utf8").trimEnd() });
+  const { dir } = repo();
+  const { session: s, view } = open(dir, { name: "tic-tac-toe", agent: makeAgent("mock", { env: {}, script: demo, sleep: clock.sleep }), clock });
+  assert.deepEqual(view().settingOptions.models, ["opus", "sonnet", "haiku"], "the demo shows the model picker");
+  s.setSettings({ model: "sonnet" });
+  await s.pass({ text: JSON.parse(readFileSync(demo, "utf8")).plan.join("\n") });
   assert.equal(view().last!.error, undefined);
   assert.equal(view().choices.length, 1, "it offers another way for a taken cell");
   assert.ok(view().lines.some((l) => l.kind === "proposal"), "and proposes the draw");
@@ -485,4 +489,6 @@ test("the demo plays its three turns cleanly: a choice, then boxes, then everyth
   await s.pass();
   assert.equal(view().last!.error, undefined);
   assert.equal(view().done, true, "the demo ends with the whole plan built");
+  assert.ok(existsSync(join(dir, "index.html")), "and with a game to open");
+  execFileSync(process.execPath, ["--test"], { cwd: dir, stdio: "pipe" });
 });

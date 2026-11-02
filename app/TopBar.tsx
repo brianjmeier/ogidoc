@@ -93,7 +93,7 @@ function Picker(props: { name: "model" | "effort"; state: Snapshot; options: str
         </Select.Item>
       )}
     >
-      <Select.Label>{props.name}</Select.Label>
+      <Select.Label class="pick-name">{props.name}</Select.Label>
       <Select.Trigger class="select" aria-label={props.name}>
         <Select.Value<string>>{(s) => label(s.selectedOption())}</Select.Value>
         <Select.Icon class="caret">▾</Select.Icon>

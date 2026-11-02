@@ -64,6 +64,10 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 .pick input:focus-visible, .pick .select:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
 .pick .select { all: unset; font: 12.5px/1 var(--font-mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 9ch; cursor: pointer; }
 .pick .caret { color: var(--muted); font-size: 10px; }
+/* Narrower, the pickers' values say what they are, and the bar stays on one line. */
+@media (max-width: 1180px) {
+  .pick .pick-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .pick[data-disabled], .pick input:disabled { opacity: 0.5; }
 .menu { z-index: 50; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); padding: 4px; font: 12.5px/1 var(--font-mono); }
 .menu ul { list-style: none; margin: 0; padding: 0; outline: none; }
