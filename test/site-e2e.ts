@@ -31,6 +31,7 @@ try {
     assert.ok(brandFonts.length > 1 && brandFonts.every((f) => f.startsWith("\"Ogidoc Wordmark\"")), `${colorScheme}: "ogidoc" is set in the same mono everywhere on the page, got ${brandFonts}`);
     assert.ok(await page.evaluate(() => document.fonts.load('700 17px "Ogidoc Wordmark"', "ogidoc").then((f) => f.length > 0)), `${colorScheme}: the wordmark's font ships with the site, not from the visitor's computer`);
     assert.equal(await page.title(), "Ogidoc", `${colorScheme}: the page is called Ogidoc`);
+    assert.equal(await page.$eval(".clip video", (v) => v.getAttribute("src")), colorScheme === "dark" ? "/demo-dark.mp4" : "/demo.mp4", `${colorScheme}: the clip is recorded in the page's theme`);
     assert.doesNotMatch((await page.textContent("body")) ?? "", /underpaint|paint/i, `${colorScheme}: nothing on the page still uses the old name or the painting idea`);
 
     const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);

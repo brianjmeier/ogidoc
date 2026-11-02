@@ -64,12 +64,17 @@ function Beside() {
 }
 
 // The whole loop in fifteen seconds: write, hand over, built, the other way, again.
-// Under reduced motion it waits for a click.
+// Recorded in both themes; it plays the one the page is in. Under reduced motion it waits
+// for a click.
 function Clip() {
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const theme = matchMedia("(prefers-color-scheme: dark)");
+  const [dark, setDark] = createSignal(theme.matches);
+  theme.addEventListener("change", (e) => setDark(e.matches));
+  const name = () => (dark() ? "demo-dark" : "demo");
   return (
     <figure class="clip">
-      <video src="/demo.mp4" poster="/demo-poster.png" width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a plan and hands over; the agent builds it, offers another way for the timezone, and folds settled lines into boxes" />
+      <video src={`/${name()}.mp4`} poster={`/${name()}-poster.png`} width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a plan and hands over; the agent builds it, offers another way for the timezone, and folds settled lines into boxes" />
     </figure>
   );
 }

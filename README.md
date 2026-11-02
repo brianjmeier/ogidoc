@@ -10,7 +10,10 @@ You work close to the code: the structure, the interfaces, where each thing live
 Code is more precise than prose, so the plan can read like code that wouldn't compile
 yet. The agent turns it into a program that does.
 
-![Write a plan, hand over, and the agent builds it, offers another way, and folds settled lines into boxes](docs/demo.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/demo-dark.gif">
+  <img src="docs/demo.gif" alt="Write a plan, hand over, and the agent builds it, offers another way, and folds settled lines into boxes">
+</picture>
 
 ## Install
 
