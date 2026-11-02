@@ -68,5 +68,5 @@ Without a name, Ogidoc opens the session in this folder, or starts one named aft
 the folder; `ogidoc checkout --detach` starts or opens the one called `checkout`.
 Always start it with `--detach`, so the terminal stays free.
 
-If `ogidoc` is not on the path, it isn't installed; tell the person how to install it
-from https://github.com/brianjmeier/ogidoc.
+If `ogidoc` is not on the path, it isn't installed; the person installs it with
+`npm install -g ogidoc` (Node 22.18 or newer).

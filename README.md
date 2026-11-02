@@ -14,10 +14,11 @@ yet. The agent turns it into a program that does.
 
 ## Install
 
-Node 22.18 or newer. Installing builds the editor once.
+Node 22.18 or newer.
 
 ```bash
-npm install -g github:brianjmeier/ogidoc
+npm install -g ogidoc
+ogidoc --demo               # try it: a scripted agent, a throwaway folder, no API key
 ogidoc install-skill        # optional: teach your Claude Code and pi chat to work beside a session
 ```
 

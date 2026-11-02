@@ -5,7 +5,7 @@ import { abstractions, choices, frames, promptWithCode, styles } from "./scenes.
 import "../app/style.css";
 import "./site.css";
 
-const INSTALL = "npm install -g github:brianjmeier/ogidoc";
+const INSTALL = "npm install -g ogidoc";
 const REPO = "https://github.com/brianjmeier/ogidoc";
 
 function Install() {
