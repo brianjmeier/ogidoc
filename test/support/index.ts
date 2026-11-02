@@ -10,8 +10,8 @@ import { openSession } from "../../src/session.ts";
 import type { Agent } from "../../src/agents.ts";
 import type { Clock } from "../../src/clock.ts";
 
-export const SCRIPT = new URL("../../demo/weekly.json", import.meta.url).pathname;
-export const PLAN = readFileSync(new URL("../../demo/demo.plan", import.meta.url), "utf8").trimEnd();
+export const SCRIPT = new URL("../fixtures/weekly.json", import.meta.url).pathname;
+export const PLAN = readFileSync(new URL("../fixtures/weekly.plan", import.meta.url), "utf8").trimEnd();
 
 // A clock the test moves by hand; sleeping costs no real time.
 export function testClock(start = 0): Clock & { advance(ms: number): void } {

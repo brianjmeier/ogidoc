@@ -74,7 +74,7 @@ function Clip() {
   const name = () => (dark() ? "demo-dark" : "demo");
   return (
     <figure class="clip">
-      <video src={`/${name()}.mp4`} poster={`/${name()}-poster.png`} width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a plan and hands over; the agent builds it, offers another way for the timezone, and folds settled lines into boxes" />
+      <video src={`/${name()}.mp4`} poster={`/${name()}-poster.png`} width="1000" height="580" muted loop playsinline autoplay={!still} controls={still} aria-label="The person writes a tic-tac-toe plan and hands over; the agent builds it, offers another way for a taken cell, and folds settled lines into boxes" />
     </figure>
   );
 }

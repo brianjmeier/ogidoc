@@ -470,3 +470,19 @@ test("stopping a turn stops the agent and keeps the turn as a failed one", async
   assert.equal(view().last!.error, "The turn was stopped.");
   assert.equal(view().canUndo, true, "what it changed is committed, so it can be undone");
 });
+
+test("the demo plays its three turns cleanly: a choice, then boxes, then everything built", async () => {
+  const demo = new URL("../demo/tic-tac-toe.json", import.meta.url).pathname;
+  const clock = testClock();
+  const { session: s, view } = open(repo().dir, { name: "tic-tac-toe", agent: makeAgent("mock", { env: {}, script: demo, sleep: clock.sleep }), clock });
+  await s.pass({ text: readFileSync(new URL("../demo/tic-tac-toe.plan", import.meta.url), "utf8").trimEnd() });
+  assert.equal(view().last!.error, undefined);
+  assert.equal(view().choices.length, 1, "it offers another way for a taken cell");
+  assert.ok(view().lines.some((l) => l.kind === "proposal"), "and proposes the draw");
+  await s.pass();
+  assert.equal(view().last!.error, undefined);
+  assert.deepEqual(view().boxes.map((b) => b.name), ["click", "winner"]);
+  await s.pass();
+  assert.equal(view().last!.error, undefined);
+  assert.equal(view().done, true, "the demo ends with the whole plan built");
+});

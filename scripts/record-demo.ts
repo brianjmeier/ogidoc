@@ -14,12 +14,12 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const WIDTH = 1000;
 const HEIGHT = 580;
 const TA = 'textarea[aria-label="Plan text"]';
-const plan = readFileSync(join(ROOT, "demo/demo.plan"), "utf8").trimEnd().split("\n");
+const plan = readFileSync(join(ROOT, "demo/tic-tac-toe.plan"), "utf8").trimEnd().split("\n");
 
 // One take in one theme, on a fresh session; returns the raw video.
 async function take(browser: Browser, colorScheme: "light" | "dark"): Promise<string> {
   const videos = mkdtempSync(join(tmpdir(), "ogidoc-video-"));
-  const server = spawn(process.execPath, [join(ROOT, "bin/ogidoc.ts"), "weekly", "--agent", "mock", "--script", join(ROOT, "demo/weekly.json"), "--port", "0"], {
+  const server = spawn(process.execPath, [join(ROOT, "bin/ogidoc.ts"), "tic-tac-toe", "--agent", "mock", "--script", join(ROOT, "demo/tic-tac-toe.json"), "--port", "0"], {
     cwd: mkdtempSync(join(tmpdir(), "ogidoc-record-")),
     env: { ...process.env, OGIDOC_HOME: mkdtempSync(join(tmpdir(), "ogidoc-home-")) },
   });
@@ -63,7 +63,7 @@ async function take(browser: Browser, colorScheme: "light" | "dark"): Promise<st
     // scripted agent always builds its own pick, so the clip doesn't switch for good.
     await page.$eval(TA, (el) => {
       const ta = el as HTMLTextAreaElement;
-      const at = ta.value.indexOf("in the browser's timezone");
+      const at = ta.value.indexOf("a taken cell does nothing");
       ta.focus();
       ta.setSelectionRange(at, at);
     });

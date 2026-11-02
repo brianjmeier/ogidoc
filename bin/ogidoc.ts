@@ -68,10 +68,10 @@ if (values.help) {
 // scripted agent, so it needs no project and no API key.
 if (values.demo) {
   const dir = mkdtempSync(join(tmpdir(), "ogidoc-demo-"));
-  copyFileSync(join(DEMO_DIR, "demo.plan"), join(dir, "demo.plan"));
+  copyFileSync(join(DEMO_DIR, "tic-tac-toe.plan"), join(dir, "tic-tac-toe.plan"));
   process.chdir(dir);
-  positionals.splice(0, positionals.length, "demo");
-  Object.assign(values, { agent: "mock", "agent-cmd": undefined, script: join(DEMO_DIR, "weekly.json"), open: !values.detach || values.open });
+  positionals.splice(0, positionals.length, "tic-tac-toe");
+  Object.assign(values, { agent: "mock", "agent-cmd": undefined, script: join(DEMO_DIR, "tic-tac-toe.json"), open: !values.detach || values.open });
   console.log("This is a demo: a scripted agent plays three turns on a plan that is already written. Hand over with ⌘↵ (Ctrl+↵).");
 }
 

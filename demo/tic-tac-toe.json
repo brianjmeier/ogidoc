@@ -1,0 +1,294 @@
+[
+  {
+    "delay": 1200,
+    "activity": [
+      "reading tic-tac-toe.plan",
+      "editing test/game.test.js",
+      "editing src/game.js",
+      "editing src/winner.js",
+      "running node --test"
+    ],
+    "writes": {
+      "src/game.js": "export const newGame = () => ({ board: Array(9).fill(null), turn: \"X\" });\n\nexport function click(game, cell) {\n  if (game.board[cell]) return game;\n  const board = game.board.with(cell, game.turn);\n  return { board, turn: game.turn === \"X\" ? \"O\" : \"X\" };\n}\n",
+      "src/winner.js": "const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];\n\nexport function winner(board) {\n  for (const [a, b, c] of LINES) if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];\n  return null;\n}\n",
+      "test/game.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { click, newGame } from \"../src/game.js\";\nimport { winner } from \"../src/winner.js\";\n\ntest(\"X then O fill two cells\", () => {\n  const g = click(click(newGame(), 0), 4);\n  assert.deepEqual([g.board[0], g.board[4], g.turn], [\"X\", \"O\", \"X\"]);\n});\n\ntest(\"a taken cell does nothing\", () => {\n  const g = click(newGame(), 0);\n  assert.equal(click(g, 0), g);\n});\n\ntest(\"X X X across the top -> X wins\", () => {\n  assert.equal(winner([\"X\", \"X\", \"X\", \"O\", \"O\", null, null, null, null]), \"X\");\n});\n"
+    },
+    "reply": {
+      "plan": [
+        {
+          "text": "game tic_tac_toe:",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  board = 3x3 grid, all empty",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  turn = X",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  click(cell) -> put turn's mark there, swap turn",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "    a taken cell does nothing",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  game over when someone has three in a row",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "    a row, a column or a diagonal",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "    X X X across the top -> X wins",
+          "kind": "example",
+          "status": "built"
+        },
+        {
+          "text": "  maybe also: a full board is a draw",
+          "kind": "proposal",
+          "status": null
+        }
+      ],
+      "boxes": [],
+      "choices": [
+        {
+          "line": 4,
+          "options": [
+            [
+              "    a taken cell does nothing"
+            ],
+            [
+              "    a taken cell shakes, and it stays your turn"
+            ]
+          ]
+        }
+      ],
+      "suggestions": [
+        "  restart() -> clear the board, X goes first"
+      ],
+      "steps": [
+        {
+          "kind": "red-green",
+          "what": "X then O fill two cells"
+        },
+        {
+          "kind": "red-green",
+          "what": "three across the top wins, from your example"
+        },
+        {
+          "kind": "refactor",
+          "what": "the eight winning lines in one list"
+        }
+      ],
+      "files": [
+        {
+          "op": "+",
+          "path": "src/game.js",
+          "why": "newGame, click"
+        },
+        {
+          "op": "+",
+          "path": "src/winner.js",
+          "why": "winner(board)"
+        },
+        {
+          "op": "+",
+          "path": "test/game.test.js",
+          "why": "your example as a test"
+        }
+      ],
+      "checks": [
+        {
+          "name": "node --test",
+          "ok": true
+        }
+      ],
+      "summary": "Built the board, the turns and the win. A taken cell does nothing; shaking it is the other way. A full board as a draw is a proposal."
+    }
+  },
+  {
+    "delay": 1000,
+    "activity": [
+      "reading tic-tac-toe.plan",
+      "editing src/game.js",
+      "running node --test"
+    ],
+    "writes": {},
+    "reply": {
+      "plan": [
+        {
+          "text": "game tic_tac_toe:",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  board = 3x3 grid, all empty",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  turn = X",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  click(cell) -> see click",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  game over: see winner",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  maybe also: a full board is a draw",
+          "kind": "proposal",
+          "status": null
+        }
+      ],
+      "boxes": [
+        {
+          "name": "click",
+          "lines": [
+            "put turn's mark there, swap turn",
+            "a taken cell does nothing"
+          ],
+          "status": "built",
+          "uses": []
+        },
+        {
+          "name": "winner",
+          "lines": [
+            "three in a row, a column or a diagonal -> that mark",
+            "X X X across the top -> X wins"
+          ],
+          "status": "built",
+          "uses": []
+        }
+      ],
+      "suggestions": [
+        "  restart() -> clear the board, X goes first"
+      ],
+      "steps": [
+        {
+          "kind": "red-green",
+          "what": "the game is over once winner(board) has a mark"
+        },
+        {
+          "kind": "refactor",
+          "what": "click and winner settled, so they moved into boxes"
+        }
+      ],
+      "files": [
+        {
+          "op": "~",
+          "path": "src/game.js",
+          "why": "gameOver(game)"
+        }
+      ],
+      "checks": [
+        {
+          "name": "node --test",
+          "ok": true
+        }
+      ],
+      "summary": "The game ends on a win, and click and winner moved into boxes."
+    }
+  },
+  {
+    "delay": 900,
+    "activity": [
+      "reading tic-tac-toe.plan",
+      "editing test/game.test.js",
+      "editing src/game.js",
+      "running node --test"
+    ],
+    "writes": {},
+    "reply": {
+      "plan": [
+        {
+          "text": "game tic_tac_toe:",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  board = 3x3 grid, all empty",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  turn = X",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  click(cell) -> see click",
+          "kind": null,
+          "status": "built"
+        },
+        {
+          "text": "  game over: see winner, or a full board is a draw",
+          "kind": null,
+          "status": "built"
+        }
+      ],
+      "boxes": [
+        {
+          "name": "click",
+          "lines": [
+            "put turn's mark there, swap turn",
+            "a taken cell does nothing"
+          ],
+          "status": "built",
+          "uses": []
+        },
+        {
+          "name": "winner",
+          "lines": [
+            "three in a row, a column or a diagonal -> that mark",
+            "X X X across the top -> X wins"
+          ],
+          "status": "built",
+          "uses": []
+        }
+      ],
+      "steps": [
+        {
+          "kind": "red-green",
+          "what": "a full board with no winner is a draw"
+        },
+        {
+          "kind": "refactor",
+          "what": "gameOver says who won, or draw"
+        }
+      ],
+      "files": [
+        {
+          "op": "~",
+          "path": "src/game.js",
+          "why": "a full board is a draw"
+        }
+      ],
+      "checks": [
+        {
+          "name": "node --test",
+          "ok": true
+        }
+      ],
+      "summary": "A full board with no winner is a draw. Everything is built."
+    }
+  }
+]
