@@ -90,7 +90,7 @@ function Page() {
           <Install />
           <a class="repo" href={REPO}>Source on GitHub</a>
         </div>
-        <p class="run">then <code>ogidoc --demo</code> to try it without an API key, or <code>ogidoc</code> in your&nbsp;project</p>
+        <p class="run">then <code>ogidoc --demo</code> to try it without an API key, or <code>ogidoc</code> in your project, with Claude Code, pi or any agent&nbsp;CLI</p>
       </header>
       <Clip />
       <section class="beat">
@@ -128,7 +128,7 @@ function Page() {
       <section class="beat">
         <div class="copy-col">
           <h2><span>Keep your&nbsp;chat.</span><span> Ogidoc runs beside&nbsp;it.</span></h2>
-          <p>Start a session in the background and your Claude Code or pi chat keeps the terminal for tests, the app and pull requests. It reads the session, and the turns stay between you and the plan&nbsp;agent.</p>
+          <p>Start a session in the background and your agent's chat keeps the terminal for tests, the app and pull requests. It reads the session, and the turns stay between you and the plan&nbsp;agent.</p>
         </div>
         <Beside />
       </section>

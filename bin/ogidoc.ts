@@ -25,12 +25,16 @@ Usage
   ogidoc wait [name]           wait until the agent's turn ends, then say how it went
   ogidoc stop [name]           stop a session
   ogidoc install-skill [claude|pi|both]
+  ogidoc skill                 print the chat skill, for any other agent (e.g. ogidoc skill >> AGENTS.md)
   ogidoc --demo                try it with a scripted agent, in a throwaway folder, no API key
 
 Options
   --detach                   run in the background and give the terminal back
   --open                     open the editor in your browser
   --agent <claude|pi|mock>   the agent that takes turns with you (default: claude if installed, else pi)
+  --agent-cmd "<command>"    any other agent CLI: the command runs in your project each turn, gets the
+                             prompt on stdin and in $OGIDOC_PROMPT, and prints its reply
+                             (e.g. --agent-cmd "codex exec -s workspace-write")
   --agent-arg <arg>          extra argument for the agent CLI, repeatable (e.g. --agent-arg=--model --agent-arg=sonnet)
   --script <file.json>       turns for the mock agent
   --port <n>                 port to listen on (default 4747)
@@ -42,6 +46,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     agent: { type: "string" },
+    "agent-cmd": { type: "string" },
     "agent-arg": { type: "string", multiple: true },
     script: { type: "string" },
     port: { type: "string" },
@@ -66,7 +71,7 @@ if (values.demo) {
   copyFileSync(join(DEMO_DIR, "demo.plan"), join(dir, "demo.plan"));
   process.chdir(dir);
   positionals.splice(0, positionals.length, "demo");
-  Object.assign(values, { agent: "mock", script: join(DEMO_DIR, "weekly.json"), open: !values.detach || values.open });
+  Object.assign(values, { agent: "mock", "agent-cmd": undefined, script: join(DEMO_DIR, "weekly.json"), open: !values.detach || values.open });
   console.log("This is a demo: a scripted agent plays three turns on a plan that is already written. Hand over with ⌘↵ (Ctrl+↵).");
 }
 
@@ -96,6 +101,9 @@ const commands: Record<string, () => Promise<void> | void> = {
       copyFileSync(join(AGENT_DIR, "chat", "SKILL.md"), join(dir, "SKILL.md"));
       console.log(`Installed the Ogidoc chat skill for ${name} in ${dir}`);
     }
+  },
+  skill() {
+    process.stdout.write(readFileSync(join(AGENT_DIR, "chat", "SKILL.md"), "utf8"));
   },
   list() {
     const all = sessions.list();
@@ -153,8 +161,8 @@ async function open() {
 
   // The first agent CLI on the path, else claude so the error names it.
   const installed = (cli: string) => spawnSync(process.platform === "win32" ? "where" : "which", [cli]).status === 0;
-  const agentName = values.agent || AGENTS.find(installed) || "claude";
-  const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), sleep: systemClock.sleep });
+  const agentName = values["agent-cmd"] ? "command" : values.agent || AGENTS.find(installed) || "claude";
+  const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), command: values["agent-cmd"], sleep: systemClock.sleep });
   const session = openSession({ cwd, name, agent, clock: systemClock, commit: !values["no-commit"] });
   session.save();
   const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
@@ -183,6 +191,7 @@ function detach(name: string, log: string) {
   const args = [
     name,
     ...(values.agent ? ["--agent", values.agent] : []),
+    ...(values["agent-cmd"] ? [`--agent-cmd=${values["agent-cmd"]}`] : []),
     ...(values["agent-arg"] || []).map((a) => `--agent-arg=${a}`),
     ...(values.script ? ["--script", resolve(values.script)] : []),
     ...(values.port ? ["--port", values.port] : []),

@@ -3,7 +3,7 @@
 
 // Lowercase letters, digits and dashes, so a name works in a path, a URL and a command.
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const COMMANDS = new Set(["list", "status", "wait", "stop", "install-skill"]);
+const COMMANDS = new Set(["list", "status", "wait", "stop", "install-skill", "skill"]);
 
 // A name the person typed. `weekly.plan` still reads as `weekly`. A session that already
 // exists keeps its name even when it was made before names had rules.

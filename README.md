@@ -22,7 +22,7 @@ Node 22.18 or newer.
 ```bash
 npm install -g ogidoc
 ogidoc --demo               # try it: a scripted agent, a throwaway folder, no API key
-ogidoc install-skill        # optional: teach your Claude Code and pi chat to work beside a session
+ogidoc install-skill        # optional: teach your Claude Code or pi chat to work beside a session
 ```
 
 Run the same install again to update. Working on Ogidoc itself? Clone it and run
@@ -44,14 +44,31 @@ opens or starts the session called `checkout`.
 | --- | --- |
 | `--detach` | Run in the background and give the terminal back. |
 | `--agent claude\|pi\|mock` | The agent that takes turns with you. Defaults to Claude Code if installed, else pi. |
+| `--agent-cmd "<command>"` | Any other agent CLI. See [Any agent](#any-agent). |
 | `--agent-arg <arg>` | Extra argument for the agent CLI, repeatable: `--agent-arg=--model --agent-arg=sonnet` |
 | `--no-commit` | Don't commit each agent turn. |
 | `--port <n>` | Defaults to 4747, or any free port. |
 | `--open` | Open the editor in the browser. |
 
+### Any agent
+
+Claude Code and pi are built in. Any other coding agent with a command line works too:
+give Ogidoc the command, and it runs it in your project for each turn, with the prompt
+on stdin and in `$OGIDOC_PROMPT`, and reads what it prints as the reply.
+
+```bash
+ogidoc --agent-cmd "codex exec -s workspace-write"
+ogidoc --agent-cmd 'opencode run --auto "$OGIDOC_PROMPT"'
+```
+
+The agent edits code with its own tools, as it always does. What it prints to stderr
+shows as its activity while it works. The built-in agents also carry on their own
+conversation when a reply doesn't end the turn; a command agent gets the whole prompt
+again instead.
+
 ### Next to your chat
 
-Start the session with `--detach` and keep using Claude Code or pi in the same
+Start the session with `--detach` and keep using your agent's chat in the same
 terminal for everything that isn't the plan: running tests, running the app, opening a
 PR. Your chat can read the session but never takes a turn; turns stay between you, in
 the editor, and the plan agent.
@@ -72,7 +89,8 @@ three turns on a plan that is already written, in a throwaway folder.
 
 `ogidoc install-skill [claude|pi|both]` (default both) copies the chat skill into
 `~/.claude/skills` and `~/.pi/agent/skills`, so your chat knows how to start a session,
-read it, and stay out of the plan.
+read it, and stay out of the plan. For any other agent, `ogidoc skill` prints the same
+skill, to put wherever that agent reads its instructions: `ogidoc skill >> AGENTS.md`.
 
 ## How a session goes
 
@@ -134,8 +152,10 @@ feature.plan                         the plan
   expects.
 
 Claude Code runs as `claude -p --output-format stream-json` with edit and shell tools
-allowed; pi runs as `pi -p --mode json --no-session`. Both edit code with their own
-tools and end their reply with the JSON block. Tool use streams to the editor as
+allowed, and pi as `pi -p --mode json`; when a reply doesn't end the turn, both carry on
+the same conversation with `--resume` or `--session`. A command agent runs through
+`sh -c` with the prompt on stdin and in `$OGIDOC_PROMPT`. Every agent edits code with
+its own tools and ends its reply with the JSON block. Tool use streams to the editor as
 activity.
 
 ## Layout
@@ -148,7 +168,10 @@ src/threads.ts        comment threads pinned to plan lines
 src/choices.ts        the other ways the agent offered, cycled in place
 src/plan-store.ts     where a plan lives on disk and how it is saved
 src/turn-log.ts       one commit per turn, drift, revert (git, or nothing)
-src/agents.ts         Claude Code, pi and mock adapters
+src/agents.ts         Claude Code, pi, any command, and the scripted mock
+src/sessions.ts       session names: checked, or inferred from where you are
+src/registry.ts       the sessions running on this machine
+src/client.ts         status and wait, as the chat reads a session
 src/prompt.ts         builds the turn prompt, parses the reply
 src/server.ts         the local HTTP server and its event stream
 src/types.ts          shapes shared by the server and the editor
@@ -165,10 +188,11 @@ From a clone of this repository:
 ```bash
 npm ci                # installs and builds
 npm run typecheck     # server, tests and editor
-npm test              # unit tests: diff, prompt, session with git, both adapters
+npm test              # unit tests: diff, prompt, session with git, every adapter, the CLI
 npm run test:e2e      # the built editor in Chromium against the scripted agent
 npm run test:real     # one real Claude Code turn in a temp repo (needs `claude`)
 node test/real-agent.ts pi   # same with pi (needs pi with a provider configured)
+node test/real-agent.ts --cmd "codex exec -s workspace-write --skip-git-repo-check"   # any agent CLI
 ```
 
 The pi adapter is tested against pi's JSON event format with a stand-in binary, and

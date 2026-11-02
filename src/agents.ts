@@ -33,6 +33,8 @@ interface AgentOpts {
   bin?: string;
   args?: string[];
   script?: string;
+  // The shell command a `command` agent runs for each turn.
+  command?: string;
   // Paces the mock agent's activity.
   sleep?: Clock["sleep"];
 }
@@ -53,12 +55,16 @@ interface Acc {
 export function makeAgent(name: string, opts: AgentOpts): Agent {
   if (name === "claude") return claudeAgent(opts);
   if (name === "pi") return piAgent(opts);
+  if (name === "command") {
+    if (!opts.command?.trim()) throw new Error("The command agent needs --agent-cmd.");
+    return commandAgent({ command: opts.command, env: opts.env });
+  }
   if (name === "mock") {
     if (!opts.script) throw new Error("The mock agent needs --script.");
     if (!opts.sleep) throw new Error("The mock agent needs a clock to pace its turns.");
     return mockAgent({ script: opts.script, sleep: opts.sleep });
   }
-  throw new Error(`Unknown agent "${name}". Use claude, pi or mock.`);
+  throw new Error(`Unknown agent "${name}". Use claude, pi or mock, or any agent CLI with --agent-cmd.`);
 }
 
 export const AGENTS = ["claude", "pi"];
@@ -136,6 +142,46 @@ function piAgent({ env, bin = env.OGIDOC_PI || "pi", args = [] }: AgentOpts): Ag
 function sessionId(id: string): string {
   if (!/^[\w-]+$/.test(id)) throw new Error(`"${id}" is not a session id.`);
   return id;
+}
+
+// Any agent CLI, as a shell command run in the project for each turn: the prompt goes in
+// on stdin and in $OGIDOC_PROMPT, for a CLI that takes it as an argument, and what the
+// command prints is its reply. What it prints to stderr shows as its activity. It has no
+// conversation to carry on, so a retry sends the whole prompt again.
+function commandAgent({ command, env }: { command: string; env: Env }): Agent {
+  return {
+    name: command.trim().split(/\s+/)[0].split("/").at(-1)!,
+    settingOptions: { models: [], efforts: [] },
+    acceptsModel: () => false,
+    run({ prompt, cwd, onActivity, signal }) {
+      return new Promise((resolve, reject) => {
+        // Its own process group, so stopping the turn stops whatever the command started.
+        const child = spawn("sh", ["-c", command], { cwd, env: { ...env, OGIDOC_PROMPT: prompt }, stdio: ["pipe", "pipe", "pipe"], detached: true });
+        let out = "";
+        let err = "";
+        child.stdout.on("data", (d) => { out += d; });
+        child.stderr.on("data", (d) => {
+          err += d;
+          const line = String(d).trim().split("\n").at(-1)?.trim();
+          if (line) onActivity(line.slice(0, 80));
+        });
+        child.on("error", (e) => reject(new Error(`Could not start ${command}: ${e.message}`)));
+        child.on("close", (code) => {
+          if (out.trim()) resolve(out);
+          else reject(new Error(`\`${command}\` exited with code ${code} and no reply. ${err.trim().slice(-500)}`));
+        });
+        signal?.addEventListener("abort", () => {
+          try {
+            process.kill(-child.pid!, "SIGTERM");
+          } catch {
+            child.kill("SIGTERM");
+          }
+        });
+        child.stdin.on("error", () => {});
+        child.stdin.end(prompt);
+      });
+    },
+  };
 }
 
 function textOf(message: any): string {

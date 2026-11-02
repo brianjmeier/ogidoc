@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { setTimeout } from "node:timers/promises";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeAgent } from "../src/agents.ts";
@@ -96,4 +98,53 @@ out({ type: "message_end", message: msg });
 out({ type: "agent_end", messages: [msg] });
 `);
   await assert.rejects(makeAgent("pi", { env: { PATH: process.env.PATH }, bin }).run({ prompt: "p", cwd: dir, onActivity() {} }), /security token included in the request is invalid/);
+});
+
+test("any agent CLI as a command: prompt on stdin and in $OGIDOC_PROMPT, stderr as activity, stdout as the reply", async () => {
+  const { bin, dir } = fake("myagent", `
+const fs = require("fs");
+const stdin = fs.readFileSync(0, "utf8");
+fs.writeFileSync(process.argv[1] + ".seen", JSON.stringify({ stdin, env: process.env.OGIDOC_PROMPT, cwd: process.cwd(), arg: process.argv[2] }));
+process.stderr.write("reading weekly.plan\\n");
+process.stderr.write("running the tests\\n");
+process.stdout.write("Done.\\n\\n" + ${JSON.stringify(REPLY)});
+`);
+  const activity: string[] = [];
+  const agent = makeAgent("command", { env: { PATH: process.env.PATH }, command: `${bin} "$OGIDOC_PROMPT"` });
+  assert.equal(agent.name, "myagent", "named after the command, so the editor says what runs");
+  const prompt = `PROMPT with "quotes", $dollars and \`ticks\``;
+  const out = await agent.run({ prompt, cwd: dir, onActivity: (a) => activity.push(a) });
+  assert.equal(parseReply(out).summary, "ok");
+  assert.deepEqual(activity.slice(-1), ["running the tests"]);
+  const seen = JSON.parse(readFileSync(bin + ".seen", "utf8"));
+  assert.equal(seen.stdin, prompt);
+  assert.equal(seen.env, prompt);
+  assert.equal(seen.arg, prompt, "the prompt reaches an argument unchanged, quotes and all");
+  assert.equal(realpathSync(seen.cwd), realpathSync(dir));
+});
+
+test("a command agent that prints nothing is an error, and stopping it stops what it started", async () => {
+  const quiet = makeAgent("command", { env: { PATH: process.env.PATH }, command: "echo nope >&2; exit 3" });
+  await assert.rejects(quiet.run({ prompt: "p", cwd: tmpdir(), onActivity() {} }), /exited with code 3 and no reply. nope/);
+
+  // The command starts a child of its own and waits on it; once the child has said its pid,
+  // stop the turn: the turn ends, and the child is gone too.
+  const stop = new AbortController();
+  const slow = makeAgent("command", { env: { PATH: process.env.PATH }, command: `sleep 30 & echo $! >&2; wait` });
+  let child = 0;
+  let said = () => {};
+  const started = new Promise<void>((r) => (said = r));
+  const turn = slow.run({ prompt: "p", cwd: tmpdir(), onActivity: (a) => { child = Number(a); said(); }, signal: stop.signal });
+  await started;
+  stop.abort();
+  await assert.rejects(turn, /no reply/);
+  for (let i = 0; i < 50 && running(child); i++) await setTimeout(10);
+  assert.equal(running(child), false, "the command's own children are stopped too");
+});
+
+// Whether a process still runs; one that has exited but not been reaped doesn't count.
+const running = (pid: number) => (spawnSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" }).stdout.trim().replace(/Z.*/, "") !== "");
+
+test("--agent-cmd needs a command", () => {
+  assert.throws(() => makeAgent("command", { env: {}, command: " " }), /needs --agent-cmd/);
 });

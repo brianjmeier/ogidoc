@@ -66,7 +66,9 @@ ogidoc stop [name]        # stop it, once no turn is running
 
 Without a name, Ogidoc opens the session in this folder, or starts one named after
 the folder; `ogidoc checkout --detach` starts or opens the one called `checkout`.
-Always start it with `--detach`, so the terminal stays free.
+Always start it with `--detach`, so the terminal stays free. The turns run on Claude Code
+or pi, whichever is installed (`--agent claude` or `--agent pi` to choose); for any other
+agent CLI, pass its command: `ogidoc --detach --agent-cmd "codex exec -s workspace-write"`.
 
 If `ogidoc` is not on the path, it isn't installed; the person installs it with
 `npm install -g ogidoc` (Node 22.18 or newer).

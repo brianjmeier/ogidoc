@@ -1,6 +1,6 @@
 {
   "name": "ogidoc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build software by taking turns with an agent on one pseudocode file. The real code is built underneath.",
   "homepage": "https://ogidoc.brianmeier.dev",
   "repository": {
