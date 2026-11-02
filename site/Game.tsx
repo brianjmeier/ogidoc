@@ -1,32 +1,53 @@
-import { For, createSignal } from "solid-js";
-// The game the demo's agent builds: the very files `ogidoc --demo` leaves in its folder.
-import { click, newGame, over, status } from "../demo/game/src/game.js";
+import { createSignal } from "solid-js";
 
-type Game = ReturnType<typeof newGame>;
+const CELLS = [1, 4, 2, 5, 3];
 
-// What the demo built, running: a window with the board, to play.
-export function Game() {
-  const [game, setGame] = createSignal<Game>(newGame());
+// The page the demo's agent builds, as it is: demo/game/index.html in a frame, with its
+// own plain styling. It stays an empty page until the plan is built, then loads and
+// plays X across the top row, and is the visitor's to play from there.
+export function Game(props: { ref: (api: GameApi) => void }) {
+  let frame!: HTMLIFrameElement;
+  const [src, setSrc] = createSignal("about:blank");
+  let played = false;
+  let touched = false;
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  async function play() {
+    const doc = frame.contentDocument;
+    if (!doc) return;
+    doc.addEventListener("pointerdown", (e) => { if (e.isTrusted) touched = true; });
+    await wait(700);
+    for (const n of CELLS) {
+      if (touched) return;
+      doc.querySelector<HTMLButtonElement>(`button[aria-label="Cell ${n}"]`)?.click();
+      await wait(480);
+    }
+  }
+
+  props.ref({
+    // Built: open the page and play it, once.
+    built() {
+      if (played) return;
+      played = true;
+      setSrc("/game/index.html");
+    },
+    // The scene starts over: back to an empty page, unless the visitor is playing.
+    reset() {
+      if (touched) return;
+      played = false;
+      setSrc("about:blank");
+    },
+  });
+
   return (
-    <figure class="built" aria-label="The tic-tac-toe game the demo builds, to play">
-      <div class="built-top">
-        <span class="file">tic-tac-toe · index.html</span>
-      </div>
-      <div class="built-body">
-        <div class="board">
-          <For each={game().board}>
-            {(mark, i) => (
-              <button type="button" aria-label={`Cell ${i() + 1}${mark ? `, ${mark}` : ""}`} onClick={() => setGame(click(game(), i()))}>
-                {mark ?? ""}
-              </button>
-            )}
-          </For>
-        </div>
-        <p class="status" aria-live="polite">{status(game())}</p>
-        <button type="button" class="again" style={{ visibility: over(game()) ? "visible" : "hidden" }} onClick={() => setGame(newGame())}>
-          Play again
-        </button>
-      </div>
+    <figure class="built">
+      <div class="built-top"><span class="file">index.html</span></div>
+      <iframe ref={frame} src={src()} title="The tic-tac-toe page the demo builds" onLoad={() => src() !== "about:blank" && play()} />
     </figure>
   );
+}
+
+export interface GameApi {
+  built(): void;
+  reset(): void;
 }

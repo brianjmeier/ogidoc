@@ -17,8 +17,9 @@ const LAST_HOLD_MS = 4200;
 // One looping scene: the real editor, read-only, playing a scripted session while it
 // is on screen. It pauses when scrolled away and picks up where it was.
 // `under` leaves out the Underneath drawer, for scenes that make their point in the plan.
-// `model` shows the model picker in the top bar, starting on that model.
-export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean; model?: string }) {
+// `model` shows the model picker in the top bar, starting on that model. `onStart` hears
+// each loop begin, and `onBuilt` the last turn land, held for `lastHold` milliseconds.
+export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean; model?: string; onStart?: () => void; onBuilt?: () => void; lastHold?: number }) {
   let el!: HTMLDivElement;
   let editor!: EditorApi;
   const [whose, setWhose] = createSignal<"h" | "a">("h");
@@ -52,6 +53,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
       setLast(null);
       setWhose("h");
       setModel(props.model);
+      props.onStart?.();
       await wait(START_MS);
       for (const [i, f] of props.frames.entries()) {
         if (stopped) return;
@@ -79,7 +81,9 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           setBoxAnim(null);
           setLast(f.last);
           setWhose("h");
-          await wait(i === props.frames.length - 1 ? LAST_HOLD_MS : HOLD_MS);
+          const lastTurn = i === props.frames.length - 1;
+          if (lastTurn) props.onBuilt?.();
+          await wait(lastTurn ? (props.lastHold ?? LAST_HOLD_MS) : HOLD_MS);
         }
       }
     }

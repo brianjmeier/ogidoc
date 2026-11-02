@@ -34,10 +34,12 @@ try {
     assert.equal(await page.$eval(".hero-demo .scene-top .file", (f) => f.textContent), "tic-tac-toe", `${colorScheme}: under the hero, the live editor plays the demo`);
     await page.waitForFunction(() => document.querySelectorAll(".hero-demo .ln").length >= 5, null, { timeout: 20000 });
     assert.ok(await page.$(".hero-demo .scene-top .pick .select"), `${colorScheme}: the demo shows which model the turns run on`);
-    for (const c of [1, 4, 2, 5, 3]) await page.click(`.built button[aria-label^="Cell ${c}"]`);
-    assert.equal(await page.textContent(".built .status"), "X wins", `${colorScheme}: the game the demo builds plays, and X takes the top row`);
-    await page.click(".built .again");
-    assert.equal(await page.textContent(".built .status"), "X's turn", `${colorScheme}: and starts again`);
+    assert.equal(await page.$eval(".built iframe", (f) => f.getAttribute("src")), "about:blank", `${colorScheme}: the page the demo builds is empty until it is built`);
+    const built = page.frameLocator(".built iframe");
+    // The scene plays while it is on screen.
+    await page.locator(".hero-demo").scrollIntoViewIfNeeded();
+    await built.locator(".status").filter({ hasText: "X wins" }).waitFor({ timeout: 90000 });
+    assert.equal(await built.locator('button[aria-label="Cell 1"]').textContent(), "X", `${colorScheme}: once built, the real page plays X across the top`);
     assert.doesNotMatch((await page.textContent("body")) ?? "", /underpaint|paint/i, `${colorScheme}: nothing on the page still uses the old name or the painting idea`);
 
     const height = (n: number) => page.$eval(scene(n), (s) => s.getBoundingClientRect().height);

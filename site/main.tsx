@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { Scene } from "./Scene.tsx";
-import { Game } from "./Game.tsx";
+import { Game, type GameApi } from "./Game.tsx";
 import { abstractions, choices, demo, frames, promptWithCode, styles } from "./scenes.ts";
 import "../app/style.css";
 import "./site.css";
@@ -64,6 +64,25 @@ function Beside() {
   );
 }
 
+// The demo as `ogidoc --demo` plays it, beside the page it builds.
+function Hero() {
+  let game!: GameApi;
+  return (
+    <div class="hero-demo">
+      <Scene
+        label="The demo: a model is picked, a tic-tac-toe plan is written and handed over; the agent builds it, offers another way for a taken cell, and folds settled lines into boxes"
+        model={demo.model}
+        start={demo.start}
+        frames={frames(demo.start, demo.beats)}
+        onStart={() => game.reset()}
+        onBuilt={() => game.built()}
+        lastHold={9000}
+      />
+      <Game ref={(api) => (game = api)} />
+    </div>
+  );
+}
+
 function Page() {
   return (
     <main class="site">
@@ -77,10 +96,7 @@ function Page() {
         </div>
         <p class="run">then <code>ogidoc --demo</code> to try it without an API key, or <code>ogidoc</code> in your project, with Claude Code, pi or any agent&nbsp;CLI</p>
       </header>
-      <div class="hero-demo">
-        <Scene label="The demo: a model is picked, a tic-tac-toe plan is written and handed over; the agent builds it, offers another way for a taken cell, and folds settled lines into boxes" model={demo.model} start={demo.start} frames={frames(demo.start, demo.beats)} />
-        <Game />
-      </div>
+      <Hero />
       <section class="beat">
         <div class="copy-col">
           <h2><span>The agent codes in&nbsp;seconds.</span><span> You spend minutes describing what you&nbsp;want.</span></h2>
