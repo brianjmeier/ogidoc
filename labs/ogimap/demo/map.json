@@ -1,0 +1,434 @@
+{
+ "title": "in-memory URL shortener over HTTP",
+ "nodes": [
+  {
+   "id": "client",
+   "name": "HTTP client",
+   "parent": null,
+   "kind": "external",
+   "pseudo": [
+    "browser or API caller",
+    "POST /links, GET /:code, GET /:code/stats"
+   ],
+   "code": [],
+   "status": "built"
+  },
+  {
+   "id": "http",
+   "name": "http",
+   "parent": null,
+   "kind": "entry",
+   "pseudo": [
+    "one node:http server on :3000",
+    "every request → routes.route → JSON response"
+   ],
+   "code": [
+    {
+     "file": "src/server.js",
+     "line": 5,
+     "symbol": "server"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "http.server",
+   "name": "server",
+   "parent": "http",
+   "kind": "step",
+   "pseudo": [
+    "body = POST ? readJson(req) : undefined",
+    "{ status, json, location } = route(method, url, body)",
+    "writeHead(status, content-type json, location?)",
+    "→ end(JSON.stringify(json ?? {}))"
+   ],
+   "code": [
+    {
+     "file": "src/server.js",
+     "line": 5,
+     "symbol": "server"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "http.readJson",
+   "name": "readJson",
+   "parent": "http",
+   "kind": "step",
+   "pseudo": [
+    "text = all chunks of req",
+    "→ JSON.parse(text), or {} if bad JSON"
+   ],
+   "code": [
+    {
+     "file": "src/server.js",
+     "line": 12,
+     "symbol": "readJson"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "routes",
+   "name": "routes",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "method + path → the handler that answers it"
+   ],
+   "code": [
+    {
+     "file": "src/routes.js",
+     "line": 1
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "routes.route",
+   "name": "route",
+   "parent": "routes",
+   "kind": "step",
+   "pseudo": [
+    "POST /links → shorten(body)",
+    "GET /:code/stats → stats(code)",
+    "GET /:code → follow(code)",
+    "else → 404 not found"
+   ],
+   "code": [
+    {
+     "file": "src/routes.js",
+     "line": 4,
+     "symbol": "route"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "links",
+   "name": "links",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "the link behaviours: shorten, follow, stats",
+    "returns { status, json | location }"
+   ],
+   "code": [
+    {
+     "file": "src/links.js",
+     "line": 1
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "links.shorten",
+   "name": "shorten",
+   "parent": "links",
+   "kind": "step",
+   "pseudo": [
+    "isUrl(body.url), else 400 not a url",
+    "code = makeCode()",
+    "store.save(code, url)",
+    "→ 201 { code, short: /code }"
+   ],
+   "code": [
+    {
+     "file": "src/links.js",
+     "line": 5,
+     "symbol": "shorten"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "links.follow",
+   "name": "follow",
+   "parent": "links",
+   "kind": "step",
+   "pseudo": [
+    "link = store.find(code), else 404 unknown code",
+    "store.countVisit(code)",
+    "→ 302 location: link.url"
+   ],
+   "code": [
+    {
+     "file": "src/links.js",
+     "line": 12,
+     "symbol": "follow"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "links.stats",
+   "name": "stats",
+   "parent": "links",
+   "kind": "step",
+   "pseudo": [
+    "link = store.find(code), else 404 unknown code",
+    "→ 200 { url, visits }"
+   ],
+   "code": [
+    {
+     "file": "src/links.js",
+     "line": 19,
+     "symbol": "stats"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "validate",
+   "name": "validate",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "only http and https links can be shortened"
+   ],
+   "code": [
+    {
+     "file": "src/validate.js",
+     "line": 1
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "validate.isUrl",
+   "name": "isUrl",
+   "parent": "validate",
+   "kind": "step",
+   "pseudo": [
+    "protocol = new URL(text).protocol",
+    "→ protocol in [http:, https:]",
+    "parse fails → false"
+   ],
+   "code": [
+    {
+     "file": "src/validate.js",
+     "line": 2,
+     "symbol": "isUrl"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "codes",
+   "name": "codes",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "makes short codes from ALPHABET (no l, 1, o, 0)"
+   ],
+   "code": [
+    {
+     "file": "src/codes.js",
+     "line": 1
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "codes.makeCode",
+   "name": "makeCode",
+   "parent": "codes",
+   "kind": "step",
+   "pseudo": [
+    "6 × random char from ALPHABET",
+    "→ code (no uniqueness check)"
+   ],
+   "code": [
+    {
+     "file": "src/codes.js",
+     "line": 4,
+     "symbol": "makeCode"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "store",
+   "name": "store",
+   "parent": null,
+   "kind": "store",
+   "pseudo": [
+    "in-memory Map: code → { url, visits }",
+    "lost on restart"
+   ],
+   "code": [
+    {
+     "file": "src/store.js",
+     "line": 2,
+     "symbol": "links"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "store.save",
+   "name": "save",
+   "parent": "store",
+   "kind": "step",
+   "pseudo": [
+    "links.set(code, { url, visits: 0 })"
+   ],
+   "code": [
+    {
+     "file": "src/store.js",
+     "line": 5,
+     "symbol": "save"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "store.find",
+   "name": "find",
+   "parent": "store",
+   "kind": "step",
+   "pseudo": [
+    "→ links.get(code) or undefined"
+   ],
+   "code": [
+    {
+     "file": "src/store.js",
+     "line": 6,
+     "symbol": "find"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "store.countVisit",
+   "name": "countVisit",
+   "parent": "store",
+   "kind": "step",
+   "pseudo": [
+    "links.get(code).visits++"
+   ],
+   "code": [
+    {
+     "file": "src/store.js",
+     "line": 7,
+     "symbol": "countVisit"
+    }
+   ],
+   "status": "built"
+  }
+ ],
+ "edges": [
+  {
+   "from": "client",
+   "to": "http.server",
+   "label": "request",
+   "kind": "data"
+  },
+  {
+   "from": "http.server",
+   "to": "http.readJson",
+   "label": "POST body",
+   "kind": "call"
+  },
+  {
+   "from": "http.server",
+   "to": "routes.route",
+   "label": "method, url, body",
+   "kind": "call"
+  },
+  {
+   "from": "routes.route",
+   "to": "links.shorten",
+   "label": "POST /links",
+   "kind": "call"
+  },
+  {
+   "from": "routes.route",
+   "to": "links.follow",
+   "label": "GET /:code",
+   "kind": "call"
+  },
+  {
+   "from": "routes.route",
+   "to": "links.stats",
+   "label": "GET /:code/stats",
+   "kind": "call"
+  },
+  {
+   "from": "links.shorten",
+   "to": "validate.isUrl",
+   "label": "check url",
+   "kind": "call"
+  },
+  {
+   "from": "links.shorten",
+   "to": "codes.makeCode",
+   "label": "new code",
+   "kind": "call"
+  },
+  {
+   "from": "links.shorten",
+   "to": "store.save",
+   "label": "code, url",
+   "kind": "data"
+  },
+  {
+   "from": "links.follow",
+   "to": "store.find",
+   "label": "code",
+   "kind": "call"
+  },
+  {
+   "from": "links.follow",
+   "to": "store.countVisit",
+   "label": "visits++",
+   "kind": "data"
+  },
+  {
+   "from": "links.stats",
+   "to": "store.find",
+   "label": "code",
+   "kind": "call"
+  }
+ ],
+ "flows": [
+  {
+   "id": "shorten",
+   "name": "shorten a link",
+   "steps": [
+    "client",
+    "http.server",
+    "http.readJson",
+    "routes.route",
+    "links.shorten",
+    "validate.isUrl",
+    "codes.makeCode",
+    "store.save"
+   ]
+  },
+  {
+   "id": "follow",
+   "name": "follow a short link",
+   "steps": [
+    "client",
+    "http.server",
+    "routes.route",
+    "links.follow",
+    "store.find",
+    "store.countVisit"
+   ]
+  },
+  {
+   "id": "stats",
+   "name": "see a link's visit count",
+   "steps": [
+    "client",
+    "http.server",
+    "routes.route",
+    "links.stats",
+    "store.find"
+   ]
+  }
+ ]
+}

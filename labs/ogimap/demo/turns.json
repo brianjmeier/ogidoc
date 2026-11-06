@@ -1,0 +1,47 @@
+{
+  "hints": [
+    "Try: open ▸ codes, double-click makeCode, rewrite it so it never returns a taken code, drag an arrow from codes to store, then ⌘↵",
+    "Try: double-click empty space, sketch a rateLimit box (10 shortens a minute per ip, else 429), wire routes → rateLimit → links, then ⌘↵",
+    "That's the scripted demo. Run Ogimap on your own project with a real agent: node labs/ogimap/ogimap.ts <dir>"
+  ],
+  "turns": [
+    {
+      "delay": 2400,
+      "activity": [
+        "running ls -R src test package.json; cat src/codes.js src/store.js",
+        "editing test/codes.test.js",
+        "running npm test   # red: a taken code comes back",
+        "editing src/codes.js",
+        "running npm test   # 7 pass",
+        "editing .ogimap/map.json"
+      ],
+      "copy": {
+        "src/codes.js": "turns/1/codes.js",
+        "test/codes.test.js": "turns/1/codes.test.js",
+        ".ogimap/map.json": "turns/1/map.json"
+      },
+      "reply": { "summary": "makeCode retries while store.find(code) is taken, growing to 7+ chars after 5 tries", "changed": ["codes.makeCode"] }
+    },
+    {
+      "delay": 3000,
+      "activity": [
+        "running cat src/routes.js src/server.js src/links.js",
+        "editing test/rateLimit.test.js",
+        "running npm test   # red: no rate limit yet",
+        "editing src/rateLimit.js",
+        "editing src/routes.js",
+        "editing src/server.js",
+        "running npm test   # 9 pass",
+        "editing .ogimap/map.json"
+      ],
+      "copy": {
+        "src/rateLimit.js": "turns/2/rateLimit.js",
+        "test/rateLimit.test.js": "turns/2/rateLimit.test.js",
+        "src/routes.js": "turns/2/routes.js",
+        "src/server.js": "turns/2/server.js",
+        ".ogimap/map.json": "turns/2/map.json"
+      },
+      "reply": { "summary": "per-ip rate limit: at most 10 shortens a minute, else 429 slow down", "changed": ["rateLimit", "rateLimit.allow", "routes.route", "http.server"] }
+    }
+  ]
+}

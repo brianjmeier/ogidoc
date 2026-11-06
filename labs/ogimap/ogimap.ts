@@ -1,0 +1,261 @@
+#!/usr/bin/env node
+// Ogimap: change a codebase by editing its flow map. A proof of concept on top of
+// Ogidoc's agent adapters.
+//
+//   node labs/ogimap/ogimap.ts [dir] [--agent claude|pi|mock] [--agent-cmd "<cmd>"]
+//                              [--port 4848] [--remap] [--demo] [--open]
+
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { text } from "node:stream/consumers";
+import { makeAgent, type Agent } from "../../src/agents.ts";
+import { checkMap, intentOf, type FlowMap } from "./map.ts";
+import { MAP_FILE, mapPrompt, parseReply, turnPrompt } from "./prompt.ts";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const WEB = join(HERE, "web");
+
+const { values: opts, positionals } = parseArgs({
+  allowPositionals: true,
+  options: {
+    agent: { type: "string" },
+    "agent-cmd": { type: "string" },
+    port: { type: "string", default: "4848" },
+    remap: { type: "boolean", default: false },
+    demo: { type: "boolean", default: false },
+    open: { type: "boolean", default: false },
+  },
+});
+
+// ---------- the project and its agent ----------
+
+let project = resolve(positionals[0] ?? ".");
+let agentName = opts["agent-cmd"] ? "command" : (opts.agent ?? "claude");
+let script: string | undefined;
+
+if (opts.demo) {
+  // A throwaway copy of the demo project, with its map already drawn, and a scripted agent.
+  project = mkdtempSync(join(tmpdir(), "ogimap-demo-"));
+  cpSync(join(HERE, "demo", "shortener"), project, { recursive: true });
+  mkdirSync(join(project, ".ogimap"), { recursive: true });
+  cpSync(join(HERE, "demo", "map.json"), join(project, MAP_FILE));
+  git("init", "-q");
+  git("add", "-A");
+  git("-c", "user.name=ogimap", "-c", "user.email=ogimap@localhost", "commit", "-qm", "the demo project");
+  if (!opts.agent) {
+    agentName = "mock";
+    script = join(HERE, "demo", "turns.json");
+  }
+}
+
+const agent: Agent = makeAgent(agentName, {
+  env: process.env,
+  command: opts["agent-cmd"],
+  script,
+  sleep: (ms: number) => new Promise((r) => setTimeout(r, ms)),
+});
+
+// The scripted demo says what to try next, since its agent plays the same turns whatever you edit.
+const hints: string[] = script ? (JSON.parse(readFileSync(script, "utf8")).hints ?? []) : [];
+
+const mapPath = join(project, MAP_FILE);
+const layoutPath = join(project, ".ogimap", "layout.json");
+const rulesPath = join(project, ".ogimap", "rules.md");
+
+const state = {
+  map: existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null as FlowMap | null,
+  busy: null as null | "mapping" | "turn",
+  activity: [] as string[],
+  last: null as null | { summary: string; changed: string[]; error?: string },
+  turn: 0,
+};
+
+// ---------- git: one commit per turn, so a turn can be undone ----------
+
+function git(...args: string[]): string {
+  return execFileSync("git", args, { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+const isRepo = () => existsSync(join(project, ".git"));
+const ID = ["-c", "user.name=ogimap", "-c", "user.email=ogimap@localhost"];
+
+function commitTurn(summary: string) {
+  if (!isRepo()) return;
+  try {
+    git("add", "-A");
+    git(...ID, "commit", "-qm", `ogimap: ${summary || "turn"}`);
+  } catch {}
+}
+
+function canUndo(): boolean {
+  if (!isRepo()) return false;
+  try {
+    return git("log", "-1", "--format=%s").startsWith("ogimap: ");
+  } catch {
+    return false;
+  }
+}
+
+// ---------- events to the browser ----------
+
+const clients = new Set<ServerResponse>();
+function send(ev: object) {
+  const data = `data: ${JSON.stringify(ev)}\n\n`;
+  for (const c of clients) c.write(data);
+}
+const snapshot = () => ({
+  map: state.map,
+  layout: existsSync(layoutPath) ? JSON.parse(readFileSync(layoutPath, "utf8")) : {},
+  busy: state.busy,
+  activity: state.activity.slice(-6),
+  last: state.last,
+  canUndo: canUndo(),
+  project: relative(process.cwd(), project) || ".",
+  agent: agent.name,
+  hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
+});
+const publish = () => send({ type: "state", ...snapshot() });
+
+function activity(a: string) {
+  state.activity.push(a);
+  send({ type: "activity", text: a });
+}
+
+// ---------- turns ----------
+
+async function runAgent(prompt: string): Promise<{ summary: string; changed: string[] }> {
+  let resume: string | undefined;
+  let reply = parseReply(await agent.run({ prompt, cwd: project, onActivity: activity, onSession: (id) => (resume = id) }));
+  for (let tries = 0; ; tries++) {
+    try {
+      state.map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
+      return reply;
+    } catch (e) {
+      // One chance to fix the map, in the same conversation when the CLI can carry one on.
+      if (tries > 0 || agent.name === "mock") throw e;
+      activity("the map didn't check out; asking for a fix");
+      const fix = `${MAP_FILE} is not right: ${(e as Error).message}. Fix the file, then reply with the same JSON block.`;
+      reply = parseReply(await agent.run({ prompt: resume ? fix : `${prompt}\n\n# Before you start\n\n${fix}`, cwd: project, onActivity: activity, resume }));
+    }
+  }
+}
+
+async function guarded(kind: "mapping" | "turn", work: () => Promise<{ summary: string; changed: string[] }>) {
+  state.busy = kind;
+  state.activity = [];
+  publish();
+  try {
+    const r = await work();
+    state.turn++;
+    commitTurn(r.summary);
+    state.last = r;
+  } catch (e) {
+    state.last = { summary: "", changed: [], error: (e as Error).message };
+  } finally {
+    state.busy = null;
+    publish();
+  }
+}
+
+const remap = () => guarded("mapping", () => runAgent(mapPrompt()));
+
+function turn(draft: FlowMap, focus: string[]) {
+  const before = state.map!;
+  const intent = intentOf(before, draft, focus);
+  activity("the pen is with the agent");
+  const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
+  return guarded("turn", () => runAgent(turnPrompt({ map: before, intent, rules })));
+}
+
+// ---------- http ----------
+
+const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
+const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+// Same rule as Ogidoc: a turn runs an agent that edits files, so only a page this
+// server served, on this machine, may start one.
+function trusted(req: IncomingMessage): boolean {
+  const host = req.headers.host ?? "";
+  if (!LOCAL.has(host.replace(/:\d+$/, ""))) return false;
+  if (req.method !== "POST") return true;
+  const origin = req.headers.origin;
+  if (origin && origin !== `http://${host}`) return false;
+  return (req.headers["content-type"] ?? "").startsWith("application/json");
+}
+
+function json(res: ServerResponse, status: number, body: unknown) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+// A slice of a file in the project, for the code drawer. Never outside the project.
+function codeSlice(file: string, line: number) {
+  const p = normalize(join(project, file));
+  if (!p.startsWith(project + sep) || p.includes(`${sep}.git${sep}`)) throw new Error("outside the project");
+  const lines = readFileSync(p, "utf8").split("\n");
+  const at = Math.max(1, Math.min(line || 1, lines.length));
+  const start = Math.max(1, at - 4);
+  return { file, line: at, start, lines: lines.slice(start - 1, start + 39) };
+}
+
+const server = createServer(async (req, res) => {
+  if (!trusted(req)) return json(res, 403, { error: "forbidden" });
+  const url = new URL(req.url ?? "/", "http://x");
+  try {
+    if (url.pathname === "/api/events") {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      clients.add(res);
+      res.write(`data: ${JSON.stringify({ type: "state", ...snapshot() })}\n\n`);
+      req.on("close", () => clients.delete(res));
+      return;
+    }
+    if (url.pathname === "/api/code") return json(res, 200, codeSlice(url.searchParams.get("file") ?? "", Number(url.searchParams.get("line"))));
+    if (req.method === "POST") {
+      const body = JSON.parse((await text(req)) || "{}");
+      if (url.pathname === "/api/intent") return json(res, 200, { intent: state.map ? intentOf(state.map, body.draft, body.focus ?? []) : "" });
+      if (state.busy) return json(res, 409, { error: "the agent has the pen" });
+      if (url.pathname === "/api/turn") {
+        if (!state.map) return json(res, 409, { error: "no map yet" });
+        void turn(body.draft, body.focus ?? []);
+        return json(res, 202, {});
+      }
+      if (url.pathname === "/api/remap") {
+        void remap();
+        return json(res, 202, {});
+      }
+      if (url.pathname === "/api/layout") {
+        mkdirSync(dirname(layoutPath), { recursive: true });
+        writeFileSync(layoutPath, JSON.stringify(body.layout ?? {}, null, 1));
+        return json(res, 200, {});
+      }
+      if (url.pathname === "/api/undo") {
+        if (!canUndo()) return json(res, 409, { error: "nothing to undo" });
+        git(...ID, "revert", "--no-edit", "HEAD");
+        state.map = existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null;
+        state.last = { summary: "undid the last turn", changed: [] };
+        publish();
+        return json(res, 200, {});
+      }
+      return json(res, 404, { error: "no such action" });
+    }
+    const file = normalize(join(WEB, url.pathname === "/" ? "index.html" : url.pathname));
+    if (!file.startsWith(WEB + sep)) return json(res, 404, {});
+    const body = await readFile(file);
+    res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
+    res.end(body);
+  } catch (e) {
+    json(res, 400, { error: (e as Error).message });
+  }
+});
+
+server.listen(Number(opts.port), "127.0.0.1", () => {
+  const url = `http://localhost:${opts.port}`;
+  console.log(`Ogimap on ${url}\n  project: ${project}\n  agent:   ${agent.name}`);
+  if (opts.open) spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore", detached: true }).unref();
+  if (!state.map || opts.remap) void remap();
+});

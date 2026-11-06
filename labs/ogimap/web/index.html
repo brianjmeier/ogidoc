@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ogimap</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <span class="brand">Ogimap</span>
+  <span class="where" id="where"></span>
+  <nav class="crumbs" id="crumbs" aria-label="Level"></nav>
+  <span class="spacer"></span>
+  <span class="edits" id="edits" hidden tabindex="0"></span>
+  <button id="reset" class="ghost" hidden>Reset my edits</button>
+  <button id="undo" class="ghost" hidden>Undo agent turn</button>
+  <span class="pen" id="pen"></span>
+  <button id="pass" class="primary">Pass the pen <kbd>⌘↵</kbd></button>
+</header>
+<main>
+  <aside class="flows" aria-label="Flows">
+    <h2>Flows</h2>
+    <ol id="flows"></ol>
+    <h2>Hands</h2>
+    <dl class="help">
+      <dt>click</dt><dd>select</dd>
+      <dt>dbl-click box</dt><dd>edit pseudocode</dd>
+      <dt>dbl-click space</dt><dd>sketch a new box</dd>
+      <dt>drag ● port</dt><dd>draw an arrow</dd>
+      <dt>⌫</dt><dd>cross out</dd>
+      <dt>▸ n</dt><dd>open a box</dd>
+      <dt>⌥[ ⌥]</dt><dd>other ways</dd>
+      <dt>⌘↵</dt><dd>pass the pen</dd>
+    </dl>
+  </aside>
+  <section class="viewport" id="viewport" tabindex="0" aria-label="Flow map">
+    <div class="world" id="world">
+      <svg class="wires" id="wires"><defs>
+        <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs></svg>
+      <div id="boxes"></div>
+    </div>
+    <div class="empty" id="empty" hidden></div>
+    <div class="zoom"><button id="fit" class="ghost" title="Fit">fit</button></div>
+  </section>
+  <aside class="code" id="code" hidden aria-label="Code">
+    <header><span id="code-file"></span><button id="code-close" class="ghost" aria-label="Close">✕</button></header>
+    <pre id="code-body"></pre>
+  </aside>
+</main>
+<footer class="bottom">
+  <span class="legend"><i class="dot built"></i>built <i class="dot stale"></i>needs a build <i class="dot proposal"></i>proposal <i class="sw human"></i>your edit <i class="sw agent"></i>agent's turn</span>
+  <span class="activity" id="activity"></span>
+</footer>
+<pre class="intent" id="intent" hidden></pre>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
