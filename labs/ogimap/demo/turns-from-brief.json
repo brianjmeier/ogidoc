@@ -1,0 +1,51 @@
+{
+ "hints": [
+  "",
+  "The plan is the green on the map. Edit any box, or pass the pen with no edits to build it (⌘↵)",
+  "Task done. Everything on its map is built. Start a new task, or run Ogimap on your own project: node labs/ogimap/ogimap.ts <dir>"
+ ],
+ "turns": [
+  {
+   "delay": 2400,
+   "activity": [
+    "reading src/server.js",
+    "reading src/routes.js",
+    "reading src/links.js",
+    "reading src/store.js",
+    "writing .ogimap/map.json"
+   ],
+   "copy": {
+    ".ogimap/map.json": "turns/frame/map.json"
+   },
+   "reply": {
+    "summary": "the map for this task: createdAt in store.save, a new isExpired, 410 from follow and stats, and a test"
+   }
+  },
+  {
+   "delay": 3000,
+   "activity": [
+    "editing test/links.test.js",
+    "running npm test   # red: an expired link still redirects",
+    "editing src/store.js",
+    "editing src/links.js",
+    "running npm test   # 5 pass",
+    "editing .ogimap/map.json"
+   ],
+   "copy": {
+    "src/links.js": "turns/build/links.js",
+    "src/store.js": "turns/build/store.js",
+    "test/links.test.js": "turns/build/links.test.js",
+    ".ogimap/map.json": "turns/build/map.json"
+   },
+   "reply": {
+    "summary": "Links expire 7 days after creation: createdAt stored, isExpired check, 410 on follow/stats, tests with a mocked clock",
+    "changed": [
+     "links.isExpired",
+     "links.follow",
+     "links.stats",
+     "store.save"
+    ]
+   }
+  }
+ ]
+}

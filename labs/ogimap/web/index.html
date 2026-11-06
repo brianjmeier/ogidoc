@@ -15,11 +15,27 @@
   <span class="edits" id="edits" hidden tabindex="0"></span>
   <button id="reset" class="ghost" hidden>Reset my edits</button>
   <button id="undo" class="ghost" hidden>Undo agent turn</button>
+  <button id="newtask" class="ghost" hidden>New task</button>
   <span class="pen" id="pen"></span>
   <button id="pass" class="primary">Pass the pen <kbd>⌘↵</kbd></button>
 </header>
 <main>
+  <section class="scope" id="scope" hidden aria-label="Task">
+    <div class="scope-head">
+      <h1 id="scope-title">What do you want to change?</h1>
+      <p>Start with a prompt. The agent reads the code (it can't change anything yet) and asks only what it can't find out. When the task is clear, it draws the map, and from then on you work on the map.</p>
+    </div>
+    <ol class="thread" id="thread"></ol>
+    <form class="composer" id="composer">
+      <textarea id="say" rows="3" spellcheck="true" placeholder="e.g. short links should expire after a while"></textarea>
+      <button class="primary" id="send">Send <kbd>⌘↵</kbd></button>
+    </form>
+  </section>
   <aside class="flows" aria-label="Flows">
+    <div class="taskchip" id="taskchip" hidden>
+      <button id="taskchip-btn" aria-expanded="false"></button>
+      <ol class="thread mini" id="minithread" hidden></ol>
+    </div>
     <h2>Flows</h2>
     <ol id="flows"></ol>
     <h2>Hands</h2>

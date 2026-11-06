@@ -30,7 +30,7 @@ const events = new EventSource("/api/events");
 let activity = [];
 events.onmessage = (m) => {
   const ev = JSON.parse(m.data);
-  if (ev.type === "activity") { activity.push(ev.text); showActivity(); }
+  if (ev.type === "activity") { activity.push(ev.text); showActivity(); if (scoping()) renderTask(); }
   if (ev.type === "state") receive(ev);
 };
 
@@ -251,6 +251,7 @@ const boxesEl = $("boxes"), wiresEl = $("wires"), world = $("world"), viewport =
 
 function render() {
   renderTop();
+  renderTask();
   renderFlows();
   const empty = $("empty");
   if (!S.draft) {
@@ -498,11 +499,13 @@ function editedInside(id) {
 }
 
 // The pseudocode as the person should read it: their edits in blue, crossed-out lines
-// in red, another way in grey, and lines the agent just wrote in green.
+// in red, another way in grey, and the task's plan (what will change) in green.
 function pseudoView(n, o, wayK) {
   if (wayK) return n.pseudo.map((l) => ["way", l]);
   if (!o || n.by === "human") return n.pseudo.map((l) => ["add", l]);
   if (n.removed) return n.pseudo.map((l) => ["", l]);
+  if (o.status === "proposal" && n.pseudo.join("\n") === o.pseudo.join("\n")) return n.pseudo.map((l) => ["plan-add", l]);
+  if (o.was && n.pseudo.join("\n") === o.pseudo.join("\n")) return diff(o.was, o.pseudo).map(([op, l]) => [op === "=" ? "" : op === "+" ? "plan-add" : "plan-del", l]);
   const ops = diff(o.pseudo, n.pseudo);
   const fresh = S.fresh.has(n.id);
   return ops.map(([op, l]) => [op === "=" ? (fresh && n.status !== "built" ? "agentnew" : "") : op === "+" ? "add" : "del", l]);
@@ -523,6 +526,105 @@ function diff(a, b) {
   while (j < m) out.push(["+", b[j++]]);
   return out;
 }
+
+// ---------- the task: prompt, scoping chat, then the map ----------
+
+const phase = () => S.snap?.task?.phase ?? null;
+// Scoping shows while there's no task and no map, or while the task is being scoped.
+const scoping = () => (!S.snap?.task && !S.snap?.map) || phase() === "scope" || phase() === "frame";
+
+function renderTask() {
+  const task = S.snap?.task;
+  const on = scoping();
+  const scope = $("scope");
+  scope.hidden = !on;
+  scope.classList.toggle("alone", on && !S.draft);
+  viewport.hidden = on && !S.draft;
+  document.querySelector(".flows").hidden = on;
+  $("scope-title").textContent = task?.title || "What do you want to change?";
+  if (on) fillThread($("thread"), task, true);
+  $("composer").hidden = !!task && phase() !== "scope";
+  $("say").placeholder = task ? "answer, or say what's missing" : "e.g. short links should expire after a while";
+  $("send").disabled = busy();
+
+  const chip = $("taskchip");
+  chip.hidden = on || !task;
+  if (task && !on) {
+    const b = $("taskchip-btn");
+    b.innerHTML = "";
+    b.append(task.title || "task");
+    const small = document.createElement("small");
+    small.textContent = phase() === "done" ? "✓ done: everything on its map is built" : "the plan is the green on the map";
+    b.appendChild(small);
+    fillThread($("minithread"), task, false);
+  }
+}
+
+function fillThread(ol, task, live) {
+  ol.innerHTML = "";
+  for (const m of task?.messages ?? []) {
+    const li = document.createElement("li");
+    li.className = m.who;
+    // `names` in the agent's words read as code.
+    for (const [i, part] of m.text.split("`").entries()) {
+      if (i % 2) { const c = document.createElement("code"); c.textContent = part; li.appendChild(c); continue; }
+      for (const [j, bit] of part.split("**").entries()) {
+        if (j % 2) { const b = document.createElement("b"); b.textContent = bit; li.appendChild(b); }
+        else li.append(bit);
+      }
+    }
+    if (m.refs?.length) {
+      const refs = document.createElement("div");
+      refs.className = "refs";
+      for (const r of m.refs.slice(0, 6)) {
+        const b = document.createElement("button");
+        b.textContent = `${r.file.split("/").at(-1)}${r.line ? `:${r.line}` : ""}`;
+        b.title = r.file;
+        b.onclick = () => openCode(r);
+        refs.appendChild(b);
+      }
+      li.appendChild(refs);
+    }
+    ol.appendChild(li);
+  }
+  if (!live) return;
+  if (task?.brief && phase() !== "scope") {
+    const li = document.createElement("li");
+    li.className = "ready";
+    li.innerHTML = "<b>Ready to build.</b> ";
+    li.append(task.brief);
+    ol.appendChild(li);
+  }
+  if (busy()) {
+    const li = document.createElement("li");
+    li.className = "live";
+    li.textContent = S.snap.busy === "framing" ? `drawing the map for this task · ${activity.at(-1) ?? ""}` : `reading the code · ${activity.at(-1) ?? ""}`;
+    ol.appendChild(li);
+  }
+  ol.scrollTop = ol.scrollHeight;
+}
+
+async function say() {
+  const text = $("say").value.trim();
+  if (busy() || (!text && !S.snap?.task)) return;
+  try {
+    if (S.snap?.task) await post("/api/ask", { text });
+    else await post("/api/task", { prompt: text });
+    $("say").value = "";
+  } catch (e) {
+    showActivity(e.message, "error");
+  }
+}
+$("composer").addEventListener("submit", (ev) => { ev.preventDefault(); say(); });
+$("say").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); say(); }
+});
+$("taskchip-btn").onclick = () => {
+  const open = $("minithread").hidden;
+  $("minithread").hidden = !open;
+  $("taskchip-btn").setAttribute("aria-expanded", String(open));
+};
+$("newtask").onclick = () => post("/api/task/close").catch((e) => showActivity(e.message, "error"));
 
 // ---------- flows: a path you can watch ----------
 
@@ -618,9 +720,15 @@ function renderTop() {
   $("reset").hidden = !n || busy();
   $("undo").hidden = !snap?.canUndo || busy();
   const pen = $("pen");
-  pen.textContent = busy() ? (snap.busy === "mapping" ? "agent is mapping" : "agent's pen") : "your pen";
+  pen.textContent = busy()
+    ? ({ mapping: "agent is mapping", scoping: "agent is reading", framing: "agent is drawing" }[snap.busy] ?? "agent's pen")
+    : scoping() ? "your turn to say" : "your pen";
   pen.className = busy() ? "pen agent" : "pen";
   $("pass").disabled = busy() || !S.draft;
+  $("pass").hidden = scoping();
+  $("newtask").hidden = busy() || scoping() || !(phase() === "done" || !snap?.task);
+  if (phase() === "done") $("newtask").className = "primary";
+  else $("newtask").className = "ghost";
   showActivity();
 }
 
@@ -775,7 +883,7 @@ function startWire(ev, from) {
 addEventListener("keydown", (ev) => {
   if (ev.target.closest?.("input,textarea,select")) return;
   const mod = ev.metaKey || ev.ctrlKey;
-  if (ev.key === "Enter" && mod) { ev.preventDefault(); return pass(); }
+  if (ev.key === "Enter" && mod) { ev.preventDefault(); return scoping() ? say() : pass(); }
   if (ev.key === "Escape") { S.selected.clear(); S.edge = null; S.flow = null; return render(); }
   if ((ev.key === "Backspace" || ev.key === "Delete") && (S.selected.size || S.edge)) { ev.preventDefault(); return toggleRemove(); }
   if (ev.key === "Enter" && S.selected.size === 1 && !busy()) { ev.preventDefault(); S.editing = [...S.selected][0]; return render(); }

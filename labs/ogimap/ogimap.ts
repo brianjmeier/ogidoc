@@ -4,19 +4,25 @@
 //
 //   node labs/ogimap/ogimap.ts [dir] [--agent claude|pi|mock] [--agent-cmd "<cmd>"]
 //                              [--port 4848] [--remap] [--demo] [--open]
+//                              [--task "<prompt>"] [--task-file brief.json] [--script turns.json] [--detach]
+//
+// A task goes: scope (a read-only chat, from your prompt) → frame (the agent draws the
+// part of the map the task touches, with the change on it) → map (you and the agent
+// take turns on the map; code is built underneath) → done.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
+import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
 import { checkMap, intentOf, type FlowMap } from "./map.ts";
-import { MAP_FILE, mapPrompt, parseReply, turnPrompt } from "./prompt.ts";
+import { MAP_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB = join(HERE, "web");
@@ -30,27 +36,49 @@ const { values: opts, positionals } = parseArgs({
     remap: { type: "boolean", default: false },
     demo: { type: "boolean", default: false },
     open: { type: "boolean", default: false },
+    task: { type: "string" },
+    script: { type: "string" },
+    detach: { type: "boolean", default: false },
+    "task-file": { type: "string" },
   },
 });
 
 // ---------- the project and its agent ----------
 
 let project = resolve(positionals[0] ?? ".");
+
+// --detach: run the server in the background and print where it listens, as JSON, once
+// it does. A Tend station starts Ogimap this way.
+if (opts.detach && !opts.demo) {
+  const serverFile = join(project, ".ogimap", "server.json");
+  rmSync(serverFile, { force: true });
+  const args = process.argv.slice(1).filter((a) => a !== "--detach");
+  spawn(process.execPath, args, { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
+  for (const until = Date.now() + 15_000; Date.now() < until; await new Promise((r) => setTimeout(r, 150))) {
+    if (existsSync(serverFile)) {
+      process.stdout.write(readFileSync(serverFile, "utf8") + "\n");
+      process.exit(0);
+    }
+  }
+  console.error(`Ogimap didn't start in ${project}.`);
+  process.exit(1);
+}
 let agentName = opts["agent-cmd"] ? "command" : (opts.agent ?? "claude");
-let script: string | undefined;
+let script: string | undefined = opts.script && resolve(opts.script);
+if (script && !opts.agent) agentName = "mock";
 
 if (opts.demo) {
   // A throwaway copy of the demo project, with its map already drawn, and a scripted agent.
   project = mkdtempSync(join(tmpdir(), "ogimap-demo-"));
   cpSync(join(HERE, "demo", "shortener"), project, { recursive: true });
   mkdirSync(join(project, ".ogimap"), { recursive: true });
-  cpSync(join(HERE, "demo", "map.json"), join(project, MAP_FILE));
   git("init", "-q");
   git("add", "-A");
   git("-c", "user.name=ogimap", "-c", "user.email=ogimap@localhost", "commit", "-qm", "the demo project");
   if (!opts.agent) {
     agentName = "mock";
-    script = join(HERE, "demo", "turns.json");
+    // A task scoped elsewhere (a Tend session) starts at its map: the script without the scoping.
+    script ??= join(HERE, "demo", opts["task-file"] ? "turns-from-brief.json" : "turns.json");
   }
 }
 
@@ -61,16 +89,23 @@ const agent: Agent = makeAgent(agentName, {
   sleep: (ms: number) => new Promise((r) => setTimeout(r, ms)),
 });
 
+// Scoping only reads. Claude Code can be held to that; other CLIs are told so.
+const reader: Agent = agentName === "claude"
+  ? makeAgent("claude", { env: process.env, args: ["--disallowedTools", "Edit,Write,NotebookEdit,Bash"] })
+  : agent;
+
 // The scripted demo says what to try next, since its agent plays the same turns whatever you edit.
 const hints: string[] = script ? (JSON.parse(readFileSync(script, "utf8")).hints ?? []) : [];
 
 const mapPath = join(project, MAP_FILE);
 const layoutPath = join(project, ".ogimap", "layout.json");
 const rulesPath = join(project, ".ogimap", "rules.md");
+const taskPath = join(project, ".ogimap", "task.json");
 
 const state = {
   map: existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null as FlowMap | null,
-  busy: null as null | "mapping" | "turn",
+  busy: null as null | "mapping" | "turn" | "scoping" | "framing",
+  task: (existsSync(taskPath) ? JSON.parse(readFileSync(taskPath, "utf8")) : null) as Task | null,
   activity: [] as string[],
   last: null as null | { summary: string; changed: string[]; error?: string },
   turn: 0,
@@ -115,13 +150,15 @@ const snapshot = () => ({
   activity: state.activity.slice(-6),
   last: state.last,
   canUndo: canUndo(),
-  project: relative(process.cwd(), project) || ".",
+  project: relative(process.cwd(), project).startsWith("..") ? basename(project) : relative(process.cwd(), project) || ".",
   agent: agent.name,
   hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
+  task: state.task,
 });
 const publish = () => send({ type: "state", ...snapshot() });
 
 function activity(a: string) {
+  a = a.replaceAll(project + sep, "");
   state.activity.push(a);
   send({ type: "activity", text: a });
 }
@@ -145,7 +182,7 @@ async function runAgent(prompt: string): Promise<{ summary: string; changed: str
   }
 }
 
-async function guarded(kind: "mapping" | "turn", work: () => Promise<{ summary: string; changed: string[] }>) {
+async function guarded(kind: "mapping" | "turn" | "framing", work: () => Promise<{ summary: string; changed: string[] }>) {
   state.busy = kind;
   state.activity = [];
   publish();
@@ -169,7 +206,91 @@ function turn(draft: FlowMap, focus: string[]) {
   const intent = intentOf(before, draft, focus);
   activity("the pen is with the agent");
   const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
-  return guarded("turn", () => runAgent(turnPrompt({ map: before, intent, rules })));
+  return guarded("turn", async () => {
+    const r = await runAgent(turnPrompt({ map: before, intent, rules, task: state.task }));
+    // The task is done when nothing on its map waits for a build.
+    if (state.task && state.map && !state.map.nodes.some((n) => n.status === "stale" || n.status === "proposal")) {
+      state.task.phase = "done";
+      saveTask();
+    }
+    return r;
+  });
+}
+
+// ---------- tasks: prompt → scope → frame → map ----------
+
+function saveTask() {
+  mkdirSync(dirname(taskPath), { recursive: true });
+  if (state.task) writeFileSync(taskPath, JSON.stringify(state.task, null, 1));
+}
+
+async function scope(said: string) {
+  const task = state.task!;
+  task.messages.push({ who: "you", text: said });
+  saveTask();
+  state.busy = "scoping";
+  state.activity = [];
+  publish();
+  try {
+    const text = await reader.run({
+      prompt: scopePrompt({ task, map: state.map, said }),
+      cwd: project,
+      onActivity: activity,
+      resume: task.session,
+      onSession: (id) => (task.session = id),
+    });
+    const r = parseScope(text);
+    task.messages.push({ who: "agent", text: r.text, refs: r.refs });
+    if (r.title) task.title = r.title;
+    if (r.ready) {
+      task.brief = r.brief;
+      task.phase = "frame";
+    }
+    state.last = null;
+    state.turn++;
+  } catch (e) {
+    state.last = { summary: "", changed: [], error: (e as Error).message };
+  } finally {
+    saveTask();
+    state.busy = null;
+    publish();
+  }
+  if (task.phase === "frame") await frame();
+}
+
+// Framing may only write the map. Anything else it touched goes back as it was.
+function changedFiles(): Set<string> {
+  if (!isRepo()) return new Set();
+  return new Set(git("status", "--porcelain", "-uall").split("\n").filter(Boolean).map((l) => l.slice(3)));
+}
+
+async function frame() {
+  const before = changedFiles();
+  await guarded("framing", async () => {
+    const r = await runAgent(framePrompt({ task: state.task!, map: state.map }));
+    for (const f of changedFiles()) {
+      if (before.has(f) || f.startsWith(".ogimap/")) continue;
+      activity(`framing may not change ${f}; put back`);
+      try { git("checkout", "--", f); } catch { try { git("rm", "-qf", "--cached", f); } catch {} rmSync(join(project, f), { force: true }); }
+    }
+    state.task!.phase = "map";
+    saveTask();
+    return { summary: r.summary || `the map for: ${state.task!.title}`, changed: state.map!.nodes.filter((n) => n.status !== "built").map((n) => n.id) };
+  });
+}
+
+function startTask(body: { prompt?: string; title?: string; brief?: string; messages?: Task["messages"] }) {
+  const prompt = String(body.prompt ?? "").trim();
+  if (!prompt) throw new Error("a task starts with a prompt");
+  state.task = { prompt, title: body.title, phase: "scope", messages: body.messages ?? [] };
+  state.turn = 0;
+  // A task scoped somewhere else (a Tend session, say) goes straight to its map.
+  if (body.brief) {
+    state.task.brief = body.brief;
+    state.task.phase = "frame";
+    saveTask();
+    void frame();
+  } else void scope(prompt);
 }
 
 // ---------- http ----------
@@ -214,6 +335,7 @@ const server = createServer(async (req, res) => {
       req.on("close", () => clients.delete(res));
       return;
     }
+    if (url.pathname === "/api/state") return json(res, 200, snapshot());
     if (url.pathname === "/api/code") return json(res, 200, codeSlice(url.searchParams.get("file") ?? "", Number(url.searchParams.get("line"))));
     if (req.method === "POST") {
       const body = JSON.parse((await text(req)) || "{}");
@@ -223,6 +345,21 @@ const server = createServer(async (req, res) => {
         if (!state.map) return json(res, 409, { error: "no map yet" });
         void turn(body.draft, body.focus ?? []);
         return json(res, 202, {});
+      }
+      if (url.pathname === "/api/task") {
+        startTask(body);
+        return json(res, 202, {});
+      }
+      if (url.pathname === "/api/ask") {
+        if (state.task?.phase !== "scope") return json(res, 409, { error: "not scoping" });
+        void scope(String(body.text ?? "").trim() || "go on");
+        return json(res, 202, {});
+      }
+      if (url.pathname === "/api/task/close") {
+        state.task = null;
+        rmSync(taskPath, { force: true });
+        publish();
+        return json(res, 200, {});
       }
       if (url.pathname === "/api/remap") {
         void remap();
@@ -254,8 +391,16 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(Number(opts.port), "127.0.0.1", () => {
-  const url = `http://localhost:${opts.port}`;
+  const port = (server.address() as AddressInfo).port;
+  const url = `http://localhost:${port}`;
+  // Where to find this server, for whoever started it in the background (a Tend station).
+  mkdirSync(join(project, ".ogimap"), { recursive: true });
+  writeFileSync(join(project, ".ogimap", "server.json"), JSON.stringify({ port, pid: process.pid, url }));
+  const ignore = join(project, ".ogimap", ".gitignore");
+  if (!existsSync(ignore)) writeFileSync(ignore, "server.json\n");
   console.log(`Ogimap on ${url}\n  project: ${project}\n  agent:   ${agent.name}`);
   if (opts.open) spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore", detached: true }).unref();
-  if (!state.map || opts.remap) void remap();
+  if (opts["task-file"]) startTask(JSON.parse(readFileSync(opts["task-file"], "utf8")));
+  else if (opts.task) startTask({ prompt: opts.task });
+  else if (opts.remap) void remap();
 });

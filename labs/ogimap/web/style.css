@@ -170,3 +170,35 @@ main { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relati
 @media (max-width: 760px) { .flows { display: none; } .code { position: absolute; inset: 50% 0 0 0; width: auto; z-index: 20; } }
 /* A port is small to look at but easy to grab, even zoomed out. */
 .port::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; }
+
+/* ---------- the task: scoping, before there is a map ---------- */
+.scope { flex: 1; min-width: 0; max-width: 760px; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface); }
+.scope.alone { max-width: none; align-items: center; }
+.scope.alone > * { width: min(720px, 100%); }
+.scope-head { padding: 22px 22px 6px; }
+.scope-head h1 { font: italic 600 24px/1.2 var(--font-brand); margin: 0 0 6px; }
+.scope-head p { margin: 0; color: var(--muted); max-width: 60ch; }
+.thread { list-style: none; margin: 0; padding: 14px 22px; display: flex; flex-direction: column; gap: 12px; overflow: auto; flex: 1; }
+.thread li { max-width: 92%; padding: 9px 12px; border-radius: 10px; white-space: pre-wrap; line-height: 1.5; }
+.thread li.you { align-self: flex-end; background: var(--human-tint); color: var(--human); border: 1px solid color-mix(in srgb, var(--human) 25%, transparent); }
+.thread li.agent { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--line); }
+.thread li.agent code { font: 12px var(--font-mono); background: var(--sym-tint); color: var(--sym); padding: 0 3px; border-radius: 3px; }
+.thread li.live { color: var(--agent); font: 12px var(--font-mono); background: none; border: 1px dashed var(--agent); }
+.thread li.live::before { content: "● "; animation: blink 1s infinite; }
+.thread li.ready { align-self: stretch; max-width: none; background: var(--agent-tint); border: 1px solid var(--agent); color: var(--ink); }
+.thread li.ready b { color: var(--agent); }
+.thread .refs { padding: 6px 0 0; }
+.composer { display: flex; gap: 8px; align-items: flex-end; padding: 12px 22px 18px; border-top: 1px solid var(--line); }
+.composer textarea { flex: 1; font: 14px/1.5 var(--font-ui); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; resize: none; outline: none; }
+.composer textarea:focus { border-color: var(--human); box-shadow: 0 0 0 3px var(--human-tint); }
+.taskchip { margin: 0 0 16px; }
+.taskchip > button { width: 100%; text-align: left; border: 1px solid var(--agent); background: var(--agent-tint); border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+.taskchip > button small { display: block; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.thread.mini { padding: 8px 0 0; gap: 6px; max-height: 50vh; font-size: 11.5px; }
+.thread.mini li { max-width: 100%; padding: 6px 8px; }
+.box.status-proposal { border: 1.5px dashed var(--agent); background: color-mix(in srgb, var(--agent) 4%, var(--surface)); }
+.box.status-stale { border-color: var(--agent); }
+.pseudo li.plan-add { color: var(--agent); background: var(--agent-tint); }
+.pseudo li.plan-add::before { content: "+ "; opacity: 0.6; }
+.pseudo li.plan-del { color: var(--muted); text-decoration: line-through; }
+.done-bar { color: var(--agent); }

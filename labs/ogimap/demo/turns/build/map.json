@@ -1,26 +1,13 @@
 {
- "title": "in-memory URL shortener over HTTP",
+ "title": "In-memory URL shortener over HTTP",
  "nodes": [
-  {
-   "id": "client",
-   "name": "HTTP client",
-   "parent": null,
-   "kind": "external",
-   "pseudo": [
-    "browser or API caller",
-    "POST /links, GET /:code, GET /:code/stats"
-   ],
-   "code": [],
-   "status": "built"
-  },
   {
    "id": "http",
    "name": "http",
    "parent": null,
    "kind": "entry",
    "pseudo": [
-    "one node:http server on :3000",
-    "every request → routes.route → JSON response"
+    "one node:http server; every request → route()"
    ],
    "code": [
     {
@@ -35,12 +22,12 @@
    "id": "http.server",
    "name": "server",
    "parent": "http",
-   "kind": "step",
+   "kind": "entry",
    "pseudo": [
     "body = POST ? readJson(req) : undefined",
     "{ status, json, location } = route(method, url, body)",
-    "writeHead(status, content-type json, location?)",
-    "→ end(JSON.stringify(json ?? {}))"
+    "writeHead(status, location?)",
+    "end(JSON.stringify(json ?? {}))"
    ],
    "code": [
     {
@@ -52,35 +39,18 @@
    "status": "built"
   },
   {
-   "id": "http.readJson",
-   "name": "readJson",
-   "parent": "http",
-   "kind": "step",
-   "pseudo": [
-    "text = all chunks of req",
-    "→ JSON.parse(text), or {} if bad JSON"
-   ],
-   "code": [
-    {
-     "file": "src/server.js",
-     "line": 12,
-     "symbol": "readJson"
-    }
-   ],
-   "status": "built"
-  },
-  {
    "id": "routes",
    "name": "routes",
    "parent": null,
    "kind": "module",
    "pseudo": [
-    "method + path → the handler that answers it"
+    "method + path → the links handler that answers it"
    ],
    "code": [
     {
      "file": "src/routes.js",
-     "line": 1
+     "line": 4,
+     "symbol": "route"
     }
    ],
    "status": "built"
@@ -111,8 +81,8 @@
    "parent": null,
    "kind": "module",
    "pseudo": [
-    "the link behaviours: shorten, follow, stats",
-    "returns { status, json | location }"
+    "create, follow and report on short links",
+    "owns link lifetime: LINK_TTL = 7 days"
    ],
    "code": [
     {
@@ -128,15 +98,15 @@
    "parent": "links",
    "kind": "step",
    "pseudo": [
-    "isUrl(body.url), else 400 not a url",
+    "isUrl(body.url) else → 400 not a url",
     "code = makeCode()",
-    "store.save(code, url)",
+    "store.save(code, body.url)",
     "→ 201 { code, short: /code }"
    ],
    "code": [
     {
      "file": "src/links.js",
-     "line": 5,
+     "line": 14,
      "symbol": "shorten"
     }
    ],
@@ -148,14 +118,16 @@
    "parent": "links",
    "kind": "step",
    "pseudo": [
-    "link = store.find(code), else 404 unknown code",
+    "link = store.find(code)",
+    "!link → 404 unknown code",
+    "isExpired(link) → 410 { error: \"link expired\" }  // no visit counted",
     "store.countVisit(code)",
     "→ 302 location: link.url"
    ],
    "code": [
     {
      "file": "src/links.js",
-     "line": 12,
+     "line": 21,
      "symbol": "follow"
     }
    ],
@@ -167,14 +139,68 @@
    "parent": "links",
    "kind": "step",
    "pseudo": [
-    "link = store.find(code), else 404 unknown code",
+    "link = store.find(code)",
+    "!link → 404 unknown code",
+    "isExpired(link) → 410 { error: \"link expired\" }",
     "→ 200 { url, visits }"
    ],
    "code": [
     {
      "file": "src/links.js",
-     "line": 19,
+     "line": 29,
      "symbol": "stats"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "links.isExpired",
+   "name": "isExpired",
+   "parent": "links",
+   "kind": "step",
+   "pseudo": [
+    "LINK_TTL = 7 * 24 * 60 * 60 * 1000",
+    "isExpired(link) = Date.now() - link.createdAt > LINK_TTL"
+   ],
+   "code": [
+    {
+     "file": "src/links.js",
+     "line": 8,
+     "symbol": "isExpired"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "codes",
+   "name": "codes",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "random short codes"
+   ],
+   "code": [
+    {
+     "file": "src/codes.js",
+     "line": 4,
+     "symbol": "makeCode"
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "codes.makeCode",
+   "name": "makeCode",
+   "parent": "codes",
+   "kind": "step",
+   "pseudo": [
+    "6 random chars from ALPHABET (no l, 1, o, 0)"
+   ],
+   "code": [
+    {
+     "file": "src/codes.js",
+     "line": 4,
+     "symbol": "makeCode"
     }
    ],
    "status": "built"
@@ -185,25 +211,7 @@
    "parent": null,
    "kind": "module",
    "pseudo": [
-    "only http and https links can be shortened"
-   ],
-   "code": [
-    {
-     "file": "src/validate.js",
-     "line": 1
-    }
-   ],
-   "status": "built"
-  },
-  {
-   "id": "validate.isUrl",
-   "name": "isUrl",
-   "parent": "validate",
-   "kind": "step",
-   "pseudo": [
-    "protocol = new URL(text).protocol",
-    "→ protocol in [http:, https:]",
-    "parse fails → false"
+    "input checks"
    ],
    "code": [
     {
@@ -215,58 +223,22 @@
    "status": "built"
   },
   {
-   "id": "codes",
-   "name": "codes",
-   "parent": null,
-   "kind": "module",
+   "id": "validate.isUrl",
+   "name": "isUrl",
+   "parent": "validate",
+   "kind": "step",
    "pseudo": [
-    "makes short codes from ALPHABET (no l, 1, o, 0)",
-    "asks store which codes are taken"
+    "new URL(text).protocol in [http:, https:]",
+    "parse error → false"
    ],
    "code": [
     {
-     "file": "src/codes.js",
-     "line": 1
+     "file": "src/validate.js",
+     "line": 2,
+     "symbol": "isUrl"
     }
    ],
    "status": "built"
-  },
-  {
-   "id": "codes.makeCode",
-   "name": "makeCode",
-   "parent": "codes",
-   "kind": "step",
-   "pseudo": [
-    "6 × random char from ALPHABET",
-    "retry while store.find(code) exists",
-    "after 5 tries, grow to 7 chars (then 8 after 5 more, …)",
-    "→ code, never one already taken"
-   ],
-   "code": [
-    {
-     "file": "src/codes.js",
-     "line": 14,
-     "symbol": "makeCode"
-    }
-   ],
-   "status": "built",
-   "ways": [
-    {
-     "pseudo": [
-      "6 × random char from ALPHABET",
-      "store.save refuses a taken code",
-      "shorten retries makeCode until save succeeds",
-      "→ code, never one already taken"
-     ]
-    },
-    {
-     "pseudo": [
-      "n = next counter value",
-      "code = n in base-32 over ALPHABET",
-      "→ code, unique by construction (short but guessable)"
-     ]
-    }
-   ]
   },
   {
    "id": "store",
@@ -274,14 +246,13 @@
    "parent": null,
    "kind": "store",
    "pseudo": [
-    "in-memory Map: code → { url, visits }",
-    "lost on restart"
+    "in-memory Map: code → { url, visits, createdAt }"
    ],
    "code": [
     {
      "file": "src/store.js",
-     "line": 2,
-     "symbol": "links"
+     "line": 4,
+     "symbol": "store"
     }
    ],
    "status": "built"
@@ -292,7 +263,7 @@
    "parent": "store",
    "kind": "step",
    "pseudo": [
-    "links.set(code, { url, visits: 0 })"
+    "links.set(code, { url, visits: 0, createdAt: Date.now() })"
    ],
    "code": [
     {
@@ -309,7 +280,7 @@
    "parent": "store",
    "kind": "step",
    "pseudo": [
-    "→ links.get(code) or undefined"
+    "links.get(code)  // undefined if unknown"
    ],
    "code": [
     {
@@ -336,25 +307,49 @@
     }
    ],
    "status": "built"
+  },
+  {
+   "id": "tests",
+   "name": "links tests",
+   "parent": null,
+   "kind": "module",
+   "pseudo": [
+    "drive route() directly, assert status + body"
+   ],
+   "code": [
+    {
+     "file": "test/links.test.js",
+     "line": 1
+    }
+   ],
+   "status": "built"
+  },
+  {
+   "id": "tests.expired",
+   "name": "expired link test",
+   "parent": "tests",
+   "kind": "step",
+   "pseudo": [
+    "code = route(POST /links).json.code",
+    "mock Date.now → 7 days + 1ms later",
+    "route(GET /code) == 410 { error: \"link expired\" }",
+    "route(GET /code/stats).status == 410",
+    "just under 7 days → still 302, visit counted"
+   ],
+   "code": [
+    {
+     "file": "test/links.test.js",
+     "line": 22
+    }
+   ],
+   "status": "built"
   }
  ],
  "edges": [
   {
-   "from": "client",
-   "to": "http.server",
-   "label": "request",
-   "kind": "data"
-  },
-  {
-   "from": "http.server",
-   "to": "http.readJson",
-   "label": "POST body",
-   "kind": "call"
-  },
-  {
    "from": "http.server",
    "to": "routes.route",
-   "label": "method, url, body",
+   "label": "every request",
    "kind": "call"
   },
   {
@@ -388,33 +383,45 @@
    "kind": "call"
   },
   {
-   "from": "codes.makeCode",
-   "to": "store.find",
-   "label": "taken?",
-   "kind": "call"
-  },
-  {
    "from": "links.shorten",
    "to": "store.save",
-   "label": "code, url",
+   "label": "code, url (+ createdAt)",
    "kind": "data"
   },
   {
    "from": "links.follow",
    "to": "store.find",
-   "label": "code",
+   "label": "look up",
+   "kind": "call"
+  },
+  {
+   "from": "links.follow",
+   "to": "links.isExpired",
+   "label": "too old?",
    "kind": "call"
   },
   {
    "from": "links.follow",
    "to": "store.countVisit",
-   "label": "visits++",
-   "kind": "data"
+   "label": "only if live",
+   "kind": "call"
   },
   {
    "from": "links.stats",
    "to": "store.find",
-   "label": "code",
+   "label": "look up",
+   "kind": "call"
+  },
+  {
+   "from": "links.stats",
+   "to": "links.isExpired",
+   "label": "too old?",
+   "kind": "call"
+  },
+  {
+   "from": "tests.expired",
+   "to": "routes.route",
+   "label": "POST then GET old link",
    "kind": "call"
   }
  ],
@@ -423,38 +430,47 @@
    "id": "shorten",
    "name": "shorten a link",
    "steps": [
-    "client",
     "http.server",
-    "http.readJson",
     "routes.route",
     "links.shorten",
     "validate.isUrl",
     "codes.makeCode",
-    "store.find",
     "store.save"
    ]
   },
   {
    "id": "follow",
-   "name": "follow a short link",
+   "name": "follow a short link (410 once expired)",
    "steps": [
-    "client",
     "http.server",
     "routes.route",
     "links.follow",
     "store.find",
+    "links.isExpired",
     "store.countVisit"
    ]
   },
   {
    "id": "stats",
-   "name": "see a link's visit count",
+   "name": "see a link's stats (410 once expired)",
    "steps": [
-    "client",
     "http.server",
     "routes.route",
     "links.stats",
-    "store.find"
+    "store.find",
+    "links.isExpired"
+   ]
+  },
+  {
+   "id": "test-expired",
+   "name": "test: expired link returns 410",
+   "steps": [
+    "tests.expired",
+    "routes.route",
+    "links.follow",
+    "links.isExpired",
+    "links.stats",
+    "links.isExpired"
    ]
   }
  ]

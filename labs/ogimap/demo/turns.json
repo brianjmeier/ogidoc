@@ -1,47 +1,119 @@
 {
-  "hints": [
-    "Try: open ▸ codes, double-click makeCode, rewrite it so it never returns a taken code, drag an arrow from codes to store, then ⌘↵",
-    "Try: double-click empty space, sketch a rateLimit box (10 shortens a minute per ip, else 429), wire routes → rateLimit → links, then ⌘↵",
-    "That's the scripted demo. Run Ogimap on your own project with a real agent: node labs/ogimap/ogimap.ts <dir>"
-  ],
-  "turns": [
-    {
-      "delay": 2400,
-      "activity": [
-        "running ls -R src test package.json; cat src/codes.js src/store.js",
-        "editing test/codes.test.js",
-        "running npm test   # red: a taken code comes back",
-        "editing src/codes.js",
-        "running npm test   # 7 pass",
-        "editing .ogimap/map.json"
-      ],
-      "copy": {
-        "src/codes.js": "turns/1/codes.js",
-        "test/codes.test.js": "turns/1/codes.test.js",
-        ".ogimap/map.json": "turns/1/map.json"
-      },
-      "reply": { "summary": "makeCode retries while store.find(code) is taken, growing to 7+ chars after 5 tries", "changed": ["codes.makeCode"] }
-    },
-    {
-      "delay": 3000,
-      "activity": [
-        "running cat src/routes.js src/server.js src/links.js",
-        "editing test/rateLimit.test.js",
-        "running npm test   # red: no rate limit yet",
-        "editing src/rateLimit.js",
-        "editing src/routes.js",
-        "editing src/server.js",
-        "running npm test   # 9 pass",
-        "editing .ogimap/map.json"
-      ],
-      "copy": {
-        "src/rateLimit.js": "turns/2/rateLimit.js",
-        "test/rateLimit.test.js": "turns/2/rateLimit.test.js",
-        "src/routes.js": "turns/2/routes.js",
-        "src/server.js": "turns/2/server.js",
-        ".ogimap/map.json": "turns/2/map.json"
-      },
-      "reply": { "summary": "per-ip rate limit: at most 10 shortens a minute, else 429 slow down", "changed": ["rateLimit", "rateLimit.allow", "routes.route", "http.server"] }
-    }
-  ]
+ "hints": [
+  "Try: type a prompt like \"short links should expire after a while\" and send it (the scripted agent plays a recorded real session)",
+  "Answer it, e.g. \"one fixed lifetime is fine, but 7 days. 410 yes.\"",
+  "",
+  "The plan is the green on the map. Edit any box, or pass the pen with no edits to build it (⌘↵)",
+  "Task done. Everything on its map is built. Start a new task, or run Ogimap on your own project: node labs/ogimap/ogimap.ts <dir>"
+ ],
+ "turns": [
+  {
+   "delay": 1800,
+   "activity": [
+    "reading src/links.js",
+    "reading src/store.js",
+    "reading src/routes.js",
+    "reading test/links.test.js"
+   ],
+   "reply": {
+    "say": "Links are created in `shorten` (`src/links.js:5`) and stored in memory by `store.save` (`src/store.js:5`) with no timestamp. To make them expire, I'd store `createdAt` and check it in `follow` and `stats`.\n\nTwo things the code doesn't settle:\n\n1. **How long do links last?** Every link could get the same lifetime (`LINK_TTL`, default 30 days), or the caller could set an optional `expiresIn` in the body of `POST /links`. **I'd pick:** one fixed lifetime for every link, with no new input to validate.\n2. **What does an expired code return?** It could be `410 Gone` or the same `404` as an unknown code. **I'd pick:** `410 {error: \"link expired\"}` for both `follow` and `stats`.",
+    "ready": false,
+    "title": "Expire short links",
+    "refs": [
+     {
+      "file": "src/links.js",
+      "line": 5
+     },
+     {
+      "file": "src/links.js",
+      "line": 12
+     },
+     {
+      "file": "src/links.js",
+      "line": 19
+     },
+     {
+      "file": "src/store.js",
+      "line": 5
+     }
+    ]
+   }
+  },
+  {
+   "delay": 1200,
+   "activity": [
+    "reading src/links.js"
+   ],
+   "reply": {
+    "say": "Ready. Links will get a fixed 7-day lifetime, and `follow` and `stats` will return `410` once a link is older than that. `test/links.test.js` will need a test for an expired link.",
+    "ready": true,
+    "title": "Expire short links after 7 days",
+    "refs": [
+     {
+      "file": "src/store.js",
+      "line": 5
+     },
+     {
+      "file": "src/links.js",
+      "line": 1
+     },
+     {
+      "file": "src/links.js",
+      "line": 12
+     },
+     {
+      "file": "src/links.js",
+      "line": 19
+     },
+     {
+      "file": "test/links.test.js",
+      "line": 1
+     }
+    ],
+    "brief": "store.save(code, url): also record createdAt = Date.now()\nlinks.js: LINK_TTL = 7 days in ms; isExpired(link) = Date.now() - link.createdAt > LINK_TTL\nfollow(code): unknown → 404; isExpired → 410 {error: \"link expired\"}, no visit counted; else 302\nstats(code): unknown → 404; isExpired → 410 {error: \"link expired\"}; else 200\ntest: link older than 7 days → follow and stats return 410"
+   }
+  },
+  {
+   "delay": 2400,
+   "activity": [
+    "reading src/server.js",
+    "reading src/routes.js",
+    "reading src/links.js",
+    "reading src/store.js",
+    "writing .ogimap/map.json"
+   ],
+   "copy": {
+    ".ogimap/map.json": "turns/frame/map.json"
+   },
+   "reply": {
+    "summary": "the map for this task: createdAt in store.save, a new isExpired, 410 from follow and stats, and a test"
+   }
+  },
+  {
+   "delay": 3000,
+   "activity": [
+    "editing test/links.test.js",
+    "running npm test   # red: an expired link still redirects",
+    "editing src/store.js",
+    "editing src/links.js",
+    "running npm test   # 5 pass",
+    "editing .ogimap/map.json"
+   ],
+   "copy": {
+    "src/links.js": "turns/build/links.js",
+    "src/store.js": "turns/build/store.js",
+    "test/links.test.js": "turns/build/links.test.js",
+    ".ogimap/map.json": "turns/build/map.json"
+   },
+   "reply": {
+    "summary": "Links expire 7 days after creation: createdAt stored, isExpired check, 410 on follow/stats, tests with a mocked clock",
+    "changed": [
+     "links.isExpired",
+     "links.follow",
+     "links.stats",
+     "store.save"
+    ]
+   }
+  }
+ ]
 }

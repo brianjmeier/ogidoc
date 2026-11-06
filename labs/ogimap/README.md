@@ -1,37 +1,53 @@
 # Ogimap — change a codebase by editing its flow map
 
 A proof of concept. Ogidoc goes from plan to code. Ogimap goes the other way round,
-and then back again. An agent reads an existing codebase and draws a **flow map**:
-boxes for its abstractions, each with **pseudocode**, arrows for calls and data, and
-**flows** you can play, like a token travelling "shorten a link" from box to box.
+and then back again: it works on a codebase that already exists.
 
-To change the code you change the map: rewrite a box's pseudocode, sketch a new box,
-drag an arrow, cross something out. Then hand over the pen. The agent changes the code
-test first, redraws the map so it is true to the code again, and offers the other
-ways it could have been built on the boxes themselves. You pick one or go on. There
-is no chat box anywhere. **Your edits to the map are the whole message.**
+In a big codebase you can't start from a map of everything, so **a task starts as a
+prompt**. The agent reads the code with you, read-only, and asks only what the code
+can't tell it. When it decides the task is clear, it **draws the part of the flow map
+the task touches, with the change on it as a plan**: boxes for the abstractions, each
+with pseudocode, arrows for calls and data, flows you can play. From then on it is
+Ogidoc mode. You rewrite pseudocode, sketch boxes, drag arrows, cross things out, pick
+one of the ways the agent offered, and pass the pen. The agent builds it test first
+and redraws the map true to the code. **After scoping there is no chat: your edits to
+the map are the whole message.**
 
 ```bash
-node labs/ogimap/ogimap.ts --demo            # scripted agent, throwaway copy of the demo project, no API key
-node labs/ogimap/ogimap.ts path/to/project   # Claude Code maps it, then takes your turns
+node labs/ogimap/ogimap.ts --demo            # a recorded real session replayed by a scripted agent, no API key
+node labs/ogimap/ogimap.ts path/to/project   # Claude Code scopes (read-only), draws the map and builds
 node labs/ogimap/ogimap.ts . --agent pi      # or pi, or any CLI: --agent-cmd "codex exec -s workspace-write"
 ```
 
 Open <http://localhost:4848>. Node 22.18+, no install: it reuses Ogidoc's agent
-adapters (`src/agents.ts`) and serves a no-build page.
+adapters (`src/agents.ts`) and serves a page with no build step.
 
-## A session
+## A task
 
-| You | What the agent reads |
+| | |
 | --- | --- |
-| ![Edit pseudocode, draw an arrow](docs/edit.png) | Open `▸ codes`, rewrite `makeCode` so a code is never reused, drag an arrow from codes to store. Hover the edit count to see exactly what the agent will get: a diff of the design, not prose. |
-| ![Sketch a new box](docs/sketch.png) | Double-click empty space to sketch `rateLimit`, then wire `routes → rateLimit → links`. Dashed blue means it is yours and not built yet. |
-| ![The flow, replayed](docs/flow.png) | After the turn, `rateLimit` is real: the client IP is threaded through `server → route`, there are tests, and the "shorten a link" flow now passes through it. |
-| ![Other ways](docs/ways.png) | The agent built a sliding window and offers a fixed window, and trusting `x-forwarded-for`, as other ways on the box, each with its tradeoff as a pseudocode line. `‹ 2 of 3 ›` then `⌘↵` builds that way instead. |
+| ![Scoping](docs/scope.png) | **Scope.** "short links should expire after a while." The agent reads the code (with Claude Code, edits are off), points at it with `file:line` chips, and asks two questions, each with its pick. You answer. It decides the task is ready, writes a brief, and draws the map. |
+| ![The plan on the map](docs/plan.png) | **The plan is the green.** Only what the task touches, plus one step of context, rendered as a map. `follow` and `stats` gain a line (`was` keeps what they do today), `isExpired` is a dashed proposal, and the decisions carry `‹ 1 of 3 ›` other ways. Edit any of it, or pass the pen with no edits to build it. |
+| ![Done](docs/done.png) | **Done** when nothing on the task's map waits for a build. The conversation folds into the task chip; the map stays as the code now is. |
+| ![Edit pseudocode, draw an arrow](docs/edit.png) | **Your edits are the message.** Hover the edit count to see exactly what the agent gets: a diff of the design (`CHANGE node…`, `NEW edge codes → store`), not prose. |
+| ![Other ways](docs/ways.png) | **Options, not questions.** For an expensive or visible decision the agent builds its pick and offers the others on the box, each with its tradeoff as a pseudocode line. |
 
-Both turns in the demo were recorded from **real Claude Code turns** on this project.
-The scripted agent replays them, so it plays the same two turns whatever you edit. The
-bottom bar says what to try.
+The demo replays a **real Claude Code session** recorded on `demo/shortener`: two
+scoping messages, the task map, and the build (5 tests pass). The bottom bar says what
+to try. The scripted agent plays the same turns whatever you type.
+
+## In Tend: a Worker scopes, Ogimap takes over
+
+In [Tend](https://github.com/brianjmeier/tend), Ogimap lives in the **Workers**
+station, next to its Ogidoc integration
+(`examples/stations/brian/stations/workers/ogimap/`). The Worker's own conversation is
+the scoping chat. When it decides the task is ready it calls
+`ogimapStart({ title, prompt, brief })`. Workers starts Ogimap in the Worker's checkout
+with `--task-file` (which skips straight to the map) and `--agent-cmd` set to Ogidoc's
+turn bridge, so **the same Worker** draws the map and builds it, turn by turn
+(`ogimapReply`). The Worker's board mirrors the map with the plan on it. Workers finds
+the server through `--detach`, which prints `.ogimap/server.json` (port, pid) once
+Ogimap listens.
 
 ## Hands
 
@@ -52,13 +68,20 @@ bottom bar says what to try.
 ## How it works
 
 ```
-.ogimap/map.json   nodes (id, name, parent, kind, pseudo[], code anchors, status, ways[]),
+.ogimap/task.json  the task: prompt, the scoping conversation, the brief, its phase
+.ogimap/map.json   nodes (id, name, parent, kind, pseudo[], was[], code anchors, status, ways[]),
                    edges (from, to, label, kind), flows (name, steps[])
 .ogimap/layout.json  where you dragged the boxes; the rest is laid out in columns by what they use
 .ogimap/rules.md     optional house rules, added to every turn
 ```
 
-- **Mapping** (`prompt.ts → mapPrompt`) asks the agent for two levels: whiteboard
+- **Scoping** (`scopePrompt`) runs the agent read-only and carries the conversation
+  on (`--resume`). Each reply ends with `{ ready, title, refs, brief }`, and the agent
+  decides `ready` itself.
+- **Framing** (`framePrompt`) draws the task's part of the map from the brief and the
+  conversation, with the change as a plan: `stale` + `was`, `proposal`, `ways`. Only
+  `.ogimap/` may change; anything else is put back.
+- **Mapping a whole codebase** (`--remap`, `mapPrompt`) asks the agent for two levels: whiteboard
   abstractions, and the functions that matter inside them. Pseudocode is 2–7 lines of
   "code that wouldn't compile", with real names kept real. Edges go between the most
   specific nodes, and the editor lifts them to whatever level you are looking at.

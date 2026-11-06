@@ -26,6 +26,8 @@ export interface MapNode {
   status?: Status;
   // Other ways the agent offers for this node. The node's own pseudo is the way it built.
   ways?: { pseudo: string[] }[];
+  // On a stale node from a task plan: the pseudo as the code is today.
+  was?: string[];
   // Set by the editor only: the person drew this node, or wants it gone.
   by?: "human";
   removed?: boolean;
@@ -71,6 +73,7 @@ export function checkMap(raw: unknown): FlowMap {
     if (typeof n.name !== "string") bad(`${n.id} has no name`);
     if (!Array.isArray(n.pseudo) || n.pseudo.some((l) => typeof l !== "string")) bad(`${n.id}'s pseudo must be a list of lines`);
     if (!KINDS.has(n.kind)) n.kind = "step";
+    if (n.was && (!Array.isArray(n.was) || n.status === "built")) delete n.was;
     delete n.by;
     delete n.removed;
   }

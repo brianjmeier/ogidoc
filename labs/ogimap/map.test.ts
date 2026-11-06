@@ -2,14 +2,24 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { checkMap, intentOf, type FlowMap } from "./map.ts";
-import { parseReply } from "./prompt.ts";
+import { parseReply, parseScope } from "./prompt.ts";
 
-const demo = (): FlowMap => checkMap(JSON.parse(readFileSync(new URL("./demo/map.json", import.meta.url), "utf8")));
+// The task map the agent drew in the recorded demo session: the plan is on it.
+const plan = (): FlowMap => checkMap(JSON.parse(readFileSync(new URL("./demo/turns/frame/map.json", import.meta.url), "utf8")));
 
-test("the demo map checks out", () => {
-  const m = demo();
+test("the demo's task map checks out, with the plan on it", () => {
+  const m = plan();
   assert.ok(m.nodes.length > 10);
   assert.ok(m.flows.every((f) => f.steps.length > 1));
+  const follow = m.nodes.find((n) => n.id === "links.follow")!;
+  assert.equal(follow.status, "stale");
+  assert.ok(follow.was && follow.was.length < follow.pseudo.length);
+  assert.ok(m.nodes.some((n) => n.status === "proposal"));
+});
+
+test("a built node keeps no was", () => {
+  const m = checkMap({ title: "x", nodes: [{ id: "a", name: "a", kind: "step", pseudo: ["new"], status: "built", was: ["old"] }], edges: [], flows: [] });
+  assert.equal(m.nodes[0].was, undefined);
 });
 
 test("a map with a dangling parent is refused", () => {
@@ -17,33 +27,40 @@ test("a map with a dangling parent is refused", () => {
 });
 
 test("the person's edits read as a diff, not prose", () => {
-  const before = demo();
+  const before = plan();
   const draft = structuredClone(before);
-  const make = draft.nodes.find((n) => n.id === "codes.makeCode")!;
-  make.pseudo = ["6 × random char from ALPHABET", "retry while store.find(code) exists"];
+  const follow = draft.nodes.find((n) => n.id === "links.follow")!;
+  follow.pseudo = follow.pseudo.map((l) => l.replace("410", "404"));
   draft.nodes.push({ id: "rateLimit", name: "rateLimit", kind: "step", parent: null, pseudo: ["10 a minute per ip"], by: "human" });
   draft.edges.push({ from: "routes", to: "rateLimit", by: "human" });
-  draft.edges.find((e) => e.to === "store.countVisit")!.removed = true;
+  draft.edges[0].removed = true;
   draft.nodes.find((n) => n.id === "links.stats")!.removed = true;
-  const intent = intentOf(before, draft, ["codes.makeCode"]);
-  assert.match(intent, /CHANGE node codes.makeCode\n {4}6 × random char from ALPHABET\n {2}- → code \(no uniqueness check\)\n {2}\+ retry while store.find\(code\) exists/);
+  const intent = intentOf(before, draft, ["links.follow"]);
+  assert.match(intent, /CHANGE node links.follow\n/);
+  assert.match(intent, /\n {2}- .*410.*\n {2}\+ .*404/);
   assert.match(intent, /NEW node rateLimit "rateLimit" \(step\)\n {2}\+ 10 a minute per ip/);
   assert.match(intent, /NEW edge routes → rateLimit/);
-  assert.match(intent, /REMOVE edge links.follow → store.countVisit/);
+  assert.match(intent, new RegExp(`REMOVE edge ${before.edges[0].from} → ${before.edges[0].to}`));
   assert.match(intent, /REMOVE node links.stats/);
-  assert.match(intent, /selected: codes.makeCode/);
+  assert.match(intent, /selected: links.follow/);
 });
 
 test("picking another way says so", () => {
-  const before = demo();
-  before.nodes[0].ways = [{ pseudo: ["the other way"] }];
+  const before = plan();
+  const withWays = before.nodes.find((n) => n.ways?.length)!;
   const draft = structuredClone(before);
-  draft.nodes[0].pseudo = ["the other way"];
-  assert.match(intentOf(before, draft, []), /picked way 2 of 2/);
+  draft.nodes.find((n) => n.id === withWays.id)!.pseudo = withWays.ways![0].pseudo;
+  assert.match(intentOf(before, draft, []), new RegExp(`CHANGE node ${withWays.id.replace(".", "\\.")}: picked way 2 of`));
 });
 
-test("no edits means go on", () => {
-  assert.match(intentOf(demo(), demo(), []), /no edits/);
+test("no edits means go on: build the plan", () => {
+  assert.match(intentOf(plan(), plan(), []), /no edits/);
+});
+
+test("a scoping reply: words, then the verdict", () => {
+  const r = parseScope('Links live in `store`.\n\n```json\n{"ready": true, "title": "Expire links", "refs": [{"file": "src/store.js", "line": 5}, {"nope": 1}], "brief": "store createdAt"}\n```');
+  assert.deepEqual(r, { text: "Links live in `store`.", ready: true, title: "Expire links", brief: "store createdAt", refs: [{ file: "src/store.js", line: 5 }] });
+  assert.equal(parseScope("no block at all").ready, false);
 });
 
 test("the reply is the last json block", () => {
