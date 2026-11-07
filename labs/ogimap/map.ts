@@ -111,6 +111,15 @@ export function regionIds(map: FlowMap, seeds: Iterable<string>): Set<string> {
   return region;
 }
 
+/** What a task shows: the nodes it drew or changed, and the modules that hold them.
+ *  Narrower than the region a turn is handed, which adds one hop of context. */
+export function focusOf(map: FlowMap, ids: Iterable<string>): Set<string> {
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const focus = new Set([...ids].filter((id) => byId.has(id)));
+  for (const id of [...focus]) for (let p = byId.get(id)?.parent; p; p = byId.get(p)?.parent) focus.add(p);
+  return focus;
+}
+
 /** The part of the map with these ids, with the edges and flows among them. */
 export function regionOf(map: FlowMap, ids: Set<string>): FlowMap {
   return {

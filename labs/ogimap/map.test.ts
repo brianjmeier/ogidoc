@@ -69,7 +69,7 @@ test("the reply is the last json block", () => {
 
 // ---------- the map grows task by task ----------
 
-import { driftOf, indexOf, mergeRegion, regionIds, regionOf } from "./map.ts";
+import { driftOf, focusOf, indexOf, mergeRegion, regionIds, regionOf } from "./map.ts";
 
 const tiny = (): FlowMap =>
   checkMap({
@@ -134,4 +134,9 @@ test("nodes whose code changed are drift, and the index says so", () => {
   const index = indexOf(tiny(), drift);
   assert.match(index, /- cart\.add \(in cart\): push item \[src\/cart\.js\] — code changed since mapped/);
   assert.match(index, /- pay\.charge \(in pay\): stripe\.charge\(total\) \[src\/pay\.js\]$/m);
+});
+
+test("a task's focus is what it touched and the modules holding it, not their neighbours", () => {
+  assert.deepEqual([...focusOf(tiny(), ["pay.charge", "gone"])].sort(), ["pay", "pay.charge"]);
+  assert.deepEqual([...regionIds(tiny(), focusOf(tiny(), ["pay.charge"]))].sort(), ["cart", "cart.total", "pay", "pay.charge"]);
 });

@@ -21,7 +21,7 @@ import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
 import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
-import { checkMap, driftOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, type FlowMap } from "./map.ts";
+import { checkMap, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, type FlowMap } from "./map.ts";
 import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -269,8 +269,10 @@ function turn(draft: FlowMap, focus: string[]) {
     const task = state.task;
     if (task && state.map) {
       const map = state.map;
-      // The task keeps what it worked in, minus what the turn deleted, plus what it added.
-      task.focus = [...regionIds(map, [...(task.focus ?? []), ...returned])];
+      // The task keeps what it worked in, minus what the turn deleted, plus what it added
+      // or changed. The context a turn was handed and handed back unchanged stays out.
+      const added = [...returned].filter((id) => !before.nodes.some((n) => n.id === id));
+      task.focus = [...focusOf(map, [...(task.focus ?? []), ...added, ...r.changed])];
       // The task is done when nothing in its part of the map waits for a build.
       const mine = new Set(task.focus);
       if (!map.nodes.some((n) => mine.has(n.id) && (n.status === "stale" || n.status === "proposal"))) task.phase = "done";
@@ -334,7 +336,7 @@ async function frame() {
     const index = state.map ? indexOf(state.map, drift()) : "";
     const returned = new Set<string>();
     const r = await runAgent(framePrompt({ task: state.task!, index }), regionMerged(new Set(), returned));
-    state.task!.focus = [...regionIds(state.map!, returned)];
+    state.task!.focus = [...focusOf(state.map!, returned)];
     for (const f of changedFiles()) {
       if (before.has(f) || f.startsWith(".ogimap/")) continue;
       activity(`framing may not change ${f}; put back`);
