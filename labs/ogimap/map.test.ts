@@ -216,3 +216,53 @@ test("git rebases a branch's map onto main's through the driver, with no conflic
   assert.ok(at("cart.clear"));
   assert.match(git("log", "--format=%s"), /worker's task\nmain's task\nthe map/);
 });
+
+// ---------- what a client is told, and what it can do ----------
+
+import { draftFromEdits, viewOf } from "./map.ts";
+
+test("the view says each box's state and the plan's lines; a task marks its boxes", () => {
+  const map = tiny();
+  map.nodes.find((n) => n.id === "pay.charge")!.status = "stale";
+  map.nodes.find((n) => n.id === "pay.charge")!.pseudo = ["stripe.charge(total, idempotent)"];
+  map.nodes.find((n) => n.id === "pay.charge")!.was = ["stripe.charge(total)"];
+  map.nodes.push({ id: "cart.clear", name: "clear", parent: "cart", kind: "step", pseudo: ["empty the cart"], status: "proposal", ways: [{ pseudo: ["keep it, mark it done"] }] });
+  const view = viewOf(map, { focus: ["pay", "pay.charge"], drift: ["auth.login"], standing: "Your pen", failed: false });
+  const at = (id: string) => view.boxes.find((b) => b.id === id)!;
+  assert.equal(at("pay.charge").state, "to build");
+  assert.deepEqual(at("pay.charge").lines, [{ text: "stripe.charge(total)", mark: "removed" }, { text: "stripe.charge(total, idempotent)", mark: "added" }]);
+  assert.equal(at("cart.clear").state, "proposed");
+  assert.deepEqual(at("cart.clear").lines, [{ text: "empty the cart", mark: "added" }]);
+  assert.equal(at("cart.clear").ways, 1);
+  assert.equal(at("auth.login").state, "code changed");
+  assert.deepEqual(at("cart.add").lines, [{ text: "push item", mark: null }]);
+  assert.deepEqual(view.boxes.filter((b) => b.inTask).map((b) => b.id), ["pay", "pay.charge"]);
+  assert.equal(viewOf(map, { drift: [], standing: "", failed: false }).boxes.every((b) => b.inTask), true);
+  assert.deepEqual(view.edges[0], { from: "pay.charge", to: "cart.total", label: "amount" });
+});
+
+test("a client's edits become the person's draft, and read as a turn's diff", () => {
+  const draft = draftFromEdits(tiny(), [
+    { op: "pseudo", id: "cart.add", lines: ["push item, merge duplicates"] },
+    { op: "rename", id: "pay", name: "payments" },
+    { op: "remove", id: "auth.login" },
+    { op: "add", key: "k1", name: "Clear cart", parent: "cart", lines: ["empty the cart"] },
+    { op: "connect", from: "pay.charge", to: "k1", label: "after paying" },
+    { op: "disconnect", from: "pay.charge", to: "cart.total" },
+  ]);
+  const at = (id: string) => draft.nodes.find((n) => n.id === id)!;
+  assert.deepEqual(at("cart.add").pseudo, ["push item, merge duplicates"]);
+  assert.equal(at("pay").name, "payments");
+  assert.equal(at("auth.login").removed, true);
+  assert.deepEqual(at("cart.clear_cart"), { id: "cart.clear_cart", name: "Clear cart", parent: "cart", kind: "step", pseudo: ["empty the cart"], status: "proposal", by: "human" });
+  assert.deepEqual(draft.edges.find((e) => e.to === "cart.clear_cart"), { from: "pay.charge", to: "cart.clear_cart", label: "after paying", kind: "call", by: "human" });
+  assert.equal(draft.edges.find((e) => e.to === "cart.total")!.removed, true);
+  const intent = intentOf(tiny(), draft, []);
+  assert.match(intent, /CHANGE node cart\.add\n {2}- push item\n {2}\+ push item, merge duplicates/);
+  assert.match(intent, /NEW node cart\.clear_cart "Clear cart" \(step\) inside cart/);
+  assert.match(intent, /NEW edge pay\.charge → cart\.clear_cart "after paying"/);
+  assert.match(intent, /REMOVE edge pay\.charge → cart\.total/);
+  assert.match(intent, /REMOVE node auth\.login/);
+  assert.throws(() => draftFromEdits(tiny(), [{ op: "pseudo", id: "nowhere", lines: [] }]), /no box "nowhere"/);
+  assert.throws(() => draftFromEdits(tiny(), [{ op: "disconnect", from: "cart", to: "pay" }]), /no arrow/);
+});

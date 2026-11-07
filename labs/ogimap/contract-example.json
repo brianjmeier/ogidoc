@@ -1,0 +1,467 @@
+{
+ "api": 1,
+ "busy": null,
+ "view": {
+  "title": "In-memory URL shortener over HTTP",
+  "standing": "Your pen: edit the map, then hand it over.",
+  "failed": false,
+  "boxes": [
+   {
+    "id": "http",
+    "name": "http",
+    "parent": null,
+    "kind": "entry",
+    "state": "built",
+    "lines": [
+     {
+      "text": "one node:http server; every request → route()",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "http.server",
+    "name": "server",
+    "parent": "http",
+    "kind": "entry",
+    "state": "built",
+    "lines": [
+     {
+      "text": "body = POST ? readJson(req) : undefined",
+      "mark": null
+     },
+     {
+      "text": "{ status, json, location } = route(method, url, body)",
+      "mark": null
+     },
+     {
+      "text": "writeHead(status, location?)",
+      "mark": null
+     },
+     {
+      "text": "end(JSON.stringify(json ?? {}))",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "routes",
+    "name": "routes",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "method + path → the links handler that answers it",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "routes.route",
+    "name": "route",
+    "parent": "routes",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "POST /links → shorten(body)",
+      "mark": null
+     },
+     {
+      "text": "GET /:code/stats → stats(code)",
+      "mark": null
+     },
+     {
+      "text": "GET /:code → follow(code)",
+      "mark": null
+     },
+     {
+      "text": "else → 404 not found",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "links",
+    "name": "links",
+    "parent": null,
+    "kind": "module",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "create, follow and report on short links",
+      "mark": null
+     },
+     {
+      "text": "owns link lifetime: LINK_TTL = 7 days",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "links.shorten",
+    "name": "shorten",
+    "parent": "links",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "isUrl(body.url) else → 400 not a url",
+      "mark": null
+     },
+     {
+      "text": "code = makeCode()",
+      "mark": null
+     },
+     {
+      "text": "store.save(code, body.url)",
+      "mark": null
+     },
+     {
+      "text": "→ 201 { code, short: /code }",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "links.follow",
+    "name": "follow",
+    "parent": "links",
+    "kind": "step",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "link = store.find(code)",
+      "mark": null
+     },
+     {
+      "text": "!link → 404 unknown code",
+      "mark": null
+     },
+     {
+      "text": "isExpired(link) → 410 { error: \"link expired\" }  // no visit counted",
+      "mark": "added"
+     },
+     {
+      "text": "store.countVisit(code)",
+      "mark": null
+     },
+     {
+      "text": "→ 302 location: link.url",
+      "mark": null
+     }
+    ],
+    "ways": 1,
+    "inTask": true
+   },
+   {
+    "id": "links.stats",
+    "name": "stats",
+    "parent": "links",
+    "kind": "step",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "link = store.find(code)",
+      "mark": null
+     },
+     {
+      "text": "!link → 404 unknown code",
+      "mark": null
+     },
+     {
+      "text": "isExpired(link) → 410 { error: \"link expired\" }",
+      "mark": "added"
+     },
+     {
+      "text": "→ 200 { url, visits }",
+      "mark": null
+     }
+    ],
+    "ways": 1,
+    "inTask": true
+   },
+   {
+    "id": "links.isExpired",
+    "name": "isExpired",
+    "parent": "links",
+    "kind": "step",
+    "state": "proposed",
+    "lines": [
+     {
+      "text": "LINK_TTL = 7 * 24 * 60 * 60 * 1000",
+      "mark": "added"
+     },
+     {
+      "text": "isExpired(link) = Date.now() - link.createdAt > LINK_TTL",
+      "mark": "added"
+     }
+    ],
+    "ways": 2,
+    "inTask": true
+   },
+   {
+    "id": "codes",
+    "name": "codes",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "random short codes",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "codes.makeCode",
+    "name": "makeCode",
+    "parent": "codes",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "6 random chars from ALPHABET (no l, 1, o, 0)",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "validate",
+    "name": "validate",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "input checks",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "validate.isUrl",
+    "name": "isUrl",
+    "parent": "validate",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "new URL(text).protocol in [http:, https:]",
+      "mark": null
+     },
+     {
+      "text": "parse error → false",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "store",
+    "name": "store",
+    "parent": null,
+    "kind": "store",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "in-memory Map: code → { url, visits }",
+      "mark": "removed"
+     },
+     {
+      "text": "in-memory Map: code → { url, visits, createdAt }",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "store.save",
+    "name": "save",
+    "parent": "store",
+    "kind": "step",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "links.set(code, { url, visits: 0 })",
+      "mark": "removed"
+     },
+     {
+      "text": "links.set(code, { url, visits: 0, createdAt: Date.now() })",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "store.find",
+    "name": "find",
+    "parent": "store",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "links.get(code)  // undefined if unknown",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "store.countVisit",
+    "name": "countVisit",
+    "parent": "store",
+    "kind": "step",
+    "state": "built",
+    "lines": [
+     {
+      "text": "links.get(code).visits++",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "tests",
+    "name": "links tests",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "drive route() directly, assert status + body",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   },
+   {
+    "id": "tests.expired",
+    "name": "expired link test",
+    "parent": "tests",
+    "kind": "step",
+    "state": "proposed",
+    "lines": [
+     {
+      "text": "code = route(POST /links).json.code",
+      "mark": "added"
+     },
+     {
+      "text": "make link older than 7 days (createdAt back-dated or Date.now mocked)",
+      "mark": "added"
+     },
+     {
+      "text": "route(GET /code).status == 410",
+      "mark": "added"
+     },
+     {
+      "text": "route(GET /code/stats).status == 410",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true
+   }
+  ],
+  "edges": [
+   {
+    "from": "http.server",
+    "to": "routes.route",
+    "label": "every request"
+   },
+   {
+    "from": "routes.route",
+    "to": "links.shorten",
+    "label": "POST /links"
+   },
+   {
+    "from": "routes.route",
+    "to": "links.follow",
+    "label": "GET /:code"
+   },
+   {
+    "from": "routes.route",
+    "to": "links.stats",
+    "label": "GET /:code/stats"
+   },
+   {
+    "from": "links.shorten",
+    "to": "validate.isUrl",
+    "label": "check url"
+   },
+   {
+    "from": "links.shorten",
+    "to": "codes.makeCode",
+    "label": "new code"
+   },
+   {
+    "from": "links.shorten",
+    "to": "store.save",
+    "label": "code, url (+ createdAt)"
+   },
+   {
+    "from": "links.follow",
+    "to": "store.find",
+    "label": "look up"
+   },
+   {
+    "from": "links.follow",
+    "to": "links.isExpired",
+    "label": "too old?"
+   },
+   {
+    "from": "links.follow",
+    "to": "store.countVisit",
+    "label": "only if live"
+   },
+   {
+    "from": "links.stats",
+    "to": "store.find",
+    "label": "look up"
+   },
+   {
+    "from": "links.stats",
+    "to": "links.isExpired",
+    "label": "too old?"
+   },
+   {
+    "from": "tests.expired",
+    "to": "routes.route",
+    "label": "POST then GET old link"
+   }
+  ]
+ },
+ "task": {
+  "phase": "map",
+  "title": "Expire short links after 7 days",
+  "prompt": "short links should expire after a while"
+ },
+ "last": {
+  "summary": "the map for this task: createdAt in store.save, a new isExpired, 410 from follow and stats, and a test"
+ }
+}

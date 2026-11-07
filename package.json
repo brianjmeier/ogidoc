@@ -1,6 +1,6 @@
 {
   "name": "ogidoc",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Build software by taking turns with an agent on one pseudocode file. The real code is built underneath.",
   "homepage": "https://ogidoc.brianmeier.dev",
   "repository": {
@@ -16,6 +16,9 @@
     "dist/bin",
     "dist/src",
     "dist/web",
+    "dist/labs",
+    "labs/ogimap/web",
+    "labs/ogimap/demo",
     "agent",
     "demo",
     "README.md",
@@ -26,7 +29,7 @@
   },
   "scripts": {
     "start": "node bin/ogidoc.ts",
-    "build": "node -e \"for (const d of ['dist/bin', 'dist/src']) require('fs').rmSync(d, { recursive: true, force: true })\" && vite build && tsc -p tsconfig.build.json",
+    "build": "node -e \"for (const d of ['dist/bin', 'dist/src', 'dist/labs']) require('fs').rmSync(d, { recursive: true, force: true })\" && vite build && tsc -p tsconfig.build.json",
     "dev": "vite build --watch",
     "site": "vite -c vite.site.config.ts",
     "build:site": "vite build -c vite.site.config.ts",

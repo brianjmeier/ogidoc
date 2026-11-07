@@ -17,5 +17,7 @@ const ROOT = packageRoot();
 export const AGENT_DIR = join(ROOT, "agent");
 // The demo: a plan to start from, and the turns a scripted agent plays on it.
 export const DEMO_DIR = join(ROOT, "demo");
+// Ogimap: its editor and its demo ship as files beside the compiled code.
+export const MAP_DIR = join(ROOT, "labs", "ogimap");
 // Built by `npm run build`.
 export const WEB_DIR = join(ROOT, "dist", "web");

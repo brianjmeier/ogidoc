@@ -517,8 +517,9 @@ function pseudoView(n, o, wayK) {
   if (wayK) return n.pseudo.map((l) => ["way", l]);
   if (!o || n.by === "human") return n.pseudo.map((l) => ["add", l]);
   if (n.removed) return n.pseudo.map((l) => ["", l]);
-  if (o.status === "proposal" && n.pseudo.join("\n") === o.pseudo.join("\n")) return n.pseudo.map((l) => ["plan-add", l]);
-  if (o.was && n.pseudo.join("\n") === o.pseudo.join("\n")) return diff(o.was, o.pseudo).map(([op, l]) => [op === "=" ? "" : op === "+" ? "plan-add" : "plan-del", l]);
+  // Untouched by the person: the plan's lines as Ogimap marks them for every client.
+  const view = S.snap.view?.boxes.find((b) => b.id === n.id);
+  if (view && n.pseudo.join("\n") === o.pseudo.join("\n") && view.lines.some((l) => l.mark)) return view.lines.map((l) => [l.mark === "added" ? "plan-add" : l.mark === "removed" ? "plan-del" : "", l.text]);
   const ops = diff(o.pseudo, n.pseudo);
   const fresh = S.fresh.has(n.id);
   return ops.map(([op, l]) => [op === "=" ? (fresh && n.status !== "built" ? "agentnew" : "") : op === "+" ? "add" : "del", l]);

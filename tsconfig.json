@@ -16,5 +16,6 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "include": ["src", "bin", "test"]
+  "include": ["src", "bin", "test", "labs/ogimap"],
+  "exclude": ["labs/ogimap/demo", "labs/ogimap/web"]
 }

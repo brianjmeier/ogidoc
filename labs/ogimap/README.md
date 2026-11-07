@@ -14,13 +14,14 @@ and redraws the map true to the code. **After scoping there is no chat: your edi
 the map are the whole message.**
 
 ```bash
-node labs/ogimap/ogimap.ts --demo            # a recorded real session replayed by a scripted agent, no API key
-node labs/ogimap/ogimap.ts path/to/project   # Claude Code scopes (read-only), draws the map and builds
-node labs/ogimap/ogimap.ts . --agent pi      # or pi, or any CLI: --agent-cmd "codex exec -s workspace-write"
+ogidoc map --demo            # a recorded real session replayed by a scripted agent, no API key
+ogidoc map path/to/project   # Claude Code scopes (read-only), draws the map and builds
+ogidoc map . --agent pi      # or pi, or any CLI: --agent-cmd "codex exec -s workspace-write"
 ```
 
-Open <http://localhost:4848>. Node 22.18+, no install: it reuses Ogidoc's agent
-adapters (`src/agents.ts`) and serves a page with no build step.
+Open <http://localhost:4848>. Ogimap ships in the `ogidoc` package from 0.3.0 and reuses
+Ogidoc's agent adapters (`src/agents.ts`); its editor is a page with no build step. From
+a checkout, `node labs/ogimap/ogimap.ts …` runs the same thing from source.
 
 ## A task
 
@@ -81,6 +82,25 @@ turn bridge, so **the same Worker** draws the map and builds it, turn by turn
 (`ogimapReply`). The Worker's board mirrors the map with the plan on it. Workers finds
 the server through `--detach`, which prints `.ogimap/server.json` (port, pid) once
 Ogimap listens.
+
+## For a client: the contract
+
+A client that drives Ogimap over HTTP, like Tend's Workers, relies on `contract.ts` and
+nothing else:
+
+- `ogidoc map --api` prints the contract's version (`OGIMAP_API`). A client checks it
+  before it starts Ogimap and refuses a version it doesn't speak.
+- `GET /api/state` answers `api` and a `view` of the map in which Ogimap has already
+  decided what it means: each box's state in words (built, to build, proposed, code
+  changed), its lines marked as added or removed by the task's plan, how many other ways
+  it has, and whether the task works in it. A client only lays it out. Ogimap's own
+  editor reads its plan lines from the same view.
+- `POST /api/turn` takes the person's `edits` (rewrite a box, rename, remove, add, connect,
+  disconnect). Ogimap turns them into its draft and refuses an edit that names no box.
+
+`contract-example.json` is a real `/api/state`, pinned by `contract.test.ts` against the
+demo. A client keeps a copy and decodes it in its own tests. Change the contract's shape
+and `OGIMAP_API` goes up, and the example with it.
 
 ## Hands
 

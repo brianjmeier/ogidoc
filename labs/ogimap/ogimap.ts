@@ -23,13 +23,21 @@ import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
 import { trusted, TYPES } from "../../src/server.ts";
 import { turnLog } from "../../src/turn-log.ts";
-import { checkMap, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, stamped, type FlowMap } from "./map.ts";
+import { MAP_DIR } from "../../src/paths.ts";
+import { OGIMAP_API } from "./contract.ts";
+import { checkMap, draftFromEdits, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, stamped, viewOf, type FlowMap } from "./map.ts";
 import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const WEB = join(HERE, "web");
+// Run from source or from the package's compiled dist/: the merge driver sits beside this
+// file, in the same form; the editor and the demo ship as files in the package.
+const SELF = fileURLToPath(import.meta.url);
+const MERGE = join(dirname(SELF), `merge${extname(SELF)}`);
+const WEB = join(MAP_DIR, "web");
+const DEMO = join(MAP_DIR, "demo");
 
 const { values: opts, positionals } = parseArgs({
+  // `ogidoc map …` hands over its arguments with the word that chose Ogimap still first.
+  args: process.argv.slice(2).filter((a, i) => !(i === 0 && a === "map")),
   allowPositionals: true,
   options: {
     agent: { type: "string" },
@@ -41,8 +49,15 @@ const { values: opts, positionals } = parseArgs({
     task: { type: "string" },
     detach: { type: "boolean", default: false },
     "task-file": { type: "string" },
+    api: { type: "boolean", default: false },
   },
 });
+
+// The contract this Ogimap speaks, for a client to check before it starts one.
+if (opts.api) {
+  console.log(OGIMAP_API);
+  process.exit(0);
+}
 
 // ---------- the project and its agent ----------
 
@@ -70,7 +85,7 @@ let script: string | undefined;
 if (opts.demo) {
   // A throwaway copy of the demo project, with its map already drawn, and a scripted agent.
   project = mkdtempSync(join(tmpdir(), "ogimap-demo-"));
-  cpSync(join(HERE, "demo", "shortener"), project, { recursive: true });
+  cpSync(join(DEMO, "shortener"), project, { recursive: true });
   mkdirSync(join(project, ".ogimap"), { recursive: true });
   git("init", "-q");
   git("add", "-A");
@@ -78,7 +93,7 @@ if (opts.demo) {
   if (!opts.agent) {
     agentName = "mock";
     // A task scoped elsewhere (a Tend session) starts at its map: the script without the scoping.
-    script = join(HERE, "demo", opts["task-file"] ? "turns-from-brief.json" : "turns.json");
+    script = join(DEMO, opts["task-file"] ? "turns-from-brief.json" : "turns.json");
   }
 }
 
@@ -143,8 +158,9 @@ const hasherFor = (map: FlowMap) => {
 };
 const drift = (): string[] => (state.map ? driftOf(state.map, hasherFor(state.map)) : []);
 
-// After an agent writes its region: the boxes it drew, changed or re-read get fresh
-// stamps; the context it handed back as it was keeps the stamp it had.
+// After an agent writes its region, every box it handed back is true to the code as it is
+// now (the prompt asks exactly that), so each gets a fresh stamp. Boxes outside the
+// region keep the stamp they had, so code that changed under them still shows.
 function restamp(before: FlowMap | null, after: FlowMap, alsoFresh: Iterable<string>): FlowMap {
   const was = new Map((before?.nodes ?? []).map((n) => [n.id, n]));
   const plain = (n: FlowMap["nodes"][number]) => JSON.stringify({ ...n, seen: undefined });
@@ -164,7 +180,7 @@ function versionTheMap() {
   if (!log.commits) return;
   try {
     git("config", "merge.ogimap.name", "Ogimap map, merged by node");
-    git("config", "merge.ogimap.driver", `node '${join(HERE, "merge.ts")}' %O %A %B`);
+    git("config", "merge.ogimap.driver", `node '${MERGE}' %O %A %B`);
     const attributes = join(project, ".gitattributes");
     const rule = `${MAP_FILE} merge=ogimap`;
     const lines = existsSync(attributes) ? readFileSync(attributes, "utf8").split("\n") : [];
@@ -201,7 +217,24 @@ function followDisk() {
   } catch {}
 }
 
+// Where things stand, in one line, for any client to show.
+function standingOf(): { standing: string; failed: boolean } {
+  if (state.last?.error) return { standing: state.last.error, failed: true };
+  const busy: Record<string, string> = {
+    scoping: "The agent is reading the code…",
+    framing: "The agent is drawing the map for this task…",
+    turn: "The agent has the pen: building what the map says…",
+    mapping: "The agent is drawing the map…",
+  };
+  if (state.busy) return { standing: busy[state.busy], failed: false };
+  if (state.task?.phase === "done") return { standing: "Done: everything in this task's part of the map is built.", failed: false };
+  if (state.task?.phase === "scope") return { standing: "Your turn to say what you want.", failed: false };
+  return { standing: "Your pen: edit the map, then hand it over.", failed: false };
+}
+
 const snapshot = () => (followDisk(), {
+  api: OGIMAP_API,
+  view: state.map ? viewOf(state.map, { focus: state.task?.focus, drift: drift(), ...standingOf() }) : null,
   map: state.map,
   layout: existsSync(layoutPath) ? JSON.parse(readFileSync(layoutPath, "utf8")) : {},
   busy: state.busy,
@@ -239,12 +272,12 @@ const wholeMap: Collect = {
 };
 
 // `returned` collects the ids the agent handed back, for the task's focus.
-const regionMerged = (sent: Set<string>, returned: Set<string>, reread: Iterable<string> = []): Collect => ({
+const regionMerged = (sent: Set<string>, returned: Set<string>): Collect => ({
   file: REGION_FILE,
   read: () => {
     if (!existsSync(regionPath)) throw new Error(`${REGION_FILE} is missing`);
     const back = JSON.parse(readFileSync(regionPath, "utf8")) as FlowMap;
-    const merged = restamp(state.map, mergeRegion(state.map, sent, back), reread);
+    const merged = restamp(state.map, mergeRegion(state.map, sent, back), back.nodes.map((n) => n.id));
     for (const n of back.nodes) returned.add(n.id);
     writeFileSync(mapPath, JSON.stringify(merged, null, 1));
     mapStamp = statSync(mapPath).mtimeMs;
@@ -318,7 +351,7 @@ function turn(draft: FlowMap, focus: string[]) {
   const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
   return guarded("turn", async () => {
     const returned = new Set<string>();
-    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned, drifted.filter((id) => ids.has(id))));
+    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned));
     const task = state.task;
     if (task && state.map) {
       const map = state.map;
@@ -442,7 +475,9 @@ const server = createServer(async (req, res) => {
       if (state.busy) return json(res, 409, { error: "the agent has the pen" });
       if (url.pathname === "/api/turn") {
         if (!state.map) return json(res, 409, { error: "no map yet" });
-        void turn(body.draft, body.focus ?? []);
+        // A client reports what the person did as edits; Ogimap's own editor sends its draft.
+        const draft = Array.isArray(body.edits) ? draftFromEdits(state.map, body.edits) : body.draft;
+        void turn(draft, body.focus ?? []);
         return json(res, 202, {});
       }
       if (url.pathname === "/api/task") {
