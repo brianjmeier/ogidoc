@@ -202,3 +202,6 @@ main { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relati
 .pseudo li.plan-add::before { content: "+ "; opacity: 0.6; }
 .pseudo li.plan-del { color: var(--muted); text-decoration: line-through; }
 .done-bar { color: var(--agent); }
+
+/* A box whose code changed since the map said what it does. */
+.bh .drift { font: 10px var(--font-mono); color: var(--sym); background: var(--sym-tint); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }

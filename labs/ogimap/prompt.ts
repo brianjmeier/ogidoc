@@ -10,11 +10,14 @@ export interface Task {
   phase: "scope" | "frame" | "map" | "done";
   messages: { who: "you" | "agent"; text: string; refs?: { file: string; line?: number }[] }[];
   session?: string;
+  // The ids of the map this task works in: what the editor shows, and what a turn is handed.
+  focus?: string[];
 }
 
 export const MAP_FILE = ".ogimap/map.json";
+export const REGION_FILE = ".ogimap/region.json";
 
-const SCHEMA = `The map is JSON, in ${MAP_FILE}:
+const schemaIn = (file: string) => `It is JSON, in ${file}:
 
 {
   "title": "what this codebase is, in a few words",
@@ -32,6 +35,22 @@ const SCHEMA = `The map is JSON, in ${MAP_FILE}:
   "edges": [{ "from": "links.shorten", "to": "codes.makeCode", "label": "new code", "kind": "call | data | event" }],
   "flows": [{ "id": "shorten", "name": "shorten a link", "steps": ["http.server", "routes.route", "links.shorten", "codes.makeCode", "store.save"] }]
 }`;
+const SCHEMA = schemaIn(MAP_FILE);
+const REGION_SCHEMA = schemaIn(REGION_FILE);
+
+// How the region an agent hands back is written into the map. The code does it; the
+// agent only needs to know what its region means.
+const REGION_RULES = `The map belongs to this codebase and grows task by task, so you never write
+${MAP_FILE}. You write ${REGION_FILE}: the part of the map you work in. Ogimap
+merges it into the map:
+
+- a node in your region replaces the map's node with the same id, or is added;
+- a node you were handed in the region and leave out is deleted from the map;
+- the edges among your region's nodes are yours: write all of them;
+- a flow you write replaces the map's flow with the same id;
+- everything else in the map stays exactly as it is.
+
+A node may sit inside one that is not in your region: give it that parent's id.`;
 
 const STYLE = `How a good map reads:
 
@@ -128,12 +147,16 @@ export function parseScope(text: string): ScopeReply {
 }
 
 // Framing: the task is clear; draw the part of the map it touches, with the change on it.
-export function framePrompt({ task, map }: { task: Task; map: FlowMap | null }): string {
-  return `# Draw the task map in Ogimap
+export function framePrompt({ task, index }: { task: Task; index: string }): string {
+  return `# Draw the task's part of the map in Ogimap
 
 A person and you scoped a task. Now draw the part of the codebase it touches as a flow
-map, with the change already on it as a plan. Don't change any code. Write only
-${MAP_FILE}${map ? " (replace it: this map is for this task)" : ""}.
+map, with the change already on it as a plan. Don't change any code.
+
+${REGION_RULES}
+
+You were handed no region yet, so nothing is deleted this time: write the nodes the task
+touches, and reuse what the map already has.
 
 ## The task: ${task.title ?? ""}
 
@@ -146,6 +169,10 @@ ${task.brief ?? ""}
 ### The conversation
 
 ${task.messages.map((m) => `${m.who}: ${m.text}`).join("\n\n")}
+
+## The map so far
+
+${index ? `Reuse these ids for things that already exist; copy a node from ${MAP_FILE} before you change it. Nodes marked "code changed since mapped" may say something the code no longer does: re-read them.\n\n${index}` : "Nothing is mapped yet: your region starts the map."}
 
 ## What to draw
 
@@ -160,7 +187,7 @@ ${task.messages.map((m) => `${m.who}: ${m.text}`).join("\n\n")}
 - Where a decision is expensive or visible, put your pick in pseudo and the other ways
   in "ways".
 
-${SCHEMA}
+${REGION_SCHEMA}
 
 ${STYLE}
 
@@ -172,7 +199,7 @@ Reply with only:
 `;
 }
 
-export function turnPrompt({ map, intent, rules, task }: { map: FlowMap; intent: string; rules: string; task?: Task | null }): string {
+export function turnPrompt({ region, intent, rules, task, drift }: { region: FlowMap; intent: string; rules: string; task?: Task | null; drift: string[] }): string {
   return `# Your turn in Ogimap
 ${task ? `\nThe task: **${task.title}**. ${task.prompt}\n\nNodes marked "stale" (with "was") or "proposal" are the plan: build them, along with the person's edits.\n` : ""}
 Ogimap is an editor where a person changes a codebase without writing prose. They see
@@ -207,21 +234,24 @@ take it out of the code, and whatever only it needed.
 - A line you could not build (it needs something only they have) stays, and its node
   is "stale".
 
-## Then redraw the map
+## Then redraw your region
 
-Rewrite ${MAP_FILE} whole, true to the code as it now is. Keep ids stable for things
-that still exist. Nodes the person added get proper ids (rename them if theirs were
-placeholders). Update "code" anchors, edges and flows. A node you built or changed is
-"built" only if a test covers it; drop its "was" once built.
+${REGION_RULES}
 
-${SCHEMA}
+${REGION_FILE} holds the region you were handed, as it was before the person's edits.
+Rewrite it true to the code as it now is. Keep ids stable for things that still exist.
+Nodes the person added get proper ids (rename them if theirs were placeholders). Update
+"code" anchors, edges and flows. A node you built or changed is "built" only if a test
+covers it; drop its "was" once built.
+${drift.length ? `\nThe code of ${drift.join(", ")} changed since the map was drawn: re-read it and make those nodes say what the code does now.\n` : ""}
+${REGION_SCHEMA}
 
 ${STYLE}
 ${rules ? `\n## House rules\n\n${rules}\n` : ""}
-## The map you were handed (before their edits)
+## The region you were handed (before their edits)
 
 \`\`\`json
-${JSON.stringify(map, null, 1)}
+${JSON.stringify(region, null, 1)}
 \`\`\`
 
 ## Your reply

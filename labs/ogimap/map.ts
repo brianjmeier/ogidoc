@@ -88,6 +88,69 @@ export function checkMap(raw: unknown): FlowMap {
   return m;
 }
 
+// ---------- regions: the map grows task by task ----------
+//
+// An agent never rewrites the whole map. It is handed the region a task works in and
+// hands that region back; the merge below writes it into the map, so what lies outside
+// stays exactly as it was. A node handed out and not handed back is deleted.
+
+const EMPTY: FlowMap = { title: "map", nodes: [], edges: [], flows: [] };
+
+/** The ids around some seeds that a turn needs to see: the seeds, what contains them,
+ *  what they contain, and what they call or are called by. */
+export function regionIds(map: FlowMap, seeds: Iterable<string>): Set<string> {
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const region = new Set([...seeds].filter((id) => byId.has(id)));
+  const core = [...region];
+  for (const e of map.edges) {
+    if (region.has(e.from) && byId.has(e.to)) region.add(e.to);
+    if (region.has(e.to) && byId.has(e.from)) region.add(e.from);
+  }
+  for (const n of map.nodes) if (n.parent && core.includes(n.parent)) region.add(n.id);
+  for (const id of [...region]) for (let p = byId.get(id)?.parent; p; p = byId.get(p)?.parent) region.add(p);
+  return region;
+}
+
+/** The part of the map with these ids, with the edges and flows among them. */
+export function regionOf(map: FlowMap, ids: Set<string>): FlowMap {
+  return {
+    title: map.title,
+    nodes: map.nodes.filter((n) => ids.has(n.id)),
+    edges: map.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
+    flows: map.flows.filter((f) => f.steps.some((s) => ids.has(s))),
+  };
+}
+
+/** The map with a region written into it. `sent` is the ids the agent was handed: those
+ *  it didn't hand back are gone. Edges among the region's nodes are the region's; flows
+ *  it handed back replace the map's of the same id. */
+export function mergeRegion(map: FlowMap | null, sent: Set<string>, back: FlowMap): FlowMap {
+  const base = map ?? EMPTY;
+  const backIds = new Set(back.nodes.map((n) => n.id));
+  const touched = new Set([...sent, ...backIds]);
+  const returned = new Map(back.nodes.map((n) => [n.id, n]));
+  const nodes = [
+    ...base.nodes.filter((n) => !sent.has(n.id) || backIds.has(n.id)).map((n) => returned.get(n.id) ?? n),
+    ...back.nodes.filter((n) => !base.nodes.some((m) => m.id === n.id)),
+  ];
+  const edges = [...base.edges.filter((e) => !(touched.has(e.from) && touched.has(e.to))), ...back.edges];
+  const backFlows = new Set((back.flows ?? []).map((f) => f.id));
+  const flows = [...base.flows.filter((f) => !backFlows.has(f.id)), ...(back.flows ?? [])];
+  return checkMap({ title: map ? base.title : back.title || base.title, nodes, edges, flows });
+}
+
+/** Nodes whose code changed since the map last said what it does. */
+export function driftOf(map: FlowMap, changed: Set<string>): string[] {
+  return map.nodes.filter((n) => n.code?.some((c) => changed.has(c.file))).map((n) => n.id);
+}
+
+/** A short index of the map, so a new task reuses what is already drawn. */
+export function indexOf(map: FlowMap, drift: string[]): string {
+  return map.nodes
+    .map((n) => `- ${n.id}${n.parent ? ` (in ${n.parent})` : ""}: ${n.pseudo[0] ?? ""}${n.code?.length ? ` [${[...new Set(n.code.map((c) => c.file))].join(", ")}]` : ""}${drift.includes(n.id) ? " — code changed since mapped" : ""}`)
+    .join("\n");
+}
+
 const edgeKey = (e: MapEdge) => `${e.from} → ${e.to}`;
 
 // What the person changed between the map they were handed and their draft. This is

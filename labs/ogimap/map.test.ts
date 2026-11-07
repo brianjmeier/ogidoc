@@ -66,3 +66,72 @@ test("a scoping reply: words, then the verdict", () => {
 test("the reply is the last json block", () => {
   assert.deepEqual(parseReply('done\n```json\n{"summary":"s","changed":["a"]}\n```'), { summary: "s", changed: ["a"] });
 });
+
+// ---------- the map grows task by task ----------
+
+import { driftOf, indexOf, mergeRegion, regionIds, regionOf } from "./map.ts";
+
+const tiny = (): FlowMap =>
+  checkMap({
+    title: "shop",
+    nodes: [
+      { id: "cart", name: "cart", kind: "module", pseudo: ["holds items"] },
+      { id: "cart.add", name: "add", parent: "cart", kind: "step", pseudo: ["push item"], code: [{ file: "src/cart.js", line: 3 }] },
+      { id: "cart.total", name: "total", parent: "cart", kind: "step", pseudo: ["sum prices"], code: [{ file: "src/cart.js", line: 9 }] },
+      { id: "pay", name: "pay", kind: "module", pseudo: ["charges cards"] },
+      { id: "pay.charge", name: "charge", parent: "pay", kind: "step", pseudo: ["stripe.charge(total)"], code: [{ file: "src/pay.js" }] },
+      { id: "auth", name: "auth", kind: "module", pseudo: ["who you are"] },
+      { id: "auth.login", name: "login", parent: "auth", kind: "step", pseudo: ["check password"] },
+    ],
+    edges: [
+      { from: "pay.charge", to: "cart.total", label: "amount" },
+      { from: "auth.login", to: "cart.add" },
+    ],
+    flows: [{ id: "checkout", name: "check out", steps: ["cart.total", "pay.charge"] }, { id: "signin", name: "sign in", steps: ["auth.login", "cart.add"] }],
+  });
+
+test("a region is the seeds, what holds them, what they hold, and what they call or are called by", () => {
+  assert.deepEqual([...regionIds(tiny(), ["pay.charge"])].sort(), ["cart", "cart.total", "pay", "pay.charge"]);
+  assert.deepEqual([...regionIds(tiny(), ["pay"])].sort(), ["pay", "pay.charge"]);
+  const r = regionOf(tiny(), regionIds(tiny(), ["pay.charge"]));
+  assert.deepEqual(r.edges, [{ from: "pay.charge", to: "cart.total", label: "amount" }]);
+  assert.deepEqual(r.flows.map((f) => f.id), ["checkout"]);
+});
+
+test("merging a region changes only the region: replaced, added, deleted, and the rest exactly as it was", () => {
+  const before = tiny();
+  const sent = regionIds(before, ["pay.charge"]);
+  const back = structuredClone(regionOf(before, sent));
+  back.nodes = back.nodes.filter((n) => n.id !== "cart.total"); // deleted
+  back.nodes.find((n) => n.id === "pay.charge")!.pseudo = ["stripe.charge(cart.sum)"]; // replaced
+  back.nodes.push({ id: "cart.sum", name: "sum", parent: "cart", kind: "step", pseudo: ["sum prices, minus discounts"], status: "proposal" }); // added
+  back.edges = [{ from: "pay.charge", to: "cart.sum" }];
+  back.flows = [{ id: "checkout", name: "check out", steps: ["cart.sum", "pay.charge"] }];
+  const after = mergeRegion(before, sent, back);
+  assert.equal(after.nodes.some((n) => n.id === "cart.total"), false);
+  assert.deepEqual(after.nodes.find((n) => n.id === "pay.charge")!.pseudo, ["stripe.charge(cart.sum)"]);
+  assert.equal(after.nodes.find((n) => n.id === "cart.sum")!.parent, "cart");
+  for (const id of ["auth", "auth.login", "cart.add"]) assert.deepEqual(after.nodes.find((n) => n.id === id), before.nodes.find((n) => n.id === id));
+  assert.deepEqual(after.edges, [{ from: "auth.login", to: "cart.add" }, { from: "pay.charge", to: "cart.sum" }]);
+  assert.deepEqual(after.flows.map((f) => [f.id, f.steps]), [["signin", ["auth.login", "cart.add"]], ["checkout", ["cart.sum", "pay.charge"]]]);
+});
+
+test("a first region is the whole map, and a framing region (nothing sent) deletes nothing", () => {
+  const first = mergeRegion(null, new Set(), { title: "shop", nodes: [{ id: "a", name: "a", kind: "step", pseudo: ["x"] }], edges: [], flows: [] });
+  assert.deepEqual(first.nodes.map((n) => n.id), ["a"]);
+  const framed = mergeRegion(tiny(), new Set(), { title: "", nodes: [{ id: "auth.logout", name: "logout", parent: "auth", kind: "step", pseudo: ["forget session"], status: "proposal" }], edges: [], flows: [] });
+  assert.equal(framed.nodes.length, tiny().nodes.length + 1);
+  assert.equal(framed.title, "shop");
+});
+
+test("a region that points at a parent nowhere in the map is refused", () => {
+  assert.throws(() => mergeRegion(tiny(), new Set(), { title: "", nodes: [{ id: "x", name: "x", parent: "nowhere", kind: "step", pseudo: [] }], edges: [], flows: [] }), /parent nowhere/);
+});
+
+test("nodes whose code changed are drift, and the index says so", () => {
+  const drift = driftOf(tiny(), new Set(["src/cart.js"]));
+  assert.deepEqual(drift, ["cart.add", "cart.total"]);
+  const index = indexOf(tiny(), drift);
+  assert.match(index, /- cart\.add \(in cart\): push item \[src\/cart\.js\] — code changed since mapped/);
+  assert.match(index, /- pay\.charge \(in pay\): stripe\.charge\(total\) \[src\/pay\.js\]$/m);
+});

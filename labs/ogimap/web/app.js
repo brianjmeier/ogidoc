@@ -15,6 +15,7 @@ const S = {
   ways: {},            // node id → which way is showing (0 = the one built)
   view: { x: 0, y: 0, z: 1 },
   fresh: new Set(),    // nodes the agent just changed
+  scope: "task",       // with a task: its part of the map, or the whole map
   fitted: undefined,
 };
 
@@ -201,9 +202,17 @@ function outsideEnd(id, nodes) {
 
 let lastWires = new Map();
 
+// With a task, the map shows the task's part of it unless the person asks for the whole.
+// What the person sketched is always theirs to see.
+function inScope(id) {
+  const focus = S.snap?.task?.focus;
+  if (!focus || S.scope === "all") return true;
+  return focus.includes(id) || !orig(id);
+}
+
 function visible() {
   const nodes = byId();
-  const shown = S.draft.nodes.filter((n) => (n.parent ?? null) === S.level);
+  const shown = S.draft.nodes.filter((n) => (n.parent ?? null) === S.level && inScope(n.id));
   const ghosts = new Map();
   const wires = new Map();
   for (const e of S.draft.edges) {
@@ -211,7 +220,7 @@ function visible() {
     if (!inA && !inB) continue;
     let a = inA ? ancestorAt(e.from, S.level, nodes) : outsideEnd(e.from, nodes);
     let b = inB ? ancestorAt(e.to, S.level, nodes) : outsideEnd(e.to, nodes);
-    if (!a || !b || a === b) continue;
+    if (!a || !b || a === b || !inScope(a) || !inScope(b)) continue;
     if (!inA) { ghosts.set(a, "in"); a = `ghost:${a}`; }
     if (!inB) { ghosts.set(b, ghosts.get(b) === "in" ? "both" : "out"); b = `ghost:${b}`; }
     const key = `${a}→${b}`;
@@ -400,6 +409,13 @@ function boxEl(n, nodes, flow) {
   head.querySelector(".name").textContent = n.name || "untitled";
   head.querySelector(".name").title = n.id;
   head.querySelector(".kind").textContent = n.kind;
+  if (S.snap.drift?.includes(n.id)) {
+    const d = document.createElement("span");
+    d.className = "drift";
+    d.textContent = "code changed";
+    d.title = "The code changed since the map said this; the next turn re-reads it.";
+    head.insertBefore(d, head.querySelector(".kind"));
+  }
   if (kids) {
     const open = document.createElement("button");
     open.className = "open" + (editedInside(n.id) ? " edited" : "");
@@ -681,7 +697,7 @@ const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
 function renderFlows() {
   const ol = $("flows");
   ol.innerHTML = "";
-  for (const f of S.draft?.flows ?? []) {
+  for (const f of (S.draft?.flows ?? []).filter((f) => f.steps.some(inScope))) {
     const li = document.createElement("li");
     const b = document.createElement("button");
     b.textContent = f.name;
@@ -726,6 +742,10 @@ function renderTop() {
   pen.className = busy() ? "pen agent" : "pen";
   $("pass").disabled = busy() || !S.draft;
   $("pass").hidden = scoping();
+  const focus = snap?.task?.focus;
+  const whole = $("scopeview");
+  whole.hidden = scoping() || !focus || !snap?.map || snap.map.nodes.length <= focus.length;
+  whole.textContent = S.scope === "task" ? `Show the whole map (${snap?.map?.nodes.length ?? 0} boxes)` : "Show this task only";
   $("newtask").hidden = busy() || scoping() || !(phase() === "done" || !snap?.task);
   if (phase() === "done") $("newtask").className = "primary";
   else $("newtask").className = "ghost";
@@ -896,6 +916,7 @@ addEventListener("keydown", (ev) => {
 // ---------- buttons, code drawer, the intent preview ----------
 
 $("pass").onclick = pass;
+$("scopeview").onclick = () => { S.scope = S.scope === "task" ? "all" : "task"; S.fitted = undefined; render(); };
 $("fit").onclick = fit;
 $("reset").onclick = () => { S.draft = clone(S.snap.map); S.ways = {}; S.editing = null; render(); };
 $("undo").onclick = () => post("/api/undo").catch((e) => showActivity(e.message, "error"));

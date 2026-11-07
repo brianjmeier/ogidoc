@@ -36,6 +36,22 @@ The demo replays a **real Claude Code session** recorded on `demo/shortener`: tw
 scoping messages, the task map, and the build (5 tests pass). The bottom bar says what
 to try. The scripted agent plays the same turns whatever you type.
 
+## The map grows, task by task
+
+A task maps only what it touches, but the map belongs to the checkout: each task adds
+to it. An agent never rewrites `.ogimap/map.json`. When a task is framed, it sees an
+index of the map so far (ids, first lines, files) and writes the task's nodes to
+`.ogimap/region.json`. Each turn after that, Ogimap writes the task's region there: the
+nodes it works in, what contains them, what they contain, and what calls in or out.
+The agent rewrites that file. Ogimap merges it back in code (`mergeRegion`): a returned
+node replaces or adds, a node handed out and not returned is deleted, and the rest of
+the map is untouched byte for byte.
+
+A box whose code files changed since the map's last commit, outside Ogimap, is
+marked **code changed**. The next turn's region includes it, and the agent is told
+to re-read it. The editor opens on the task's part of the map; **Show the whole map**
+switches.
+
 ## In Tend: a Worker scopes, Ogimap takes over
 
 In [Tend](https://github.com/brianjmeier/tend), Ogimap lives in the **Workers**

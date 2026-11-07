@@ -21,8 +21,8 @@ import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
 import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
-import { checkMap, intentOf, type FlowMap } from "./map.ts";
-import { MAP_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
+import { checkMap, driftOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, type FlowMap } from "./map.ts";
+import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB = join(HERE, "web");
@@ -101,6 +101,7 @@ const mapPath = join(project, MAP_FILE);
 const layoutPath = join(project, ".ogimap", "layout.json");
 const rulesPath = join(project, ".ogimap", "rules.md");
 const taskPath = join(project, ".ogimap", "task.json");
+const regionPath = join(project, REGION_FILE);
 
 const state = {
   map: existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null as FlowMap | null,
@@ -126,6 +127,22 @@ function commitTurn(summary: string) {
     git(...ID, "commit", "-qm", `ogimap: ${summary || "turn"}`);
   } catch {}
 }
+
+// The files changed since the map last said what the code does: committed since the
+// last commit that touched the map, or not committed yet. The map itself doesn't count.
+function changedSinceMap(): Set<string> {
+  if (!isRepo() || !state.map) return new Set();
+  try {
+    const at = git("log", "-1", "--format=%H", "--", MAP_FILE);
+    if (!at) return new Set();
+    const committed = git("diff", "--name-only", at, "HEAD").split("\n");
+    const working = git("status", "--porcelain", "-uall").split("\n").map((l) => l.slice(3).split(" -> ").at(-1)!);
+    return new Set([...committed, ...working].filter((f) => f && !f.startsWith(".ogimap/")));
+  } catch {
+    return new Set();
+  }
+}
+const drift = (): string[] => (state.map ? driftOf(state.map, changedSinceMap()) : []);
 
 function canUndo(): boolean {
   if (!isRepo()) return false;
@@ -154,6 +171,7 @@ const snapshot = () => ({
   agent: agent.name,
   hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
   task: state.task,
+  drift: drift(),
 });
 const publish = () => send({ type: "state", ...snapshot() });
 
@@ -165,18 +183,38 @@ function activity(a: string) {
 
 // ---------- turns ----------
 
-async function runAgent(prompt: string): Promise<{ summary: string; changed: string[] }> {
+// Reads what the agent wrote into the new map: the whole map when mapping, a region
+// merged into the map otherwise.
+type Collect = { file: string; read: () => FlowMap };
+
+const wholeMap: Collect = { file: MAP_FILE, read: () => checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) };
+
+// `returned` collects the ids the agent handed back, for the task's focus.
+const regionMerged = (sent: Set<string>, returned: Set<string>): Collect => ({
+  file: REGION_FILE,
+  read: () => {
+    if (!existsSync(regionPath)) throw new Error(`${REGION_FILE} is missing`);
+    const back = JSON.parse(readFileSync(regionPath, "utf8")) as FlowMap;
+    const merged = mergeRegion(state.map, sent, back);
+    for (const n of back.nodes) returned.add(n.id);
+    writeFileSync(mapPath, JSON.stringify(merged, null, 1));
+    rmSync(regionPath, { force: true });
+    return merged;
+  },
+});
+
+async function runAgent(prompt: string, collect: Collect = wholeMap): Promise<{ summary: string; changed: string[] }> {
   let resume: string | undefined;
   let reply = parseReply(await agent.run({ prompt, cwd: project, onActivity: activity, onSession: (id) => (resume = id) }));
   for (let tries = 0; ; tries++) {
     try {
-      state.map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
+      state.map = collect.read();
       return reply;
     } catch (e) {
-      // One chance to fix the map, in the same conversation when the CLI can carry one on.
+      // One chance to fix it, in the same conversation when the CLI can carry one on.
       if (tries > 0 || agent.name === "mock") throw e;
-      activity("the map didn't check out; asking for a fix");
-      const fix = `${MAP_FILE} is not right: ${(e as Error).message}. Fix the file, then reply with the same JSON block.`;
+      activity(`${collect.file} didn't check out; asking for a fix`);
+      const fix = `${collect.file} is not right: ${(e as Error).message}. Fix the file, then reply with the same JSON block.`;
       reply = parseReply(await agent.run({ prompt: resume ? fix : `${prompt}\n\n# Before you start\n\n${fix}`, cwd: project, onActivity: activity, resume }));
     }
   }
@@ -201,16 +239,41 @@ async function guarded(kind: "mapping" | "turn" | "framing", work: () => Promise
 
 const remap = () => guarded("mapping", () => runAgent(mapPrompt()));
 
+// What a turn works in: the task's region, what the person touched, and nodes whose code
+// changed under the map. With no task, the whole map.
+function turnRegion(before: FlowMap, draft: FlowMap, focus: string[], drifted: string[]): Set<string> {
+  if (!state.task?.focus) return new Set(before.nodes.map((n) => n.id));
+  const was = new Map(before.nodes.map((n) => [n.id, n]));
+  const touched = draft.nodes.filter((n) => {
+    const o = was.get(n.id);
+    return o && (n.removed || o.name !== n.name || o.pseudo.join("\n") !== n.pseudo.join("\n") || (o.parent ?? null) !== (n.parent ?? null));
+  }).map((n) => n.id);
+  const parents = draft.nodes.filter((n) => !was.has(n.id) && n.parent).map((n) => n.parent!);
+  const wired = draft.edges.filter((e) => e.by === "human" || e.removed).flatMap((e) => [e.from, e.to]);
+  return regionIds(before, [...state.task.focus, ...touched, ...parents, ...wired, ...focus, ...drifted]);
+}
+
 function turn(draft: FlowMap, focus: string[]) {
   const before = state.map!;
   const intent = intentOf(before, draft, focus);
+  const drifted = drift();
+  const ids = turnRegion(before, draft, focus, drifted);
+  const region = regionOf(before, ids);
+  mkdirSync(dirname(regionPath), { recursive: true });
+  writeFileSync(regionPath, JSON.stringify(region, null, 1));
   activity("the pen is with the agent");
   const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
   return guarded("turn", async () => {
-    const r = await runAgent(turnPrompt({ map: before, intent, rules, task: state.task }));
-    // The task is done when nothing on its map waits for a build.
-    if (state.task && state.map && !state.map.nodes.some((n) => n.status === "stale" || n.status === "proposal")) {
-      state.task.phase = "done";
+    const returned = new Set<string>();
+    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned));
+    const task = state.task;
+    if (task && state.map) {
+      const map = state.map;
+      // The task keeps what it worked in, minus what the turn deleted, plus what it added.
+      task.focus = [...regionIds(map, [...(task.focus ?? []), ...returned])];
+      // The task is done when nothing in its part of the map waits for a build.
+      const mine = new Set(task.focus);
+      if (!map.nodes.some((n) => mine.has(n.id) && (n.status === "stale" || n.status === "proposal"))) task.phase = "done";
       saveTask();
     }
     return r;
@@ -267,7 +330,11 @@ function changedFiles(): Set<string> {
 async function frame() {
   const before = changedFiles();
   await guarded("framing", async () => {
-    const r = await runAgent(framePrompt({ task: state.task!, map: state.map }));
+    rmSync(regionPath, { force: true });
+    const index = state.map ? indexOf(state.map, drift()) : "";
+    const returned = new Set<string>();
+    const r = await runAgent(framePrompt({ task: state.task!, index }), regionMerged(new Set(), returned));
+    state.task!.focus = [...regionIds(state.map!, returned)];
     for (const f of changedFiles()) {
       if (before.has(f) || f.startsWith(".ogimap/")) continue;
       activity(`framing may not change ${f}; put back`);
@@ -275,7 +342,7 @@ async function frame() {
     }
     state.task!.phase = "map";
     saveTask();
-    return { summary: r.summary || `the map for: ${state.task!.title}`, changed: state.map!.nodes.filter((n) => n.status !== "built").map((n) => n.id) };
+    return { summary: r.summary || `the map for: ${state.task!.title}`, changed: [...returned] };
   });
 }
 
@@ -292,6 +359,10 @@ function startTask(body: { prompt?: string; title?: string; brief?: string; mess
     void frame();
   } else void scope(prompt);
 }
+
+// A task file is read before the server listens, so a bad one fails the start instead
+// of leaving a server that answers nothing.
+const taskFile: Parameters<typeof startTask>[0] | null = opts["task-file"] ? JSON.parse(readFileSync(opts["task-file"], "utf8")) : null;
 
 // ---------- http ----------
 
@@ -396,11 +467,14 @@ server.listen(Number(opts.port), "127.0.0.1", () => {
   // Where to find this server, for whoever started it in the background (a Tend station).
   mkdirSync(join(project, ".ogimap"), { recursive: true });
   writeFileSync(join(project, ".ogimap", "server.json"), JSON.stringify({ port, pid: process.pid, url }));
+  // Where the server listens, and a turn's region in flight, are never part of the map.
   const ignore = join(project, ".ogimap", ".gitignore");
-  if (!existsSync(ignore)) writeFileSync(ignore, "server.json\n");
+  const ignored = existsSync(ignore) ? readFileSync(ignore, "utf8").split("\n") : [];
+  const missing = ["server.json", "region.json"].filter((f) => !ignored.includes(f));
+  if (missing.length) writeFileSync(ignore, [...ignored.filter(Boolean), ...missing].join("\n") + "\n");
   console.log(`Ogimap on ${url}\n  project: ${project}\n  agent:   ${agent.name}`);
   if (opts.open) spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore", detached: true }).unref();
-  if (opts["task-file"]) startTask(JSON.parse(readFileSync(opts["task-file"], "utf8")));
+  if (taskFile) startTask(taskFile);
   else if (opts.task) startTask({ prompt: opts.task });
   else if (opts.remap) void remap();
 });

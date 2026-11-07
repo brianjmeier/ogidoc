@@ -15,7 +15,7 @@
     "writing .ogimap/map.json"
    ],
    "copy": {
-    ".ogimap/map.json": "turns/frame/map.json"
+    ".ogimap/region.json": "turns/frame/map.json"
    },
    "reply": {
     "summary": "the map for this task: createdAt in store.save, a new isExpired, 410 from follow and stats, and a test"
@@ -35,7 +35,7 @@
     "src/links.js": "turns/build/links.js",
     "src/store.js": "turns/build/store.js",
     "test/links.test.js": "turns/build/links.test.js",
-    ".ogimap/map.json": "turns/build/map.json"
+    ".ogimap/region.json": "turns/build/map.json"
    },
    "reply": {
     "summary": "Links expire 7 days after creation: createdAt stored, isExpired check, 410 on follow/stats, tests with a mocked clock",
