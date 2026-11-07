@@ -40,16 +40,14 @@ function receive(snap) {
   const turnEnded = prev?.busy && !snap.busy;
   S.snap = snap;
   activity = snap.activity ?? [];
-  if (!S.draft || turnEnded || !prev?.map || (!snap.busy && prev.map !== snap.map && !dirty())) {
-    if (turnEnded && snap.last?.error && S.draft) {
-      // The agent failed: keep the person's edits so they can try again.
-    } else {
-      if (turnEnded) { markFresh(prev.map, snap.map, snap.last?.changed ?? []); S.fitted = undefined; }
-      S.draft = snap.map ? clone(snap.map) : null;
-      S.ways = {};
-      S.editing = null;
-      if (S.level && !S.draft?.nodes.some((n) => n.id === S.level)) S.level = null;
-    }
+  // A failed turn keeps the person's edits, so they can try again.
+  const keepEdits = turnEnded && snap.last?.error && S.draft;
+  if (!keepEdits && (!S.draft || turnEnded || !prev?.map || (!snap.busy && prev.map !== snap.map && !dirty()))) {
+    if (turnEnded) { markFresh(prev.map, snap.map, snap.last?.changed ?? []); S.fitted = undefined; }
+    S.draft = snap.map ? clone(snap.map) : null;
+    S.ways = {};
+    S.editing = null;
+    if (S.level && !S.draft?.nodes.some((n) => n.id === S.level)) S.level = null;
   }
   render();
 }
@@ -78,9 +76,8 @@ function markFresh(before, after, changed) {
 // ---------- the person's edits ----------
 
 function dirty() {
-  return !!S.draft && !!S.snap?.map && JSON.stringify(stripView(S.draft)) !== JSON.stringify(S.snap.map);
+  return !!S.draft && !!S.snap?.map && JSON.stringify(S.draft) !== JSON.stringify(S.snap.map);
 }
-const stripView = (m) => m;
 
 function editCount() {
   if (!S.draft || !S.snap?.map) return 0;

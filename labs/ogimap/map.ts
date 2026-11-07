@@ -100,6 +100,12 @@ export function checkMap(raw: unknown): FlowMap {
 
 const EMPTY: FlowMap = { title: "map", nodes: [], edges: [], flows: [] };
 
+/** The ids with every node that holds one of them, up to the top. */
+function withAncestors(byId: Map<string, MapNode>, ids: Set<string>): Set<string> {
+  for (const id of [...ids]) for (let p = byId.get(id)?.parent; p; p = byId.get(p)?.parent) ids.add(p);
+  return ids;
+}
+
 /** The ids around some seeds that a turn needs to see: the seeds, what contains them,
  *  what they contain, and what they call or are called by. */
 export function regionIds(map: FlowMap, seeds: Iterable<string>): Set<string> {
@@ -111,17 +117,14 @@ export function regionIds(map: FlowMap, seeds: Iterable<string>): Set<string> {
     if (region.has(e.to) && byId.has(e.from)) region.add(e.from);
   }
   for (const n of map.nodes) if (n.parent && core.includes(n.parent)) region.add(n.id);
-  for (const id of [...region]) for (let p = byId.get(id)?.parent; p; p = byId.get(p)?.parent) region.add(p);
-  return region;
+  return withAncestors(byId, region);
 }
 
 /** What a task shows: the nodes it drew or changed, and the modules that hold them.
  *  Narrower than the region a turn is handed, which adds one hop of context. */
 export function focusOf(map: FlowMap, ids: Iterable<string>): Set<string> {
   const byId = new Map(map.nodes.map((n) => [n.id, n]));
-  const focus = new Set([...ids].filter((id) => byId.has(id)));
-  for (const id of [...focus]) for (let p = byId.get(id)?.parent; p; p = byId.get(p)?.parent) focus.add(p);
-  return focus;
+  return withAncestors(byId, new Set([...ids].filter((id) => byId.has(id))));
 }
 
 /** The part of the map with these ids, with the edges and flows among them. */

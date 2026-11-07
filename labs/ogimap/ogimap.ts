@@ -4,7 +4,7 @@
 //
 //   node labs/ogimap/ogimap.ts [dir] [--agent claude|pi|mock] [--agent-cmd "<cmd>"]
 //                              [--port 4848] [--remap] [--demo] [--open]
-//                              [--task "<prompt>"] [--task-file brief.json] [--script turns.json] [--detach]
+//                              [--task "<prompt>"] [--task-file brief.json] [--detach]
 //
 // A task goes: scope (a read-only chat, from your prompt) → frame (the agent draws the
 // part of the map the task touches, with the change on it) → map (you and the agent
@@ -21,6 +21,8 @@ import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
 import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
+import { trusted, TYPES } from "../../src/server.ts";
+import { turnLog } from "../../src/turn-log.ts";
 import { checkMap, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, stamped, type FlowMap } from "./map.ts";
 import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
@@ -37,7 +39,6 @@ const { values: opts, positionals } = parseArgs({
     demo: { type: "boolean", default: false },
     open: { type: "boolean", default: false },
     task: { type: "string" },
-    script: { type: "string" },
     detach: { type: "boolean", default: false },
     "task-file": { type: "string" },
   },
@@ -64,8 +65,7 @@ if (opts.detach && !opts.demo) {
   process.exit(1);
 }
 let agentName = opts["agent-cmd"] ? "command" : (opts.agent ?? "claude");
-let script: string | undefined = opts.script && resolve(opts.script);
-if (script && !opts.agent) agentName = "mock";
+let script: string | undefined;
 
 if (opts.demo) {
   // A throwaway copy of the demo project, with its map already drawn, and a scripted agent.
@@ -78,7 +78,7 @@ if (opts.demo) {
   if (!opts.agent) {
     agentName = "mock";
     // A task scoped elsewhere (a Tend session) starts at its map: the script without the scoping.
-    script ??= join(HERE, "demo", opts["task-file"] ? "turns-from-brief.json" : "turns.json");
+    script = join(HERE, "demo", opts["task-file"] ? "turns-from-brief.json" : "turns.json");
   }
 }
 
@@ -114,18 +114,14 @@ const state = {
 
 // ---------- git: one commit per turn, so a turn can be undone ----------
 
+// Ogidoc's turn log commits what a turn changed, map and code together, and takes a
+// turn back out, map included. Its own files are the ones Ogimap writes to version the
+// map (the merge rule and what stays out of git): committed when they change, never
+// reverted with a turn.
+const log = turnLog({ cwd: project, ownFiles: [join(project, ".gitattributes"), join(project, ".ogimap", ".gitignore")], commit: true });
+
 function git(...args: string[]): string {
   return execFileSync("git", args, { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-}
-const isRepo = () => existsSync(join(project, ".git"));
-const ID = ["-c", "user.name=ogimap", "-c", "user.email=ogimap@localhost"];
-
-function commitTurn(summary: string) {
-  if (!isRepo()) return;
-  try {
-    git("add", "-A");
-    git(...ID, "commit", "-qm", `ogimap: ${summary || "turn"}`);
-  } catch {}
 }
 
 // What each file the map anchors to hashes to now, as git hashes a blob; null for a
@@ -165,7 +161,7 @@ function restamp(before: FlowMap | null, after: FlowMap, alsoFresh: Iterable<str
 // A checkout Ogimap runs in versions its map like code: the map rebases and merges by
 // node (the merge driver), and what belongs to this checkout alone stays out of git.
 function versionTheMap() {
-  if (!isRepo()) return;
+  if (!log.commits) return;
   try {
     git("config", "merge.ogimap.name", "Ogimap map, merged by node");
     git("config", "merge.ogimap.driver", `node '${join(HERE, "merge.ts")}' %O %A %B`);
@@ -177,7 +173,7 @@ function versionTheMap() {
 }
 
 function canUndo(): boolean {
-  if (!isRepo()) return false;
+  if (!log.commits) return false;
   try {
     return git("log", "-1", "--format=%s").startsWith("ogimap: ");
   } catch {
@@ -217,7 +213,7 @@ const snapshot = () => (followDisk(), {
   hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
   task: state.task,
   drift: drift(),
-}) as const;
+});
 const publish = () => send({ type: "state", ...snapshot() });
 
 function activity(a: string) {
@@ -274,14 +270,17 @@ async function runAgent(prompt: string, collect: Collect = wholeMap): Promise<{ 
   }
 }
 
-async function guarded(kind: "mapping" | "turn" | "framing", work: () => Promise<{ summary: string; changed: string[] }>) {
+// One agent run with the pen: busy while it runs, and what it said after. A run that
+// changes the checkout (all but scoping) is one commit.
+async function guarded(kind: NonNullable<typeof state.busy>, work: () => Promise<{ summary: string; changed: string[] } | null>) {
   state.busy = kind;
   state.activity = [];
   publish();
+  const mark = log.begin();
   try {
     const r = await work();
     state.turn++;
-    commitTurn(r.summary);
+    if (r) log.record(mark, `ogimap: ${r.summary || "turn"}`, { ownFiles: true });
     state.last = r;
   } catch (e) {
     state.last = { summary: "", changed: [], error: (e as Error).message };
@@ -347,10 +346,7 @@ async function scope(said: string) {
   const task = state.task!;
   task.messages.push({ who: "you", text: said });
   saveTask();
-  state.busy = "scoping";
-  state.activity = [];
-  publish();
-  try {
+  await guarded("scoping", async () => {
     const text = await reader.run({
       prompt: scopePrompt({ task, map: state.map, said }),
       cwd: project,
@@ -365,34 +361,23 @@ async function scope(said: string) {
       task.brief = r.brief;
       task.phase = "frame";
     }
-    state.last = null;
-    state.turn++;
-  } catch (e) {
-    state.last = { summary: "", changed: [], error: (e as Error).message };
-  } finally {
     saveTask();
-    state.busy = null;
-    publish();
-  }
+    return null;
+  });
   if (task.phase === "frame") await frame();
 }
 
 // Framing may only write the map. Anything else it touched goes back as it was.
-function changedFiles(): Set<string> {
-  if (!isRepo()) return new Set();
-  return new Set(git("status", "--porcelain", "-uall").split("\n").filter(Boolean).map((l) => l.slice(3)));
-}
-
 async function frame() {
-  const before = changedFiles();
+  const before = log.begin();
   await guarded("framing", async () => {
     rmSync(regionPath, { force: true });
     const index = state.map ? indexOf(state.map, drift()) : "";
     const returned = new Set<string>();
     const r = await runAgent(framePrompt({ task: state.task!, index }), regionMerged(new Set(), returned));
     state.task!.focus = [...focusOf(state.map!, returned)];
-    for (const f of changedFiles()) {
-      if (before.has(f) || f.startsWith(".ogimap/")) continue;
+    for (const [f, hash] of log.begin()) {
+      if (before.get(f) === hash || f.startsWith(".ogimap/")) continue;
       activity(`framing may not change ${f}; put back`);
       try { git("checkout", "--", f); } catch { try { git("rm", "-qf", "--cached", f); } catch {} rmSync(join(project, f), { force: true }); }
     }
@@ -422,19 +407,6 @@ const taskFile: Parameters<typeof startTask>[0] | null = opts["task-file"] ? JSO
 
 // ---------- http ----------
 
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
-const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-// Same rule as Ogidoc: a turn runs an agent that edits files, so only a page this
-// server served, on this machine, may start one.
-function trusted(req: IncomingMessage): boolean {
-  const host = req.headers.host ?? "";
-  if (!LOCAL.has(host.replace(/:\d+$/, ""))) return false;
-  if (req.method !== "POST") return true;
-  const origin = req.headers.origin;
-  if (origin && origin !== `http://${host}`) return false;
-  return (req.headers["content-type"] ?? "").startsWith("application/json");
-}
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -499,7 +471,10 @@ const server = createServer(async (req, res) => {
       }
       if (url.pathname === "/api/undo") {
         if (!canUndo()) return json(res, 409, { error: "nothing to undo" });
-        git(...ID, "revert", "--no-edit", "HEAD");
+        const mark = log.begin();
+        const subject = git("log", "-1", "--format=%s");
+        log.revert(git("rev-parse", "HEAD"));
+        log.record(mark, `Revert "${subject}"`, { ownFiles: false });
         state.map = existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null;
         state.last = { summary: "undid the last turn", changed: [] };
         publish();

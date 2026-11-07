@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Where each agent turn is recorded, so it can be undone and so changes made outside a
@@ -32,7 +32,10 @@ export interface LogState {
 export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ownFiles: string[]; commit: boolean; saved?: LogState }): TurnLog {
   const root = repoRoot(cwd);
   if (!root) return noLog;
-  const log = gitLog(root, ownFiles.map((f) => relative(root, f)), saved);
+  // git names the root by its real path; `cwd` may run through a symlink (macOS /tmp
+  // is /private/tmp), so own files are placed against the real path of `cwd`.
+  const here = relative(root, realpathSync(cwd));
+  const log = gitLog(root, ownFiles.map((f) => join(here, relative(cwd, f))), saved);
   return commit ? log : { ...noLog, revert: log.revert };
 }
 

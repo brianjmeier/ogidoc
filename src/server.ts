@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { WEB_DIR } from "./paths.ts";
 import type { Session } from "./session.ts";
 
-const TYPES: Record<string, string> = {
+export const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -22,7 +22,7 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 // rebinding. A POST must be JSON from the same origin, and another site can only send
 // JSON after a CORS preflight, which this server never grants. Any port is fine, so a
 // tunnel that forwards to a different local port still works.
-function trusted(req: IncomingMessage): boolean {
+export function trusted(req: IncomingMessage): boolean {
   const host = req.headers.host ?? "";
   if (!LOCAL_HOSTS.has(host.replace(/:\d+$/, ""))) return false;
   if (req.method !== "POST") return true;
