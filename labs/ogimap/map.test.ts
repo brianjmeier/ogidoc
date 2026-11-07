@@ -69,7 +69,7 @@ test("the reply is the last json block", () => {
 
 // ---------- the map grows task by task ----------
 
-import { driftOf, focusOf, indexOf, mergeRegion, regionIds, regionOf } from "./map.ts";
+import { driftOf, focusOf, indexOf, mergeMaps, mergeRegion, regionIds, regionOf, stamped } from "./map.ts";
 
 const tiny = (): FlowMap =>
   checkMap({
@@ -129,7 +129,13 @@ test("a region that points at a parent nowhere in the map is refused", () => {
 });
 
 test("nodes whose code changed are drift, and the index says so", () => {
-  const drift = driftOf(tiny(), new Set(["src/cart.js"]));
+  const hashes: Record<string, string> = { "src/cart.js": "c1", "src/pay.js": "p1" };
+  const seenNow = stamped(tiny(), tiny().nodes.map((n) => n.id), (f) => hashes[f] ?? null);
+  assert.deepEqual(seenNow.nodes.find((n) => n.id === "cart.add")!.seen, { "src/cart.js": "c1" });
+  assert.equal(seenNow.nodes.find((n) => n.id === "cart")!.seen, undefined);
+  assert.deepEqual(driftOf(seenNow, (f) => hashes[f] ?? null), []);
+  hashes["src/cart.js"] = "c2";
+  const drift = driftOf(seenNow, (f) => hashes[f] ?? null);
   assert.deepEqual(drift, ["cart.add", "cart.total"]);
   const index = indexOf(tiny(), drift);
   assert.match(index, /- cart\.add \(in cart\): push item \[src\/cart\.js\] — code changed since mapped/);
@@ -139,4 +145,74 @@ test("nodes whose code changed are drift, and the index says so", () => {
 test("a task's focus is what it touched and the modules holding it, not their neighbours", () => {
   assert.deepEqual([...focusOf(tiny(), ["pay.charge", "gone"])].sort(), ["pay", "pay.charge"]);
   assert.deepEqual([...regionIds(tiny(), focusOf(tiny(), ["pay.charge"]))].sort(), ["cart", "cart.total", "pay", "pay.charge"]);
+});
+
+// ---------- a branch's map rebases onto main's ----------
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync as write, readFileSync as read, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+test("three-way: each side's changes land, both-changed keeps ours unstamped, deletes and parents carry", () => {
+  const base = stamped(tiny(), tiny().nodes.map((n) => n.id), () => "h0");
+  const ours = structuredClone(base);
+  ours.nodes.find((n) => n.id === "cart.add")!.pseudo = ["push item, merge duplicates"];
+  ours.nodes.find((n) => n.id === "pay.charge")!.pseudo = ["ours: stripe.charge(total, idempotent)"];
+  ours.nodes.push({ id: "cart.clear", name: "clear", parent: "cart", kind: "step", pseudo: ["empty the cart"] });
+  ours.edges.push({ from: "pay.charge", to: "cart.clear" });
+  const theirs = structuredClone(base);
+  theirs.nodes.find((n) => n.id === "cart.total")!.pseudo = ["sum prices, then tax"];
+  theirs.nodes.find((n) => n.id === "pay.charge")!.pseudo = ["theirs: adyen.charge(total)"];
+  theirs.nodes = theirs.nodes.filter((n) => n.id !== "auth" && n.id !== "auth.login");
+  theirs.nodes.push({ id: "auth.sso", name: "sso", parent: "auth", kind: "step", pseudo: ["google sign-in"] });
+  const merged = mergeMaps(base, ours, theirs);
+  const at = (id: string) => merged.nodes.find((n) => n.id === id);
+  assert.deepEqual(at("cart.add")!.pseudo, ["push item, merge duplicates"]);
+  assert.deepEqual(at("cart.total")!.pseudo, ["sum prices, then tax"]);
+  assert.deepEqual(at("pay.charge")!.pseudo, ["ours: stripe.charge(total, idempotent)"]);
+  assert.deepEqual(at("pay.charge")!.ways, [{ pseudo: ["theirs: adyen.charge(total)"] }]);
+  assert.equal(at("pay.charge")!.status, "stale");
+  assert.equal(at("pay.charge")!.seen, undefined);
+  assert.deepEqual(at("cart.total")!.seen, { "src/cart.js": "h0" });
+  assert.ok(at("cart.clear"));
+  assert.equal(at("auth"), undefined);
+  assert.equal(at("auth.login"), undefined);
+  assert.equal(at("auth.sso")!.parent, null);
+  assert.ok(merged.edges.some((e) => e.from === "pay.charge" && e.to === "cart.clear"));
+  assert.equal(merged.edges.some((e) => e.from === "auth.login"), false);
+});
+
+test("git rebases a branch's map onto main's through the driver, with no conflict", () => {
+  const repo = mkdtempSync(join(tmpdir(), "ogimap-rebase-"));
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const save = (map: FlowMap) => write(join(repo, ".ogimap/map.json"), JSON.stringify(map, null, 1) + "\n");
+  git("init", "-q", "-b", "main");
+  git("config", "merge.ogimap.driver", `node '${new URL("./merge.ts", import.meta.url).pathname}' %O %A %B`);
+  write(join(repo, ".gitattributes"), ".ogimap/map.json merge=ogimap\n");
+  mkdirSync(join(repo, ".ogimap"));
+  save(tiny());
+  git("add", "-A");
+  git("commit", "-qm", "the map");
+  git("checkout", "-qb", "worker");
+  const mine = tiny();
+  mine.nodes.find((n) => n.id === "cart.add")!.pseudo = ["worker: push item"];
+  mine.nodes.push({ id: "cart.clear", name: "clear", parent: "cart", kind: "step", pseudo: ["empty the cart"] });
+  save(mine);
+  git("commit", "-qam", "worker's task");
+  git("checkout", "-q", "main");
+  const mains = tiny();
+  mains.nodes.find((n) => n.id === "cart.total")!.pseudo = ["main: sum prices, then tax"];
+  mains.nodes.find((n) => n.id === "cart.add")!.code = [{ file: "src/cart.js", line: 4 }];
+  save(mains);
+  git("commit", "-qam", "main's task");
+  git("checkout", "-q", "worker");
+  git("rebase", "-q", "main");
+  const after = checkMap(JSON.parse(read(join(repo, ".ogimap/map.json"), "utf8")));
+  const at = (id: string) => after.nodes.find((n) => n.id === id);
+  assert.deepEqual(at("cart.add")!.pseudo, ["worker: push item"]);
+  assert.deepEqual(at("cart.add")!.code, [{ file: "src/cart.js", line: 4 }]);
+  assert.deepEqual(at("cart.total")!.pseudo, ["main: sum prices, then tax"]);
+  assert.ok(at("cart.clear"));
+  assert.match(git("log", "--format=%s"), /worker's task\nmain's task\nthe map/);
 });

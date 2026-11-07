@@ -47,10 +47,27 @@ The agent rewrites that file. Ogimap merges it back in code (`mergeRegion`): a r
 node replaces or adds, a node handed out and not returned is deleted, and the rest of
 the map is untouched byte for byte.
 
-A box whose code files changed since the map's last commit, outside Ogimap, is
-marked **code changed**. The next turn's region includes it, and the agent is told
-to re-read it. The editor opens on the task's part of the map; **Show the whole map**
-switches.
+Each box records the git blob hash of every file it points at, from when it last said
+what the code does. A box whose files hash differently now (another task, a hand edit,
+a rebase onto main) is marked **code changed**; the next turn's region includes it, and
+the agent is told to re-read it. The editor opens on the task's part of the map; **Show
+the whole map** switches.
+
+## Every branch has its version of the map
+
+`.ogimap/map.json` is committed with the code, one commit per turn, so a branch carries
+its own version of the map. A checkout cut from main starts from main's map. A branch's
+map rebases and merges onto main's like its code does: Ogimap registers a git merge
+driver (`merge.ts`) in each checkout it runs in, and `.gitattributes` routes the map to
+it. The driver merges three ways, field by field within each box: what one side changed
+lands, and what either side added or deleted is added or deleted. When both sides
+rewrote a box's pseudocode, the box keeps one and offers the other as another way,
+marked to build, so the conflict shows as a choice instead of a merge marker. A running
+Ogimap reads the map again when git changes it under it. What belongs to one checkout
+(the task, the box layout, the server's port, a turn in flight) is git-ignored, so it
+never reaches main.
+
+
 
 ## In Tend: a Worker scopes, Ogimap takes over
 

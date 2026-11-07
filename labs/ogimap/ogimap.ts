@@ -11,7 +11,7 @@
 // take turns on the map; code is built underneath) → done.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -21,7 +21,7 @@ import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
 import type { AddressInfo } from "node:net";
 import { makeAgent, type Agent } from "../../src/agents.ts";
-import { checkMap, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, type FlowMap } from "./map.ts";
+import { checkMap, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, stamped, type FlowMap } from "./map.ts";
 import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -128,21 +128,53 @@ function commitTurn(summary: string) {
   } catch {}
 }
 
-// The files changed since the map last said what the code does: committed since the
-// last commit that touched the map, or not committed yet. The map itself doesn't count.
-function changedSinceMap(): Set<string> {
-  if (!isRepo() || !state.map) return new Set();
+// What each file the map anchors to hashes to now, as git hashes a blob; null for a
+// file that is gone. A box is stale when this differs from what it saw.
+function hashesOf(files: string[]): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  const present = files.filter((f) => existsSync(join(project, f)));
+  for (const f of files) out.set(f, null);
+  if (!present.length) return out;
   try {
-    const at = git("log", "-1", "--format=%H", "--", MAP_FILE);
-    if (!at) return new Set();
-    const committed = git("diff", "--name-only", at, "HEAD").split("\n");
-    const working = git("status", "--porcelain", "-uall").split("\n").map((l) => l.slice(3).split(" -> ").at(-1)!);
-    return new Set([...committed, ...working].filter((f) => f && !f.startsWith(".ogimap/")));
-  } catch {
-    return new Set();
-  }
+    const hashes = execFileSync("git", ["hash-object", "--", ...present], { cwd: project, encoding: "utf8" }).trim().split("\n");
+    present.forEach((f, i) => out.set(f, hashes[i] ?? null));
+  } catch {}
+  return out;
 }
-const drift = (): string[] => (state.map ? driftOf(state.map, changedSinceMap()) : []);
+const hasherFor = (map: FlowMap) => {
+  const hashes = hashesOf([...new Set(map.nodes.flatMap((n) => [...(n.code ?? []).map((c) => c.file), ...Object.keys(n.seen ?? {})]))]);
+  return (file: string) => hashes.get(file) ?? null;
+};
+const drift = (): string[] => (state.map ? driftOf(state.map, hasherFor(state.map)) : []);
+
+// After an agent writes its region: the boxes it drew, changed or re-read get fresh
+// stamps; the context it handed back as it was keeps the stamp it had.
+function restamp(before: FlowMap | null, after: FlowMap, alsoFresh: Iterable<string>): FlowMap {
+  const was = new Map((before?.nodes ?? []).map((n) => [n.id, n]));
+  const plain = (n: FlowMap["nodes"][number]) => JSON.stringify({ ...n, seen: undefined });
+  const fresh = new Set(alsoFresh);
+  const kept = after.nodes.map((n) => {
+    const old = was.get(n.id);
+    if (!old || plain(old) !== plain(n)) fresh.add(n.id);
+    return old?.seen && !fresh.has(n.id) ? { ...n, seen: old.seen } : n;
+  });
+  const map = { ...after, nodes: kept };
+  return stamped(map, fresh, hasherFor(map));
+}
+
+// A checkout Ogimap runs in versions its map like code: the map rebases and merges by
+// node (the merge driver), and what belongs to this checkout alone stays out of git.
+function versionTheMap() {
+  if (!isRepo()) return;
+  try {
+    git("config", "merge.ogimap.name", "Ogimap map, merged by node");
+    git("config", "merge.ogimap.driver", `node '${join(HERE, "merge.ts")}' %O %A %B`);
+    const attributes = join(project, ".gitattributes");
+    const rule = `${MAP_FILE} merge=ogimap`;
+    const lines = existsSync(attributes) ? readFileSync(attributes, "utf8").split("\n") : [];
+    if (!lines.includes(rule)) writeFileSync(attributes, [...lines.filter(Boolean), rule].join("\n") + "\n");
+  } catch {}
+}
 
 function canUndo(): boolean {
   if (!isRepo()) return false;
@@ -160,7 +192,20 @@ function send(ev: object) {
   const data = `data: ${JSON.stringify(ev)}\n\n`;
   for (const c of clients) c.write(data);
 }
-const snapshot = () => ({
+// The map is versioned with the code, so git can change it under a running server
+// (a rebase onto main, a pull, a checkout). Between turns, read it again when it did.
+let mapStamp = existsSync(mapPath) ? statSync(mapPath).mtimeMs : 0;
+function followDisk() {
+  if (state.busy || !existsSync(mapPath)) return;
+  const now = statSync(mapPath).mtimeMs;
+  if (now === mapStamp) return;
+  mapStamp = now;
+  try {
+    state.map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
+  } catch {}
+}
+
+const snapshot = () => (followDisk(), {
   map: state.map,
   layout: existsSync(layoutPath) ? JSON.parse(readFileSync(layoutPath, "utf8")) : {},
   busy: state.busy,
@@ -172,7 +217,7 @@ const snapshot = () => ({
   hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
   task: state.task,
   drift: drift(),
-});
+}) as const;
 const publish = () => send({ type: "state", ...snapshot() });
 
 function activity(a: string) {
@@ -187,17 +232,26 @@ function activity(a: string) {
 // merged into the map otherwise.
 type Collect = { file: string; read: () => FlowMap };
 
-const wholeMap: Collect = { file: MAP_FILE, read: () => checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) };
+const wholeMap: Collect = {
+  file: MAP_FILE,
+  read: () => {
+    const map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
+    const all = stamped(map, map.nodes.map((n) => n.id), hasherFor(map));
+    writeFileSync(mapPath, JSON.stringify(all, null, 1));
+    return all;
+  },
+};
 
 // `returned` collects the ids the agent handed back, for the task's focus.
-const regionMerged = (sent: Set<string>, returned: Set<string>): Collect => ({
+const regionMerged = (sent: Set<string>, returned: Set<string>, reread: Iterable<string> = []): Collect => ({
   file: REGION_FILE,
   read: () => {
     if (!existsSync(regionPath)) throw new Error(`${REGION_FILE} is missing`);
     const back = JSON.parse(readFileSync(regionPath, "utf8")) as FlowMap;
-    const merged = mergeRegion(state.map, sent, back);
+    const merged = restamp(state.map, mergeRegion(state.map, sent, back), reread);
     for (const n of back.nodes) returned.add(n.id);
     writeFileSync(mapPath, JSON.stringify(merged, null, 1));
+    mapStamp = statSync(mapPath).mtimeMs;
     rmSync(regionPath, { force: true });
     return merged;
   },
@@ -265,7 +319,7 @@ function turn(draft: FlowMap, focus: string[]) {
   const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
   return guarded("turn", async () => {
     const returned = new Set<string>();
-    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned));
+    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned, drifted.filter((id) => ids.has(id))));
     const task = state.task;
     if (task && state.map) {
       const map = state.map;
@@ -469,10 +523,12 @@ server.listen(Number(opts.port), "127.0.0.1", () => {
   // Where to find this server, for whoever started it in the background (a Tend station).
   mkdirSync(join(project, ".ogimap"), { recursive: true });
   writeFileSync(join(project, ".ogimap", "server.json"), JSON.stringify({ port, pid: process.pid, url }));
-  // Where the server listens, and a turn's region in flight, are never part of the map.
+  versionTheMap();
+  // Where the server listens, a turn's region in flight, this checkout's task and its
+  // layout are never part of the map, which travels with the branch.
   const ignore = join(project, ".ogimap", ".gitignore");
   const ignored = existsSync(ignore) ? readFileSync(ignore, "utf8").split("\n") : [];
-  const missing = ["server.json", "region.json"].filter((f) => !ignored.includes(f));
+  const missing = ["server.json", "region.json", "task.json", "layout.json"].filter((f) => !ignored.includes(f));
   if (missing.length) writeFileSync(ignore, [...ignored.filter(Boolean), ...missing].join("\n") + "\n");
   console.log(`Ogimap on ${url}\n  project: ${project}\n  agent:   ${agent.name}`);
   if (opts.open) spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore", detached: true }).unref();

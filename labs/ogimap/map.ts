@@ -28,6 +28,10 @@ export interface MapNode {
   ways?: { pseudo: string[] }[];
   // On a stale node from a task plan: the pseudo as the code is today.
   was?: string[];
+  // The git blob hash of each file in `code` when the node last said what it does.
+  // A node whose files hash differently now is stale, whatever happened in between
+  // (another task, a hand edit, a rebase onto main). Ogimap writes it, never the agent.
+  seen?: Record<string, string>;
   // Set by the editor only: the person drew this node, or wants it gone.
   by?: "human";
   removed?: boolean;
@@ -148,9 +152,75 @@ export function mergeRegion(map: FlowMap | null, sent: Set<string>, back: FlowMa
   return checkMap({ title: map ? base.title : back.title || base.title, nodes, edges, flows });
 }
 
-/** Nodes whose code changed since the map last said what it does. */
-export function driftOf(map: FlowMap, changed: Set<string>): string[] {
-  return map.nodes.filter((n) => n.code?.some((c) => changed.has(c.file))).map((n) => n.id);
+/** Nodes whose code changed since the map last said what it does: a file it saw hashes
+ *  differently now, or is gone (`hashOf` answers null). A node never stamped is not drift. */
+export function driftOf(map: FlowMap, hashOf: (file: string) => string | null): string[] {
+  return map.nodes.filter((n) => n.seen && Object.entries(n.seen).some(([file, hash]) => hashOf(file) !== hash)).map((n) => n.id);
+}
+
+/** The map with these nodes stamped as true to the code as it is now. */
+export function stamped(map: FlowMap, ids: Iterable<string>, hashOf: (file: string) => string | null): FlowMap {
+  const fresh = new Set(ids);
+  return {
+    ...map,
+    nodes: map.nodes.map((n) => {
+      if (!fresh.has(n.id) || !n.code?.length) return n;
+      const seen: Record<string, string> = {};
+      for (const c of n.code) {
+        const hash = hashOf(c.file);
+        if (hash !== null) seen[c.file] = hash;
+      }
+      return Object.keys(seen).length ? { ...n, seen } : n;
+    }),
+  };
+}
+
+// ---------- three-way merge: a branch's map onto main's, as git merges code ----------
+
+/** One branch's map merged with another's, from the map they share (`base`), the way
+ *  git merges code. Nodes merge field by field: a field changed on one side takes that
+ *  side. When both sides rewrote a node's pseudocode, the node keeps ours and offers
+ *  theirs as another way, unstamped and to build, so the person sees the choice and the
+ *  next turn re-reads it; any other field changed on both keeps ours. Nodes, edges and
+ *  flows added or deleted on either side are added or deleted; a node whose parent the
+ *  other side deleted moves to the top. */
+export function mergeMaps(base: FlowMap, ours: FlowMap, theirs: FlowMap): FlowMap {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const three = <T>(key: (x: T) => string, b: T[], o: T[], t: T[], both: (o: T, t: T, b: T | undefined) => T): T[] => {
+    const B = new Map(b.map((x) => [key(x), x]));
+    const O = new Map(o.map((x) => [key(x), x]));
+    const T = new Map(t.map((x) => [key(x), x]));
+    const out: T[] = [];
+    for (const k of new Set([...O.keys(), ...T.keys(), ...B.keys()])) {
+      const [bx, ox, tx] = [B.get(k), O.get(k), T.get(k)];
+      if (ox && tx) out.push(same(ox, tx) ? ox : same(ox, bx) ? tx : same(tx, bx) ? ox : both(ox, tx, bx));
+      else if (ox && !tx) { if (!bx || !same(ox, bx)) out.push(ox); }
+      else if (tx && !ox) { if (!bx || !same(tx, bx)) out.push(tx); }
+    }
+    return out;
+  };
+  const nodes = three<MapNode>((n) => n.id, base.nodes, ours.nodes, theirs.nodes, (o, t, b) => {
+    const merged: Record<string, unknown> = {};
+    const fields = new Set([...Object.keys(o), ...Object.keys(t), ...Object.keys(b ?? {})]);
+    for (const f of fields) {
+      const [ov, tv, bv] = [(o as any)[f], (t as any)[f], (b as any)?.[f]];
+      const v = same(ov, tv) || same(tv, bv) ? ov : same(ov, bv) ? tv : ov;
+      if (v !== undefined) merged[f] = v;
+    }
+    const node = merged as unknown as MapNode;
+    if (b && !same(o.pseudo, b.pseudo) && !same(t.pseudo, b.pseudo) && !same(o.pseudo, t.pseudo)) {
+      node.ways = [{ pseudo: t.pseudo }, ...(o.ways ?? [])];
+      node.status = "stale";
+    }
+    // Both sides touched this node: whatever it saw, the next turn re-reads it.
+    delete node.seen;
+    return node;
+  });
+  const ids = new Set(nodes.map((n) => n.id));
+  for (const n of nodes) if (n.parent && !ids.has(n.parent)) n.parent = null;
+  const edges = three<MapEdge>((e) => `${e.from}→${e.to}`, base.edges, ours.edges, theirs.edges, (o) => o);
+  const flows = three<Flow>((f) => f.id, base.flows ?? [], ours.flows ?? [], theirs.flows ?? [], (o) => o);
+  return checkMap({ title: ours.title || theirs.title, nodes, edges, flows });
 }
 
 /** A short index of the map, so a new task reuses what is already drawn. */
