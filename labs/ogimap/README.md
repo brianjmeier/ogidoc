@@ -70,6 +70,31 @@ never reaches main.
 
 
 
+## Explaining code you already have
+
+Ogimap also works without a change. When you've lost track of how something works
+(cognitive debt), ask for an **as-is map**: the agent draws the code as it is, every box
+"built", its pseudocode the real code with `file:line`, and an open decision as another
+way on its box rather than a plan. Nothing is built unless you edit a box and hand it
+over, and then that edit is a real request. Run it on a scratch branch, since Ogimap
+commits the map on every turn. Prose with proof explains *why*; the map shows the shape
+at a glance, and it is still there next time.
+
+## Saving a map and reusing it
+
+- **It's a file in the repo.** `.ogimap/map.json` is committed with the code, so the map
+  is saved the moment a turn ends. Nothing else needs keeping: the task, the layout and
+  the server's port are git-ignored.
+- **Come back to it** by starting Ogimap on the branch that holds it. Boxes whose files
+  changed since say "code changed", and the next turn re-reads them.
+- **Share it** by merging the branch, or only its `.ogimap/` commits, into main. Every
+  checkout cut from main then starts from that map.
+- **Another project** gets its own map: run `ogidoc map` there (in Tend, a Worker on that
+  repository calls `ogimapStart`). It starts empty and grows from the first task. Copy
+  `.ogimap/rules.md` if the house rules carry over.
+
+The `run-ogimap` skill in Brian's setup teaches agents both uses, and how to keep a map.
+
 ## In Tend: a Worker scopes, Ogimap takes over
 
 In [Tend](https://github.com/brianjmeier/tend), Ogimap lives in the **Workers**
@@ -79,7 +104,9 @@ the scoping chat. When it decides the task is ready it calls
 `ogimapStart({ title, prompt, brief })`. Workers starts Ogimap in the Worker's checkout
 with `--task-file` (which skips straight to the map) and `--agent-cmd` set to Ogidoc's
 turn bridge, so **the same Worker** draws the map and builds it, turn by turn
-(`ogimapReply`). The Worker's board mirrors the map with the plan on it. Workers finds
+(`ogimapReply`). The Worker's board, `ogimap`, draws the map in the board's own shapes (a rectangle
+per box with its title and code inside, a frame per module, arrows routed around
+boxes); the person edits it there and hands over with `ogimapHand`. Workers finds
 the server through `--detach`, which prints `.ogimap/server.json` (port, pid) once
 Ogimap listens.
 
