@@ -208,9 +208,21 @@
           }
         ],
         "files": [
-          "src/store.js",
-          "src/links.js",
-          "test/expiry.test.js"
+          {
+            "op": "~",
+            "path": "src/store.js",
+            "why": "a link remembers when it was made"
+          },
+          {
+            "op": "~",
+            "path": "src/links.js",
+            "why": "follow answers 410 after 30 days"
+          },
+          {
+            "op": "+",
+            "path": "test/expiry.test.js",
+            "why": "your example as a test"
+          }
         ],
         "checks": [
           {

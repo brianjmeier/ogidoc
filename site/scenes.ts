@@ -1,8 +1,10 @@
 import { diffLines, splitLines } from "../src/shared/diff.ts";
 import { choose } from "../src/choices.ts";
 import { agree, edit, fromReply, type Plan } from "../src/plan.ts";
-import type { AnimationOp, BoxChanges, LastTurn, Line, Reply } from "../src/types.ts";
+import type { AnimationOp, Box, BoxChanges, BoxEdge, LastTurn, Line, Reply, Smell } from "../src/types.ts";
 import demoScript from "../demo/tic-tac-toe.json" with { type: "json" };
+import shortenerScript from "../demo/shortener.json" with { type: "json" };
+import shortenerMap from "./shortener-map.json" with { type: "json" };
 
 // The site's scenes are written as turns, and played through the same plan code the
 // editor runs: the person's typing goes through `edit`, the agent's reply through
@@ -218,4 +220,25 @@ export const demo = {
   start: empty,
   model: "default",
   beats: [{ model: demoScript.models[1] }, { person: demoScript.plan.join("\n") }, demoTurn(demoScript.turns[0]), { pick: 1 }, { pick: 0 }, demoTurn(demoScript.turns[1]), demoTurn(demoScript.turns[2])] satisfies Beat[],
+};
+
+// Opened on code that already exists: the shortener demo's map, as the scan draws it
+// (site/shortener-map.json is the scan of demo/shortener) with what its describe says
+// about each box. The person writes one line; the agent's turn is the demo's.
+const said = new Map(shortenerScript.describe[""].boxes.map((b) => [b.id, b]));
+const scanned: Box[] = (shortenerMap.boxes as Box[]).map((b) => {
+  const d = said.get(b.id);
+  return d ? { ...b, name: d.name, lines: d.pseudo.map((text) => ({ text, by: "a" as const, kind: null, status: "built" as const })) } : b;
+});
+const shortenerTurn = shortenerScript.turns[0].reply;
+export const existingRepo = {
+  smells: shortenerMap.smells as Smell[],
+  start: { lines: [], boxes: scanned, edges: shortenerMap.edges as BoxEdge[], threads: [], choices: [] } satisfies Plan,
+  beats: [
+    { person: shortenerScript.plan.join("\n") },
+    {
+      agent: shortenerTurn as Partial<Reply> & Pick<Reply, "plan">,
+      last: { summary: shortenerTurn.summary, steps: shortenerTurn.steps as LastTurn["steps"], files: shortenerTurn.files as LastTurn["files"], checks: shortenerTurn.checks },
+    },
+  ] satisfies Beat[],
 };

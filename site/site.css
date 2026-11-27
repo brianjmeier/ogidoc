@@ -57,6 +57,15 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
   .beat { grid-template-columns: minmax(0, 1fr) minmax(0, 2.1fr); gap: 56px; align-items: start; }
   .copy-col { position: sticky; top: 96px; padding-top: 8px; }
 }
+/* A scene opened on existing code: the map needs the width more than the plan does. */
+@media (min-width: 1080px) {
+  .beat.wide { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .beat.wide .copy-col { position: static; }
+  .beat.wide .copy-col p { max-width: 46em; }
+}
+@media (min-width: 641px) {
+  .beat.wide .scene-body.split { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+}
 
 /* ---------- the demo under the hero, and the game it builds ---------- */
 .hero-demo { display: grid; gap: 18px; margin: 0 0 clamp(40px, 8vh, 88px); align-items: start; }

@@ -159,11 +159,13 @@ export function Boxes(props: Props) {
     setView({ z, x: Math.max(0, (w - b.width * z) / 2), y: 0 });
     setFitted(true);
   }
-  // Fit when the level, what it shows, or the room changes; not while the person types.
+  // Fit when the level, what it shows, its size, or the room changes; not while the
+  // person types in a box, or after they panned or zoomed.
   let fittedFor = "";
   createEffect(() => {
-    if (!placed()) return;
-    const key = `${level()}|${keysInOrder().join(",")}|${room().w}x${room().h}`;
+    if (!placed() || editing()) return;
+    const size = untrack(fitted) ? `${Math.round(bounds().width)}x${Math.round(bounds().height)}` : "";
+    const key = `${level()}|${keysInOrder().join(",")}|${size}|${room().w}x${room().h}`;
     if (key !== untrack(() => fittedFor)) {
       fittedFor = key;
       untrack(fit);

@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { Scene } from "./Scene.tsx";
 import { Game, type GameApi } from "./Game.tsx";
-import { abstractions, choices, demo, frames, promptWithCode, styles } from "./scenes.ts";
+import { abstractions, choices, demo, existingRepo, frames, promptWithCode, styles } from "./scenes.ts";
 import "../app/style.css";
 import "./site.css";
 
@@ -110,6 +110,13 @@ function Page() {
           <p>Once a piece settles, it folds into a named box and leaves one line behind, so the plan stays short enough to think&nbsp;in.</p>
         </div>
         <Scene label="Settled lines fold into a named box" start={abstractions.start} frames={frames(abstractions.start, abstractions.beats)} />
+      </section>
+      <section class="beat wide">
+        <div class="copy-col">
+          <h2><span>Open it on code you already&nbsp;have.</span><span> The map is your first set of&nbsp;abstractions.</span></h2>
+          <p>Ogidoc reads the repository into boxes: folders, files, what each exports and who imports it, and the tangles worth a look. Write what you want, and the agent changes the code and the boxes&nbsp;together. The map is the repository's, so every session starts from&nbsp;it.</p>
+        </div>
+        <Scene label="An existing URL shortener opens as a map of its files; the person asks for links that expire, and the agent changes the links and store boxes" file="shortener" smells={existingRepo.smells} start={existingRepo.start} frames={frames(existingRepo.start, existingRepo.beats)} />
       </section>
       <section class="beat">
         <div class="copy-col">

@@ -3,7 +3,7 @@ import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
 import { keys } from "../app/text.ts";
-import type { Box, BoxEdge, LastTurn } from "../src/types.ts";
+import type { Box, BoxEdge, LastTurn, Smell } from "../src/types.ts";
 import type { Plan } from "../src/plan.ts";
 import type { Frame } from "./scenes.ts";
 
@@ -19,7 +19,8 @@ const LAST_HOLD_MS = 4200;
 // `under` leaves out the Underneath drawer, for scenes that make their point in the plan.
 // `model` shows the model picker in the top bar, starting on that model. `onStart` hears
 // each loop begin, and `onBuilt` the last turn land, held for `lastHold` milliseconds.
-export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean; model?: string; onStart?: () => void; onBuilt?: () => void; lastHold?: number }) {
+// `smells` are the scan's tangles, for a scene opened on existing code.
+export function Scene(props: { start: Plan; frames: Frame[]; label: string; file?: string; under?: boolean; model?: string; smells?: Smell[]; onStart?: () => void; onBuilt?: () => void; lastHold?: number }) {
   let el!: HTMLDivElement;
   let editor!: EditorApi;
   const [whose, setWhose] = createSignal<"h" | "a">("h");
@@ -126,7 +127,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           </div>
           <Show when={boxes().length}>
             <div class="box-pane">
-              <Boxes ref={() => {}} title={props.file ?? "tic-tac-toe"} boxes={boxes()} edges={edges()} smells={[]} drifted={[]} symbols={[]} editable={false} busy={false} describing={null} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} onMapEdit={() => {}} onDescribe={() => {}} onFix={() => {}} />
+              <Boxes ref={() => {}} title={props.file ?? "tic-tac-toe"} boxes={boxes()} edges={edges()} smells={props.smells ?? []} drifted={[]} symbols={[]} editable={false} busy={false} describing={null} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} onMapEdit={() => {}} onDescribe={() => {}} onFix={() => {}} />
             </div>
           </Show>
         </div>

@@ -64,23 +64,30 @@ try {
     console.log(`· ${colorScheme}: three settled lines fold into a box`);
 
     await page.locator(scene(3)).scrollIntoViewIfNeeded();
-    await count(`${scene(3)} .ways`, 1);
-    const beside = () => page.$eval(scene(3), (s) => {
+    await count(`${scene(3)} .box[data-name="src/links.js"]`, 1);
+    assert.match((await page.textContent(`${scene(3)} .box-pane`)) ?? "", /unused[^]*server/i, `${colorScheme}: the scan's tangles show beside the map`);
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("410 once it is 30 days old"), `${scene(3)} .box[data-name="src/links.js"]`, { timeout: 20000 });
+    if (colorScheme === "light") await page.locator(scene(3)).screenshot({ path: "/tmp/site-scene3.png" });
+    console.log(`· ${colorScheme}: existing code opens as a map, and the turn changes the box it touched`);
+
+    await page.locator(scene(4)).scrollIntoViewIfNeeded();
+    await count(`${scene(4)} .ways`, 1);
+    const beside = () => page.$eval(scene(4), (s) => {
       const w = s.querySelector(".ways")!.getBoundingClientRect();
       const r = s.querySelectorAll(".rows .row")[5].getBoundingClientRect();
       return { top: Math.round(w.top - r.top), right: Math.round(w.right) };
     });
     const at = await beside();
     assert.equal(at.top, 0, `${colorScheme}: the other way shows beside the line it would replace`);
-    await page.waitForFunction((s) => document.querySelector(s)?.textContent === "2 of 2", `${scene(3)} .ways span`, { timeout: 20000 });
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent === "2 of 2", `${scene(4)} .ways span`, { timeout: 20000 });
     assert.deepEqual(await beside(), at, `${colorScheme}: the switch stays put when the person picks the other way`);
-    if (colorScheme === "light") await page.locator(scene(3)).screenshot({ path: "/tmp/site-scene3.png" });
-    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("loser goes first"), `${scene(3)} .rows`, { timeout: 20000 });
-    await count(`${scene(3)} .ways`, 0);
+    if (colorScheme === "light") await page.locator(scene(4)).screenshot({ path: "/tmp/site-scene4.png" });
+    await page.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("loser goes first"), `${scene(4)} .rows`, { timeout: 20000 });
+    await count(`${scene(4)} .ways`, 0);
     console.log(`· ${colorScheme}: the agent offers another way, the person picks it, the agent builds it`);
 
     for (const [k, guard] of ["if board[row][col]: return", "if (taken(cell)) return;", "(ignore-when (taken? cell))"].entries()) {
-      const style = `section:nth-of-type(4) .scene:nth-child(${k + 1})`;
+      const style = `section:nth-of-type(5) .scene:nth-child(${k + 1})`;
       await page.locator(style).scrollIntoViewIfNeeded();
       await page.waitForFunction(([s, g]) => document.querySelector(s as string)?.textContent?.includes(g as string), [`${style} .rows`, guard] as const, { timeout: 20000 });
       assert.equal(await page.$$eval(`${style} .mk .m`, (els) => els.every((e) => e.classList.contains("m-built"))), true, `${colorScheme}: the agent's line in style ${k + 1} is built`);
@@ -91,13 +98,13 @@ try {
 
     const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme });
     await phone.goto(url);
-    await phone.locator(scene(3)).scrollIntoViewIfNeeded();
-    await phone.waitForSelector(`${scene(3)} .ways`, { timeout: 20000 });
+    await phone.locator(scene(4)).scrollIntoViewIfNeeded();
+    await phone.waitForSelector(`${scene(4)} .ways`, { timeout: 20000 });
     const fit = await phone.evaluate((s) => {
       const box = document.querySelector(s)!.getBoundingClientRect();
       const rail = [...document.querySelectorAll(`${s} .ways button`)].map((b) => b.getBoundingClientRect());
       return { sideways: document.documentElement.scrollWidth - innerWidth, gutter: box.left, railInside: rail.every((r) => r.right <= box.right && r.bottom <= box.bottom) };
-    }, scene(3));
+    }, scene(4));
     assert.equal(fit.sideways, 0, `${colorScheme}: no sideways scroll at phone width`);
     assert.ok(fit.gutter >= 16, `${colorScheme}: at least a 16px side gutter at phone width, got ${fit.gutter}`);
     assert.ok(fit.railInside, `${colorScheme}: the choice switch fits inside the scene at phone width`);
