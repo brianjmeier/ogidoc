@@ -5,6 +5,7 @@
 // Pure: the caller hands in the files and the import aliases. Nothing here reads disk.
 
 import type { Smell } from "./types.ts";
+import { arrowKey } from "./shared/level.ts";
 
 interface SourceFile {
   path: string;
@@ -214,7 +215,7 @@ export function scan(title: string, all: SourceFile[], { aliases = {}, links = {
       if (hit && isTest(hit)) continue;
       const to = hit ? box(hit) : `${OUTSIDE}/${packageOf(spec)}`;
       if (to === f.path) continue;
-      const key = `${f.path}→${to}`;
+      const key = arrowKey({ from: f.path, to });
       const e = edges.get(key) ?? edges.set(key, { from: f.path, to, symbols: [] }).get(key)!;
       for (const s of symbols) if (!e.symbols.includes(s)) e.symbols.push(s);
     }

@@ -1,11 +1,12 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { joinLines } from "./shared/diff.ts";
+import { joinLines, splitLines } from "./shared/diff.ts";
 import { AGENT_DIR } from "./paths.ts";
 import type { LogState } from "./turn-log.ts";
 import type { Base } from "./plan.ts";
-import type { Box, BoxEdge, Choice, LastTurn, Line, MapOnDisk, Settings, Symbol, Thread } from "./types.ts";
+import type { Box, BoxEdge, Choice, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
 import { mapStore } from "./map-store.ts";
+import type { FlowMap } from "./map.ts";
 
 // Where a plan lives on disk and how it is saved. Everything stays plain text beside the
 // code: the plan file itself, the repo's map of boxes every session shares, comment
@@ -47,7 +48,7 @@ export interface Loaded {
   state: SessionState;
   log: LogState;
   planText: string;
-  map: MapOnDisk;
+  map: FlowMap;
 }
 
 // The editor's own bookkeeping, which stays on this machine.
@@ -159,12 +160,12 @@ export function planStore(cwd: string, name: string) {
 
 // Boxes from a session's own box files join the repo's map, as the agent made them: at
 // the top, named by their name, calling the boxes they used.
-function migrate(map: MapOnDisk, boxDir: string, saved: Box[], old: { name: string; uses?: string[] }[], readText: (p: string) => string) {
-  const have = new Set(map.boxes.map((b) => b.id));
+function migrate(map: FlowMap, boxDir: string, saved: Box[], old: { name: string; uses?: string[] }[], readText: (p: string) => string) {
+  const have = new Set(map.nodes.map((n) => n.id));
   for (const f of readdirSync(boxDir)) {
     const id = f.slice(0, -".plan".length);
     if (!f.endsWith(".plan") || have.has(id)) continue;
-    map.boxes.push({ id, name: id, parent: null, text: readText(join(boxDir, f)), status: saved.find((b) => b.id === id)?.status ?? "stale" });
+    map.nodes.push({ id, name: id, parent: null, pseudo: splitLines(readText(join(boxDir, f))), status: saved.find((b) => b.id === id)?.status ?? "stale" });
     have.add(id);
   }
   for (const b of old) for (const to of b.uses ?? []) if (have.has(b.name) && have.has(to)) map.edges.push({ from: b.name, to, kind: "call" });

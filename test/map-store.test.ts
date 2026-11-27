@@ -37,7 +37,7 @@ test("two sessions in one checkout each keep what the other saved", () => {
   a.save([box("shared", ["one"]), box("left", ["mine"])], []);
   const b = mapStore(dir);
   const seen = b.load();
-  assert.deepEqual(seen.boxes.map((x) => x.id), ["shared", "left"]);
+  assert.deepEqual(seen.nodes.map((x) => x.id), ["shared", "left"]);
 
   // b changes `shared` and adds a box; a, which read before that, adds its own box.
   b.save([box("shared", ["one, changed by b"]), box("left", ["mine"]), box("right", ["b's"])], seen.edges);

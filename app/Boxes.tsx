@@ -3,7 +3,8 @@ import { joinLines, splitLines } from "../src/shared/diff.ts";
 import type { Box, BoxChanges, BoxEdge, Edit, Pin, Smell, Snapshot } from "../src/types.ts";
 import { STATUS_LABEL, decorate, keys, symbolPattern } from "./text.ts";
 import { smellIds, tangleWords } from "../src/shared/smells.ts";
-import { GHOST, ancestorAt, count, impactOf, isGhost, namesOf, order, place, ranked, tanglesAt, trail, visible, wirePath, zoomToFit, type Rect, type Size } from "./map/layout.ts";
+import { count, impactOf, namesOf, order, place, ranked, tanglesAt, wirePath, zoomToFit, type Rect, type Size } from "./map/layout.ts";
+import { GHOST, ancestorAt, arrowKey, isGhost, trail, visible } from "../src/shared/level.ts";
 import { Tangles } from "./Tangles.tsx";
 
 // The map of the repo. One level shows at a time: the boxes inside the box you opened,
@@ -189,7 +190,7 @@ export function Boxes(props: Props) {
 
   const picked = createMemo(() => (tangle() ? new Set(smellIds(tangle()!)) : null));
   const impact = createMemo(() => (picked() ? new Set<string>() : impactOf(selected(), v().wires)));
-  const volatile = createMemo(() => new Set(props.smells.flatMap((s) => (s.kind === "volatile import" ? [`${s.a}→${s.b}`] : []))));
+  const volatile = createMemo(() => new Set(props.smells.flatMap((s) => (s.kind === "volatile import" ? [arrowKey({ from: s.a, to: s.b })] : []))));
   const loopOf = createMemo(() => {
     const m = new Map<string, string>();
     for (const s of props.smells) if (s.kind === "cycle") for (const id of s.ids) m.set(id, s.ids.join("|"));

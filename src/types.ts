@@ -20,24 +20,6 @@ export interface CodeRef {
   symbol?: string;
 }
 
-/** A box as the map file keeps it: its lines as text. */
-export interface BoxOnDisk {
-  id: string;
-  name: string;
-  parent: string | null;
-  text: string;
-  status: Status;
-  code?: CodeRef[];
-  seen?: Record<string, string>;
-  pins?: Pin[];
-}
-
-// The repo's map as the map file keeps it.
-export interface MapOnDisk {
-  boxes: BoxOnDisk[];
-  edges: BoxEdge[];
-}
-
 // A tangle an agent found reading a box's code, with where.
 export interface Pin {
   kind: string;

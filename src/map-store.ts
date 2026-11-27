@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { EMPTY_MAP, boxEdge, checkMap, mapOf, mergeMaps, type FlowMap } from "./map.ts";
-import type { Box, BoxEdge, MapOnDisk } from "./types.ts";
+import { EMPTY_MAP, checkMap, mapOf, mergeMaps, type FlowMap } from "./map.ts";
+import type { Box, BoxEdge } from "./types.ts";
 
 // The repo's map of abstractions, `.ogidoc/map.json`, shared in git by every session in
 // the checkout and merged per branch. A session's boxes are its view of it: the same
@@ -13,24 +13,29 @@ import type { Box, BoxEdge, MapOnDisk } from "./types.ts";
 
 export const MAP_FILE = join(".ogidoc", "map.json");
 
+/** A map file, checked; an empty map when there is none yet. Throws on one that isn't valid. */
+export function readMap(path: string): FlowMap {
+  const text = existsSync(path) ? readFileSync(path, "utf8").trim() : "";
+  return text ? checkMap(JSON.parse(text)) : structuredClone(EMPTY_MAP);
+}
+
 export function mapStore(root: string) {
   const path = join(root, MAP_FILE);
-  const read = (): FlowMap => (existsSync(path) ? checkMap(JSON.parse(readFileSync(path, "utf8"))) : structuredClone(EMPTY_MAP));
-  let lastRead = read();
+  let lastRead = readMap(path);
   let written = "";
 
   return {
     path,
 
-    load(): MapOnDisk {
-      lastRead = read();
-      return fromFlowMap(lastRead);
+    load(): FlowMap {
+      lastRead = readMap(path);
+      return structuredClone(lastRead);
     },
 
     /** Write this session's boxes, keeping what others saved since it last read. */
     save(boxes: Box[], edges: BoxEdge[]) {
       const mine = mapOf(lastRead.title, boxes.map(({ scan, ...b }) => b), edges.filter((e) => e.kind === "call"));
-      const merged = mergeMaps(lastRead, mine, read());
+      const merged = mergeMaps(lastRead, mine, readMap(path));
       const text = JSON.stringify(merged, null, 1) + "\n";
       if (text !== written || !existsSync(path)) {
         mkdirSync(dirname(path), { recursive: true });
@@ -39,21 +44,5 @@ export function mapStore(root: string) {
       written = text;
       lastRead = merged;
     },
-  };
-}
-
-function fromFlowMap(m: FlowMap): MapOnDisk {
-  return {
-    boxes: m.nodes.map((n) => ({
-      id: n.id,
-      name: n.name,
-      parent: n.parent ?? null,
-      text: n.pseudo.join("\n"),
-      status: n.status === "built" || n.status === "blocked" ? n.status : "stale",
-      ...(n.code && { code: n.code }),
-      ...(n.seen && { seen: n.seen }),
-      ...(n.pins && { pins: n.pins }),
-    })),
-    edges: m.edges.map(boxEdge),
   };
 }

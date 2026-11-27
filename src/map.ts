@@ -6,8 +6,9 @@
 
 import type { Box, BoxEdge, BoxScan, CodeRef, MapView, Pin, Smell, Status } from "./types.ts";
 import type { Skeleton } from "./scan.ts";
-import type { DescribeBrief, Described } from "./describe.ts";
+import type { DescribeBrief } from "./describe.ts";
 import { smellIds, smellText } from "./shared/smells.ts";
+import { GHOST, arrowKey, isGhost, trail, visible } from "./shared/level.ts";
 
 export interface MapNode {
   id: string;
@@ -27,19 +28,10 @@ export interface MapNode {
   pins?: Pin[];
 }
 
-export interface MapEdge {
-  from: string;
-  to: string;
-  label?: string;
-  kind?: "call" | "data" | "event" | "import";
-  /** On an import arrow from the scan: the names it carries. */
-  symbols?: string[];
-}
-
 export interface FlowMap {
   title: string;
   nodes: MapNode[];
-  edges: MapEdge[];
+  edges: BoxEdge[];
   /** From the scan only, never kept in map.json. */
   smells?: Smell[];
 }
@@ -63,7 +55,8 @@ export function checkMap(raw: unknown): FlowMap {
     if (!Array.isArray(n.pseudo) || n.pseudo.some((l) => typeof l !== "string")) bad(`${n.id}'s pseudo must be a list of lines`);
   }
   for (const n of m.nodes) if (n.parent && !ids.has(n.parent)) bad(`${n.id}'s parent ${n.parent} is not a node`);
-  m.edges = m.edges.filter((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
+  // An arrow is a call unless the scan found it as an import.
+  m.edges = m.edges.filter((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to).map((e) => (e.kind === "call" || e.kind === "import" ? e : { ...e, kind: "call" }));
   m.title ||= "map";
   return m;
 }
@@ -81,11 +74,8 @@ export function mapOf(title: string, boxes: Box[], edges: BoxEdge[]): FlowMap {
     ...(pins?.length && { pins }),
     ...(scan && { scan }),
   }));
-  return { title, nodes, edges: edges.map((e) => ({ ...e, kind: e.kind ?? "call" })) };
+  return { title, nodes, edges };
 }
-
-/** A map's arrow as the person sees it: a call, or an import the scan found. */
-export const boxEdge = ({ from, to, label, kind, symbols }: MapEdge): BoxEdge => ({ from, to, ...(label && { label }), kind: kind === "import" ? "import" : "call", ...(symbols && { symbols }) });
 
 /** The whole map as the person sees it: the scan of the code, with the boxes someone said
  *  something about on it. A box the scan doesn't know sits where its code is. */
@@ -98,22 +88,14 @@ export function mapView(sk: Skeleton | null, boxes: Box[], edges: BoxEdge[]): Ma
       const { scan: _, ...b } = own.get(n.id) ?? { id: n.id, name: n.name, parent: null, lines: [], status: "built" as const, ...(n.code && { code: n.code }) };
       return { ...b, parent: n.parent ?? null, ...(n.scan && { scan: n.scan }) };
     }),
-    edges: m.edges.map(boxEdge),
+    edges: m.edges,
     smells: m.smells ?? [],
   };
 }
 
-/** `id` and every box that holds it, up to the top. */
-function chainOf(parentOf: (id: string) => string | null | undefined, id: string): string[] {
-  const out: string[] = [];
-  for (let p: string | null | undefined = id; p; p = parentOf(p)) out.push(p);
-  return out;
-}
-const parentIn = (byId: Map<string, MapNode>) => (id: string) => byId.get(id)?.parent;
-
 /** The ids with every node that holds one of them, up to the top. */
 function withAncestors(byId: Map<string, MapNode>, ids: Set<string>): Set<string> {
-  for (const id of [...ids]) for (const p of chainOf(parentIn(byId), id)) ids.add(p);
+  for (const id of [...ids]) for (const p of trail(id, byId)) ids.add(p);
   return ids;
 }
 
@@ -157,7 +139,7 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
   const stand = standIns(sk, base);
   const idOf = (id: string) => stand.get(id) ?? id;
   const own = new Map(base.nodes.map((n) => [n.id, n]));
-  const scanParent = new Map(sk.nodes.map((n) => [n.id, n.parent]));
+  const scanned = new Map(sk.nodes.map((n) => [n.id, n]));
   const nodes: MapNode[] = sk.nodes.map((s) => {
     const id = idOf(s.id);
     const mine = own.get(id);
@@ -176,7 +158,7 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
   const placed = new Set(nodes.map((n) => n.id));
   // A box the scan doesn't know sits in the smallest scan box holding all its files.
   const home = (n: MapNode): string | null => {
-    const chains = [...new Set((n.code ?? []).map((c) => c.file))].filter((f) => scanParent.has(f)).map((f) => chainOf((x) => scanParent.get(x), f));
+    const chains = [...new Set((n.code ?? []).map((c) => c.file))].filter((f) => scanned.has(f)).map((f) => trail(f, scanned).reverse());
     const common = chains[0]?.find((id) => chains.every((c) => c.includes(id)));
     return common ? idOf(common) : null;
   };
@@ -185,11 +167,11 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
     const parent = n.parent && (own.has(n.parent) || placed.has(idOf(n.parent))) ? idOf(n.parent) : home(n);
     nodes.push({ ...n, parent: parent === n.id ? null : parent });
   }
-  const have = new Set(base.edges.map((e) => `${e.from}→${e.to}`));
+  const have = new Set(base.edges.map(arrowKey));
   const edges = [...base.edges];
   for (const e of sk.edges) {
     const from = idOf(e.from), to = idOf(e.to);
-    if (from === to || have.has(`${from}→${to}`)) continue;
+    if (from === to || have.has(arrowKey({ from, to }))) continue;
     edges.push({ from, to, kind: "import", symbols: e.symbols });
   }
   const smells = sk.smells.map((x): Smell => ("ids" in x ? { ...x, ids: x.ids.map(idOf) } : "b" in x ? { ...x, a: idOf(x.a), b: idOf(x.b) } : { ...x, a: idOf(x.a) }));
@@ -200,78 +182,32 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
  *  something about, and the top two levels of folders. The rest it finds by path. */
 export function landmarks(map: FlowMap): MapNode[] {
   const byId = new Map(map.nodes.map((n) => [n.id, n]));
-  return map.nodes.filter((n) => !n.scan || n.pseudo.length || (chainOf(parentIn(byId), n.id).length < 3 && !isFile(n) && n.scan.kind !== "external"));
+  return map.nodes.filter((n) => !n.scan || n.pseudo.length || (trail(n.id, byId).length < 3 && !isFile(n) && n.scan.kind !== "external"));
 }
 
 // ---------- describing a box, when the person opens it ----------
 
-const isFile = (n: MapNode) => n.code?.length === 1 && n.code[0].file === n.id;
+/** A box that stands for one file, so the functions inside it can be boxes too. */
+export const isFile = (n: { id: string; code?: CodeRef[] }) => n.code?.length === 1 && n.code[0].file === n.id;
 
 /** What a describe turn on `id` (null: the top of the map) is handed: the boxes inside,
  *  the imports among them and across the box's edge, and the tangles already seen. */
-export function describeBrief(map: FlowMap, id: string | null): DescribeBrief {
-  const byId = new Map(map.nodes.map((n) => [n.id, n]));
-  const box = id ? byId.get(id) : null;
+export function describeBrief(view: MapView, id: string | null): DescribeBrief {
+  const box = id ? view.boxes.find((b) => b.id === id) : null;
   if (id && !box) throw new Error(`The map has no box "${id}".`);
-  const kids = map.nodes.filter((n) => (n.parent ?? null) === id && n.scan);
-  const kidIds = new Set(kids.map((n) => n.id));
-  const chain = (x: string) => chainOf(parentIn(byId), x);
-  // An end inside the box shows as the child holding it; one outside as the box beside
-  // the opened one (or the top-level box) that holds it.
-  const besides = new Set(map.nodes.filter((n) => (n.parent ?? null) === (box?.parent ?? null)).map((n) => n.id));
-  const end = (x: string) => chain(x).find((p) => kidIds.has(p)) ?? chain(x).find((p) => besides.has(p) && p !== id) ?? null;
-  const arrows = new Map<string, { from: string; to: string; symbols: string[] }>();
-  for (const e of map.edges) {
-    if (e.kind !== "import") continue;
-    const from = end(e.from), to = end(e.to);
-    if (!from || !to || from === to || (!kidIds.has(from) && !kidIds.has(to))) continue;
-    const a = arrows.get(`${from}→${to}`) ?? arrows.set(`${from}→${to}`, { from, to, symbols: [] }).get(`${from}→${to}`)!;
-    for (const s of e.symbols ?? []) if (!a.symbols.includes(s) && a.symbols.length < 12) a.symbols.push(s);
-  }
+  const kids = view.boxes.filter((b) => (b.parent ?? null) === id && b.scan);
+  const kidIds = new Set(kids.map((b) => b.id));
+  const bare = (end: string) => (isGhost(end) ? end.slice(GHOST.length) : end);
+  const { wires } = visible(view.boxes, view.edges.filter((e) => e.kind === "import"), id);
   return {
     box: box ? { id: box.id, name: box.name, files: box.scan?.files ?? 0, size: box.scan?.size ?? 0 } : null,
-    children: kids.map((n) => {
-      const { size, seam, seamSize, usedBy, uses } = n.scan!;
-      return { id: n.id, name: n.name, file: isFile(n), size, seam: seam.slice(0, 12).map((x) => x.name), seamSize, usedBy, uses };
+    children: kids.map((b) => {
+      const { size, seam, seamSize, usedBy, uses } = b.scan!;
+      return { id: b.id, name: b.name, file: isFile(b), size, seam: seam.slice(0, 12).map((x) => x.name), seamSize, usedBy, uses };
     }),
-    arrows: [...arrows.values()],
-    smells: (map.smells ?? []).filter((s) => smellIds(s).some((x) => kidIds.has(x))).slice(0, 20).map(smellText),
+    arrows: wires.map((w) => ({ from: bare(w.from), to: bare(w.to), symbols: w.symbols.slice(0, 12) })),
+    smells: view.smells.filter((s) => smellIds(s).some((x) => kidIds.has(x))).slice(0, 20).map(smellText),
   };
-}
-
-/** The map with what a describe turn said about `id` and the boxes inside it. It only
- *  says what boxes do: it can name them, give them pseudo and pins, and add the
- *  functions inside a file, but it never moves, adds or removes a scanned box. */
-export function withDescription(map: FlowMap, id: string | null, d: Described): { map: FlowMap; ids: string[] } {
-  // Only the box and its children change, so only they are copied.
-  const allowed = new Set(map.nodes.filter((n) => (n.parent ?? null) === id || n.id === id).map((n) => n.id));
-  const next: FlowMap = { ...map, nodes: map.nodes.map((n) => (allowed.has(n.id) ? { ...n } : n)), edges: [...map.edges] };
-  const byId = new Map(next.nodes.map((n) => [n.id, n]));
-  const ids: string[] = [];
-  for (const b of d.boxes) {
-    const n = byId.get(b.id);
-    if (!n || !allowed.has(b.id)) continue;
-    if (b.name) n.name = b.name;
-    if (b.pseudo.length) n.pseudo = b.pseudo;
-    if (b.pins?.length) n.pins = b.pins;
-    else delete n.pins;
-    ids.push(n.id);
-  }
-  const added = new Set<string>();
-  for (const a of d.add) {
-    const parent = byId.get(a.parent);
-    if (!parent || !allowed.has(a.parent) || !isFile(parent) || byId.has(a.id)) continue;
-    const n: MapNode = { id: a.id, name: a.name, parent: a.parent, pseudo: a.pseudo, ...(a.code?.length ? { code: a.code } : { code: [{ file: parent.id }] }) };
-    next.nodes.push(n);
-    byId.set(n.id, n);
-    added.add(n.id);
-    ids.push(n.id);
-  }
-  for (const e of d.edges) {
-    if (!(added.has(e.from) || added.has(e.to)) || !byId.has(e.from) || !byId.has(e.to) || e.from === e.to) continue;
-    next.edges.push({ from: e.from, to: e.to, ...(e.label ? { label: e.label } : {}), kind: "call" });
-  }
-  return { map: next, ids };
 }
 
 /** Anything on the map that points at code and remembers what the code was. */
@@ -340,6 +276,6 @@ export function mergeMaps(base: FlowMap, ours: FlowMap, theirs: FlowMap): FlowMa
   });
   const ids = new Set(nodes.map((n) => n.id));
   for (const n of nodes) if (n.parent && !ids.has(n.parent)) n.parent = null;
-  const edges = three<MapEdge>((e) => `${e.from}→${e.to}`, base.edges, ours.edges, theirs.edges, (o) => o);
+  const edges = three<BoxEdge>(arrowKey, base.edges, ours.edges, theirs.edges, (o) => o);
   return checkMap({ title: ours.title || theirs.title, nodes, edges });
 }

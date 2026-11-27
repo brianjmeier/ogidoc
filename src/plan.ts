@@ -1,9 +1,10 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, Edit, HumanDiff, LastTurn, Line, MapChange, MapOnDisk, MapView, Reply, Thread } from "./types.ts";
-import { mapOf, withDescription } from "./map.ts";
+import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, CodeRef, Edit, HumanDiff, LastTurn, Line, MapChange, MapView, Pin, Reply, Thread } from "./types.ts";
+import { isFile, type FlowMap } from "./map.ts";
 import type { Described } from "./describe.ts";
+import { arrowKey } from "./shared/level.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
 // the comment threads pinned to its lines, and the choices offered on them. Every change
@@ -81,14 +82,15 @@ function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
 // The plan as the files on disk have it; the text there wins over what was saved. A box
 // this session hasn't seen yet (another session's, or the person's) comes as the map has
 // it; one it knows keeps what the editor knew about its lines.
-export function fromFiles(saved: Plan, planText: string, map: MapOnDisk): Plan {
+export function fromFiles(saved: Plan, planText: string, map: FlowMap): Plan {
   const p = edit(saved, { text: planText });
   const had = new Map(p.boxes.map((b) => [b.id, b]));
-  const boxes = map.boxes.map(({ text, ...disk }): Box => {
-    const old = had.get(disk.id);
-    return old ? { ...disk, lines: old.lines, status: old.status } : { ...disk, lines: text ? splitLines(text).map((t) => ({ text: t })) : [] };
+  const boxes = map.nodes.map(({ id, name, parent, pseudo, status, code, seen, pins }): Box => {
+    const old = had.get(id);
+    const disk = { id, name, parent: parent ?? null, ...(code && { code }), ...(seen && { seen }), ...(pins && { pins }) };
+    return old ? { ...disk, lines: old.lines, status: old.status } : { ...disk, lines: splitLines(pseudo.join("\n")).map((text) => ({ text })), status: status === "built" || status === "blocked" ? status : "stale" };
   });
-  return { ...p, boxes: editBoxes(boxes, Object.fromEntries(map.boxes.map((b) => [b.id, b.text]))), edges: map.edges };
+  return { ...p, boxes: editBoxes(boxes, Object.fromEntries(map.nodes.map((n) => [n.id, n.pseudo.join("\n")]))), edges: map.edges };
 }
 
 export const baseOf = (plan: Plan): Base => ({
@@ -263,7 +265,7 @@ export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; box
   // Naming a box only the scan knew brings it onto the plan without saying anything new;
   // saying what a box does, taking one off, or drawing an arrow is new.
   if (Object.keys(after.boxChanges).length || before.boxes.some((b) => !p.boxes.some((x) => x.id === b.id))) return null;
-  const arrows = (x: Plan) => x.edges.filter((e) => e.kind === "call").map((e) => `${e.from}→${e.to}`).sort().join(" ");
+  const arrows = (x: Plan) => x.edges.filter((e) => e.kind === "call").map(arrowKey).sort().join(" ");
   if (arrows(before) !== arrows(p)) return null;
   // An answer counts only where it lands: in one of the person's threads.
   if (JSON.stringify(before.threads) !== JSON.stringify(p.threads)) return null;
@@ -346,22 +348,48 @@ function agentLines(old: Line[], texts: string[]): { lines: Line[]; changed: boo
 }
 
 // What a describe said about a box and the boxes inside it, as boxes of the plan. It only
-// says what code does, so what it describes is built.
+// says what boxes do: it can name the box and its children, give them pseudo and pins, and
+// add the functions inside a file, but it never moves, adds or removes a scanned box. What
+// it describes is built.
 export function fromDescription(plan: Plan, view: MapView, id: string | null, d: Described): { plan: Plan; ids: string[] } {
-  const { map, ids } = withDescription({ ...mapOf(view.title, view.boxes, view.edges), smells: view.smells }, id, d);
+  const inView = new Map(view.boxes.map((b) => [b.id, b]));
+  const allowed = (b: Box | undefined): b is Box => !!b && (b.id === id || (b.parent ?? null) === id);
+  const said = new Map<string, { id: string; name: string; parent: string | null; pseudo: string[]; pins?: Pin[]; code?: CodeRef[] }>();
+  for (const b of d.boxes) {
+    const v = inView.get(b.id);
+    if (!allowed(v)) continue;
+    const n = said.get(v.id) ?? { id: v.id, name: v.name, parent: v.parent, pseudo: v.lines.map((l) => l.text) };
+    if (b.name) n.name = b.name;
+    if (b.pseudo.length) n.pseudo = b.pseudo;
+    n.pins = b.pins;
+    said.set(n.id, n);
+  }
+  const added = new Set<string>();
+  for (const a of d.add) {
+    const parent = inView.get(a.parent);
+    if (!allowed(parent) || !isFile(parent) || inView.has(a.id) || added.has(a.id)) continue;
+    said.set(a.id, { id: a.id, name: a.name, parent: a.parent, pseudo: a.pseudo, code: a.code?.length ? a.code : [{ file: parent.id }] });
+    added.add(a.id);
+  }
   const scanned = scannedIn(view);
-  const said = new Map(map.nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, n]));
   let boxes = plan.boxes;
   for (const n of said.values()) boxes = materialize(boxes, scanned, n.parent ?? "");
   for (const n of said.values()) {
     const old = boxes.find((b) => b.id === n.id) ?? scanned(n.id);
-    const { scan: _, pins: _pins, ...was } = old ?? { id: n.id, name: n.name, parent: n.parent ?? null, lines: [], status: "built" as const };
-    const box: Box = { ...was, name: n.name, lines: agentLines(was.lines, n.pseudo).lines, status: "built", ...(n.code?.length && { code: n.code }), ...(n.pins?.length && { pins: n.pins }) };
+    const { scan: _, pins: _pins, ...was } = old ?? { id: n.id, name: n.name, parent: n.parent, lines: [], status: "built" as const };
+    const box: Box = { ...was, name: n.name, lines: agentLines(was.lines, n.pseudo).lines, status: "built", ...(n.code && { code: n.code }), ...(n.pins?.length && { pins: n.pins }) };
     boxes = boxes.some((b) => b.id === n.id) ? boxes.map((b) => (b.id === n.id ? box : b)) : [...boxes, box];
   }
-  const have = new Set(plan.edges.map((e) => `${e.from}→${e.to}`));
-  const edges = [...plan.edges, ...map.edges.filter((e) => e.kind === "call" && !have.has(`${e.from}→${e.to}`) && (said.has(e.from) || said.has(e.to))).map((e): BoxEdge => ({ from: e.from, to: e.to, kind: "call", ...(e.label && { label: e.label }) }))];
-  return { plan: { ...plan, boxes, edges }, ids };
+  // It draws arrows only to or from a function it added.
+  const have = new Set(plan.edges.map(arrowKey));
+  const edges = [...plan.edges];
+  for (const e of d.edges) {
+    const on = (x: string) => inView.has(x) || added.has(x);
+    if (!(added.has(e.from) || added.has(e.to)) || !on(e.from) || !on(e.to) || e.from === e.to || have.has(arrowKey(e))) continue;
+    have.add(arrowKey(e));
+    edges.push({ from: e.from, to: e.to, kind: "call", ...(e.label && { label: e.label }) });
+  }
+  return { plan: { ...plan, boxes, edges }, ids: [...said.keys()] };
 }
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");

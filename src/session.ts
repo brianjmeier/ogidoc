@@ -11,7 +11,7 @@ import type { Agent } from "./agents.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, MapView, Reply, Settings, Snapshot, Thread } from "./types.ts";
-import { describeBrief, driftOf, mapOf, mapView, stamped } from "./map.ts";
+import { describeBrief, driftOf, mapView, stamped } from "./map.ts";
 import { describePrompt } from "./describe.ts";
 import { MAP_FILE } from "./map-store.ts";
 import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
@@ -266,7 +266,7 @@ export class Session extends EventEmitter {
   describe({ id = null }: { id?: string | null } = {}): Promise<void> {
     this.guard("The agent is busy.");
     const view = this.map();
-    const brief = describeBrief({ ...mapOf(view.title, view.boxes, view.edges), smells: view.smells }, id);
+    const brief = describeBrief(view, id);
     if (!brief.children.length && !brief.box) throw new Error("There is nothing on the map to describe yet.");
     return this.runDescribe(id, view, describePrompt(brief));
   }
