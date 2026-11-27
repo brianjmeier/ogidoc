@@ -266,25 +266,101 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--human); o
 @keyframes slideAway { to { transform: translateX(28px); opacity: 0; } }
 @keyframes pop { 0% { transform: scale(0.2); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 
-/* ---------- boxes ---------- */
-.canvas { position: relative; }
+/* ---------- the map ---------- */
+:root { --tangle: #b4561b; --tangle-tint: rgba(180, 86, 27, 0.09); }
+@media (prefers-color-scheme: dark) { :root { --tangle: #f0a060; --tangle-tint: rgba(240, 160, 96, 0.11); } }
+.box-pane { display: flex; flex-direction: column; }
+.map { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font: 12px/1.4 var(--font-mono); color: var(--muted); }
+.crumbs button { all: unset; cursor: pointer; padding: 2px 5px; border-radius: 4px; }
+.crumbs button:hover { background: var(--surface-2); color: var(--ink); }
+.crumbs button:focus-visible { outline: 2px solid var(--human); }
+.crumbs .here { color: var(--ink); font-weight: 600; padding: 2px 5px; }
+/* The map moves only by its transform. A drag pans it, so it never selects text. */
+.viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: grab; user-select: none; -webkit-user-select: none; }
+.viewport.panning { cursor: grabbing; }
+.viewport input, .viewport textarea { user-select: text; -webkit-user-select: text; }
+.viewport .fit { position: absolute; right: 6px; bottom: 6px; padding: 6px 10px; font-size: 12px; }
+.canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .canvas svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .canvas path { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.canvas path.hit { stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.canvas path.import { stroke-opacity: 0.7; }
+.canvas path.volatile, .canvas path.lit { stroke: var(--tangle); stroke-opacity: 1; }
+.canvas path.looped { stroke-dasharray: 7 3; }
+.canvas path.ghostwire { stroke-dasharray: 2 3; }
+.canvas path.sel { stroke: var(--human); stroke-width: 3; }
+.canvas path.dim, .canvas text.dim { opacity: 0.18; }
+.canvas path.together { stroke: var(--tangle); stroke-width: 1.5; stroke-dasharray: 3 5; opacity: 0.85; }
+.canvas path.temp { stroke: var(--human); stroke-dasharray: 5 4; stroke-width: 1.5; }
+.canvas text { font: 10.5px var(--font-mono); fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 4px; }
+.canvas text.together-label { fill: var(--tangle); }
 .box { position: absolute; width: 250px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 9px; padding: 10px 12px; font: 12px/1.55 var(--font-mono); display: grid; gap: 6px; transition: box-shadow 300ms, border-color 300ms; }
 .box.built { border-color: var(--agent); }
 .box.stale { border-color: var(--human); }
 .box.blocked { border-color: var(--gone); }
-.box .bt { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 12.5px; }
-.box .st { font: 600 10px/1.6 var(--font-ui); letter-spacing: 0.05em; text-transform: uppercase; }
+/* Code nobody has said anything about yet: the scan's facts, no verdict. */
+.box.bare { border-color: var(--line); }
+.box.external { width: auto; min-width: 140px; max-width: 250px; border-style: dashed; background: transparent; }
+.box.selected { box-shadow: 0 0 0 3px var(--human-tint); border-color: var(--human); }
+.box.impact { border-color: var(--tangle); box-shadow: 0 0 0 3px var(--tangle-tint); }
+.box.drop { border-color: var(--human); box-shadow: 0 0 0 4px var(--human-tint); }
+.box.crossed .name { text-decoration: line-through; text-decoration-color: var(--gone); color: var(--muted); }
+.box.reading { border-color: var(--agent); border-style: dashed; }
+.box .cross { font: 11px/1.4 var(--font-ui); color: var(--gone); }
+.box .bt { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 12.5px; cursor: move; }
+.box .bt .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.box .st { font: 600 10px/1.6 var(--font-ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .box.built .st { color: var(--agent); }
 .box.stale .st { color: var(--human); }
 .box.blocked .st { color: var(--gone); }
+.box.bare .st { color: var(--muted); }
+.box .drift { font: 10px/1.6 var(--font-mono); color: var(--sym); background: var(--sym-tint); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.box input.rename { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--surface-2); border: 0; outline: 1px solid var(--human); border-radius: 4px; padding: 1px 4px; }
+.box .path { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -4px; }
+.box .facts { font-size: 11px; color: var(--muted); }
+.box .seam { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding-left: 8px; border-left: 3px solid color-mix(in srgb, var(--agent) 45%, var(--line)); }
+.box .seam span { font-size: 11px; color: var(--agent); background: var(--agent-tint); border-radius: 4px; padding: 0 5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box .seam span.more { color: var(--muted); background: none; }
+.box .describe, .box .open, .box .pinsum { all: unset; cursor: pointer; justify-self: start; border-radius: 5px; font: 11.5px/1.4 var(--font-ui); }
+.box .describe { border: 1px dashed var(--line); padding: 4px 9px; color: var(--muted); }
+.box .describe:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+.box .describe:disabled { cursor: default; }
+.box .open { border: 1px solid var(--line); padding: 1px 7px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.box .open:hover { color: var(--ink); border-color: var(--ink); }
+.box .pinsum { padding: 2px 7px; background: var(--tangle-tint); color: var(--tangle); font: 600 10.5px/1.5 var(--font-mono); text-transform: uppercase; letter-spacing: 0.03em; }
+.box .describe:focus-visible, .box .open:focus-visible, .box .pinsum:focus-visible { outline: 2px solid var(--human); outline-offset: 1px; }
+.box .pins { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.box .pins li { font: 11.5px/1.4 var(--font-ui); color: var(--tangle); background: var(--tangle-tint); border-radius: 5px; padding: 3px 7px; }
+.box .pins b { font: 600 10px var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; }
+.box .pins .where { font-family: var(--font-mono); font-size: 11px; }
+/* Drag from here onto a box that uses this one. */
+.box .port { position: absolute; right: -7px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); cursor: crosshair; }
+.box .port::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+.box .port:hover { border-color: var(--human); background: var(--human); }
 .box .bb { color: var(--muted); display: grid; gap: 1px; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; border-radius: 4px; }
 .box .bb:hover { background: var(--surface-2); }
 .box .bb:focus-visible { outline: 2px solid var(--human); outline-offset: 2px; }
 .box .bb .chg { color: var(--human); background: var(--human-tint); border-radius: 3px; }
 .box .bb .chg.a { color: var(--agent); background: var(--agent-tint); }
 .box textarea.box-edit { border: 0; resize: vertical; outline-offset: 0; color: var(--ink); caret-color: var(--ink); background: var(--surface-2); border-radius: 4px; padding: 4px 6px; font: 12px/1.55 var(--font-mono); white-space: pre; overflow: auto; min-height: 60px; width: 100%; outline: 1px solid var(--human); }
+.box.sketch { border-color: var(--human); border-style: dashed; z-index: 2; }
+.ghost-box { all: unset; position: absolute; cursor: pointer; min-width: 110px; max-width: 220px; padding: 6px 10px; border: 1.5px dotted var(--line); border-radius: 9px; font: 11.5px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.ghost-box:hover { background: var(--surface-2); color: var(--ink); }
+.ghost-box:focus-visible { outline: 2px solid var(--human); }
+.map-error { font-size: 12.5px; color: var(--gone); background: var(--gone-tint); border: 1px solid var(--gone); border-radius: 8px; padding: 7px 10px; overflow-wrap: anywhere; }
+
+.tangles { max-height: 35%; overflow: auto; display: grid; gap: 6px; align-content: start; }
+.tangles ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.tangle { all: unset; cursor: pointer; box-sizing: border-box; width: 100%; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; display: grid; gap: 1px; }
+.tangle:hover { background: var(--surface); }
+.tangle:focus-visible { outline: 2px solid var(--human); }
+.tangle.on { border-color: var(--tangle); background: var(--tangle-tint); }
+.tangle .tk { font: 600 9.5px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--tangle); }
+.tangle .tw { font-size: 12.5px; overflow-wrap: anywhere; }
+.tangle small { color: var(--muted); font-size: 11.5px; }
+.tangles .evidence { list-style: none; margin: 4px 0 6px 10px; padding: 0; display: grid; gap: 2px; font: 11px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.tangles .fix { margin: 0 0 6px 10px; padding: 6px 11px; font-size: 12px; }
 .box.pop-in { animation: boxIn 520ms cubic-bezier(.2, .8, .2, 1) both; animation-delay: var(--d, 0ms); }
 .box.pulse { animation: ring 1200ms ease-out both; animation-delay: var(--d, 0ms); }
 @keyframes boxIn { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: none; } }

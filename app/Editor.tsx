@@ -43,6 +43,8 @@ export interface EditorApi {
   // Whether a line waits on the person, and moving the caret to the next one.
   hasStops(): boolean;
   jump(by: 1 | -1): void;
+  // Add a line at the end of the plan, as if typed, so the browser's undo takes it back.
+  append(line: string): void;
 }
 
 interface Props {
@@ -58,6 +60,8 @@ interface Props {
   onPass: () => void;
   onHint: (hint: string) => void;
   onUndo?: () => void;
+  // A box's name by its id, for the lines the agent moves into it.
+  nameOf?: (id: string) => string;
 }
 
 // The buttons on a row leave the keyboard where it was; they go away once used.
@@ -181,6 +185,14 @@ export function Editor(props: Props) {
   function focusIfIdle() {
     const at = document.activeElement;
     if (props.editable && (!at || at === document.body)) ta.focus({ preventScroll: true });
+  }
+
+  function append(line: string) {
+    if (!props.editable) return;
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    const text = (ta.value && !ta.value.endsWith("\n") ? "\n" : "") + line;
+    if (!document.execCommand("insertText", false, text)) insert(text);
   }
 
   function insert(s: string) {
@@ -386,6 +398,7 @@ export function Editor(props: Props) {
     fresh,
     hasStops,
     jump,
+    append,
   });
 
   return (
@@ -438,7 +451,7 @@ export function Editor(props: Props) {
                           </button>
                         </span>
                       </Show>
-                      <Show when={r().to}><span class="chip">→ {r().to}</span></Show>
+                      <Show when={r().to}><span class="chip">→ {props.nameOf?.(r().to!) ?? r().to}</span></Show>
                       <Show when={!anim() && n() !== null}>
                         <For each={openOn().get(n()!)}>
                           {(t) => <ThreadPin thread={t} editable={props.editable} onPass={props.onPass} />}

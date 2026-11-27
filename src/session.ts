@@ -460,6 +460,8 @@ export class Session extends EventEmitter {
     const mark = this.log.begin();
     if (commit) this.log.revert(commit);
     this.s = { ...this.s, ...state, history: this.s.history.slice(0, -1) };
+    // The code went back too, so what the scan reads of it may have.
+    this.rescan(true);
     this.save();
     if (commit) {
       this.log.record(mark, `ogidoc: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });

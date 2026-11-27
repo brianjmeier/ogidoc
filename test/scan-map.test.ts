@@ -95,3 +95,14 @@ test("scanning reads what git tracks, follows its links, and gives up outside a 
   assert.deepEqual(sk.edges.map((e) => [e.from, e.to]), [["a.js", "lib/b.js"]]);
   assert.equal(scanRepo("app", { ...io, git: () => null }), null);
 });
+
+test("the person says what a scanned box does, and undo brings the map back", async () => {
+  const { dir } = shop();
+  const { session: s, view } = open(dir, { agent: replying("fake", [{ plan: [{ text: "x", status: "built" }], steps: [] }]) });
+  s.editMap({ edits: [{ op: "pseudo", id: "lib/store.js", lines: ["keeps what was posted"] }] });
+  assert.deepEqual(s.map().boxes.find((b) => b.id === "lib/store.js")!.lines.map((l) => l.text), ["keeps what was posted"]);
+  await s.pass();
+  const rev = view().mapRev;
+  s.undo();
+  assert.notEqual(view().mapRev, rev, "the map pane fetches the map again");
+});

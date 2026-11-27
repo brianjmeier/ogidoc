@@ -35,3 +35,18 @@ test("only the editor's own page on this machine can drive the session", async (
     server.close();
   }
 });
+
+test("a map edit posted to /api/map reaches the session", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ogidoc-server-"));
+  const { session } = open(dir, { name: "p", commit: false });
+  const { server } = await startServer(session, { port: 0 });
+  const port = (server.address() as AddressInfo).port;
+  const self = `127.0.0.1:${port}`;
+  const edits = JSON.stringify({ edits: [{ op: "add", key: "k", name: "cart", parent: null, lines: ["holds items"] }] });
+  try {
+    assert.equal(await send(port, "POST", "/api/map", { host: self, origin: `http://${self}`, "content-type": "application/json" }, edits), 200);
+    assert.deepEqual(session.snapshot().boxes.map((b) => b.id), ["cart"]);
+  } finally {
+    server.close();
+  }
+});

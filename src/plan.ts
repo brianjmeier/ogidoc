@@ -102,7 +102,10 @@ export function editMap(plan: Plan, edits: Edit[], frame: Box[] = []): Plan {
   };
   const change = (id: string, f: (b: Box) => Box) => (boxes = boxes.map((b) => (b.id === id ? f(b) : b)));
   for (const e of edits) {
-    if (e.op === "pseudo") boxes = editBoxes(boxes, { [idOf(e.id)]: e.lines.join("\n") });
+    if (e.op === "pseudo") {
+      const id = idOf(e.id);
+      boxes = editBoxes(boxes, { [id]: e.lines.join("\n") });
+    }
     else if (e.op === "rename") change(idOf(e.id), (b) => ({ ...b, name: e.name.trim() || b.name }));
     else if (e.op === "remove") {
       if (scanned.has(e.id) && !boxes.some((b) => b.id === e.id)) throw new Error(`${e.id} is code the scan found. Say in the plan what should happen to it.`);

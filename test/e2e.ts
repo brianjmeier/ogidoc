@@ -239,10 +239,17 @@ try {
   assert.equal(await page.$$(".pin-btn").then((p) => p.length), 0, "the agent answered and resolved the thread");
   const thread = JSON.parse(readFileSync(join(dir, ".ogidoc/weekly/comments.json"), "utf8"))[0];
   assert.deepEqual(thread.messages.map((m: { by: string }) => m.by), ["h", "a"], "the comment reached the agent and it answered");
-  assert.equal(await page.$$eval(".canvas .box", (b) => b.length), 4);
+  // loadWeek's code is in src/week.js, the file weekWindow stands for, so it sits inside it.
+  assert.equal(await page.$$eval(".canvas .box", (b) => b.length), 3);
   assert.equal((await planText()).length, 3, "the plan got shorter");
-  assert.equal(await page.$$eval(".canvas svg path[marker-end]", (p) => p.length), 3, "boxes are connected by what they use");
+  assert.equal(await page.$$eval(".canvas svg path[marker-end]", (p) => p.length), 2, "boxes are connected by what they use");
   await shot("09-boxes");
+  await page.click('.canvas .box[data-name="weekWindow"] .open');
+  await page.waitForSelector('.canvas .box[data-name="loadWeek"]');
+  assert.equal(await page.$$eval(".canvas .ghost-box", (g) => g.map((x) => x.textContent)).then((g) => g.join()), "to summarizeWeek", "what uses the inside shows as a ghost");
+  await shot("09b-inside-a-box");
+  await page.click(".crumbs button >> nth=0");
+  await page.waitForSelector('.canvas .box[data-name="WeeklyCard"]');
 
   step("the person comments on a line, then resolves it");
   await page.click(".rows .row:first-child .no");
@@ -301,7 +308,7 @@ try {
   await handOver();
   await waitTurn(/done · every line built/);
   await page.waitForTimeout(1300);
-  assert.equal(await page.$$eval(".canvas .box.built", (b) => b.length), 4);
+  assert.equal(await page.$$eval(".canvas .box.built", (b) => b.length), 3);
   await shot("12-done");
   await page.click('button:has-text("Delete the plan")');
   await page.waitForSelector('button:has-text("Delete it? Click again")');

@@ -22,7 +22,7 @@ Node 22.18 or newer.
 ```bash
 npm install -g ogidoc
 ogidoc --demo               # try it: a scripted agent, a throwaway folder, no API key
-ogidoc map --demo           # Ogimap: map an existing codebase, zoom in, and change it by editing the map (labs/ogimap)
+ogidoc --demo shortener     # the same, opened on an existing app: the map of its code is where you start
 ogidoc install-skill        # optional: teach your Claude Code or pi chat to work beside a session
 ```
 
@@ -36,6 +36,12 @@ and `npm run dev` to rebuild the editor as you change it.
 cd your-project
 ogidoc --open
 ```
+
+In an existing git repository the editor opens on a map of the code: its folders and
+files as boxes, imports as arrows, and the tangles worth a look. That map is your
+first set of abstractions. Open a box and the agent says what it does in pseudocode;
+edit that, draw an arrow, sketch a new box, or write what you want in the plan, then
+hand over.
 
 A session has a name. Leave it out and Ogidoc opens the one session in this folder, or
 asks you to name a new one (the folder's name is the suggestion). `ogidoc checkout`
@@ -115,10 +121,20 @@ skill, to put wherever that agent reads its instructions: `ogidoc skill >> AGENT
 - **Building underneath.** The agent builds what it understands in TDD baby steps.
   Margin marks say what's built, what needs a build, and what waits on a comment. The Underneath drawer lists the steps, files
   and checks of the last turn.
-- **Boxes.** When a piece is settled, the agent moves it into a named box on the
-  canvas and leaves a reference in the plan, so the plan stays short. Click a box, or
-  Tab to it and press Enter, to edit it; that's how you disagree with an abstraction.
-  In the plan Tab indents; press Esc first and Tab moves on.
+- **Boxes.** The boxes are the map of your code, and they belong to the repository,
+  not the session: every session starts from them. In an existing repo the scan draws
+  the first map (folders, files, what they export, who imports what). When a piece of
+  the plan is settled, the agent moves it into a box, points the box at its code, and
+  leaves a reference in the plan, so the plan stays short. Double-click a box to go
+  inside it; one nobody described yet gets described as you open it. Click a box, or
+  Tab to it and press Enter, to edit what it does; that's how you disagree with an
+  abstraction. Drag from a box's edge to draw an arrow, double-click empty space to
+  sketch a box, ⌫ to cross one out: the next turn builds what you changed. A box whose
+  code changed since the agent last said what it does is marked until a turn catches
+  it up. In the plan Tab indents; press Esc first and Tab moves on.
+- **Tangles.** The map lists what looks tangled (a cycle, files that always change
+  together, an import of something that changes a lot), with its evidence. **Fix this**
+  writes it into the plan as a line for the agent.
 - **Autocomplete.** On your turn the agent's guesses about your next lines show as
   ghost text. Tab accepts.
 - **Done means done.** No open comments or options, every line and box built, checks
@@ -135,7 +151,7 @@ Everything stays plain text next to your code:
 ```
 feature.plan                         the plan
 .ogidoc/rules.md                 house rules for turns; edit freely
-.ogidoc/feature/boxes/*.plan     one file per box
+.ogidoc/map.json                 the boxes and arrows, one map for the repo (git merges it box by box)
 .ogidoc/feature/comments.json    comment threads, pinned to plan lines
 .ogidoc/feature/state.json       what the editor knows per line (git-ignored)
 ```
@@ -168,6 +184,12 @@ src/plan.ts           the plan's lines, boxes, threads and choices through each 
 src/threads.ts        comment threads pinned to plan lines
 src/choices.ts        the other ways the agent offered, cycled in place
 src/plan-store.ts     where a plan lives on disk and how it is saved
+src/map-store.ts      the repo's map on disk, merged when two sessions save it
+src/scan.ts           reads the code into a starting map: folders, files, seams, tangles
+src/scan-repo.ts      hands the scan what git tracks
+src/map.ts            the scan and the boxes said about it, as one map
+src/describe.ts       the prompt that asks a reader to say what a box does
+src/merge-map.ts      git's merge driver for map.json
 src/turn-log.ts       one commit per turn, drift, revert (git, or nothing)
 src/agents.ts         Claude Code, pi, any command, and the scripted mock
 src/sessions.ts       session names: checked, or inferred from where you are

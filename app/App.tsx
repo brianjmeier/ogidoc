@@ -1,6 +1,7 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { Button } from "@kobalte/core/button";
-import type { Snapshot } from "../src/types.ts";
+import type { Edit, MapView, Snapshot } from "../src/types.ts";
 import { listen, notice, post, state, type TurnChanges } from "./api.ts";
 import { Boxes, type BoxAnimation, type BoxesApi } from "./Boxes.tsx";
 import { Editor, type EditorApi } from "./Editor.tsx";
@@ -10,6 +11,7 @@ import { Underneath } from "./Underneath.tsx";
 import { sendAll, setOpenId } from "./threads.ts";
 import { keys } from "./text.ts";
 import { waitingOnYou } from "../src/shared/stops.ts";
+import { splitLines } from "../src/shared/diff.ts";
 
 export function App() {
   // The top bar renders before the editor exists.
@@ -22,6 +24,22 @@ export function App() {
   const [hint, setHint] = createSignal("");
   const [now, setNow] = createSignal(Date.now());
   const [workStart, setWorkStart] = createSignal(0);
+
+  // The whole map, fetched when the server says it changed; reconciled so a box that
+  // didn't change keeps its identity and an open box editor stays open.
+  const [map, setMap] = createStore<{ m: MapView | null }>({ m: null });
+  let mapAsked = 0;
+  createEffect(on(() => state()?.mapRev, (rev) => {
+    if (rev === undefined) return;
+    const ask = ++mapAsked;
+    fetch("/api/map").then((r) => r.json()).then((m: MapView) => {
+      if (ask === mapAsked) setMap("m", reconcile(m, { key: "id" }));
+    }, () => {});
+  }));
+  const owned = (id: string) => !!state()?.boxes.some((b) => b.id === id);
+  // A box only the scan knows joins the plan through a map edit.
+  const editMap = (edits: Edit[]) => post("/api/map", { edits });
+  const editBox = (id: string, text: string) => (owned(id) ? post("/api/edit", { boxes: { [id]: text } }) : editMap([{ op: "pseudo", id, lines: splitLines(text) }]));
 
   const editable = () => !!state() && !state()!.working && !writing();
   const live = () => editable() && !!editor();
@@ -51,8 +69,12 @@ export function App() {
     clearTimeout(editTimer);
     setPassing(true);
     setTimeout(() => setPassing(false), 500);
-    // Everything not sent yet goes with the hand-over in one request.
-    await post("/api/pass", { text: editor()!.text(), accepted: editor()!.takeAccepted(), boxes: boxes?.take() });
+    // Everything not sent yet goes with the hand-over in one request, but a box only the
+    // scan knows has to join the plan first.
+    const open = boxes?.take();
+    const [id, text] = Object.entries(open ?? {})[0] ?? [];
+    if (id && !owned(id)) await editBox(id, text);
+    await post("/api/pass", { text: editor()!.text(), accepted: editor()!.takeAccepted(), boxes: id && owned(id) ? open : undefined });
   }
 
   async function onEvent(next: Snapshot, prev: Pick<Snapshot, "turn" | "working"> | null, turn?: TurnChanges) {
@@ -119,7 +141,7 @@ export function App() {
           {/* Turn changes, said once to a screen reader; the seconds counting up are left out. */}
           <div class="sr-only" role="status">{whoseTurn().label}</div>
           <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={live() && editor()!.fresh()} onNext={live() && editor()!.hasStops() ? () => editor()!.jump(1) : undefined} />
-          <main class="panes" classList={{ solo: !s().boxes.length }}>
+          <main class="panes" classList={{ solo: !map.m?.boxes.length }}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">
                 <Editor
@@ -133,6 +155,7 @@ export function App() {
                   onPass={pass}
                   onHint={setHint}
                   onUndo={() => s().canUndo && undo.click()}
+                  nameOf={(id) => map.m?.boxes.find((b) => b.id === id)?.name ?? id}
                 />
                 <StatusCard state={s()} />
               </div>
@@ -141,20 +164,33 @@ export function App() {
               </Show>
               <Underneath last={s().last} />
             </section>
-            <Show when={s().boxes.length}>
-              <section class="pane box-pane" aria-label="Boxes">
-                <div class="pane-label">Boxes</div>
-                <Boxes
-                  ref={(api) => (boxes = api)}
-                  boxes={s().boxes}
-                  edges={s().edges}
-                  symbols={s().symbols}
-                  editable={editable()}
-                  animate={boxAnim()}
-                  onEdit={(id, text) => post("/api/edit", { boxes: { [id]: text } })}
-                  onPass={pass}
-                />
-              </section>
+            <Show when={map.m?.boxes.length ? map.m : null}>
+              {(m) => (
+                <section class="pane box-pane" aria-label="Map">
+                  <div class="pane-label">Map</div>
+                  <Boxes
+                    ref={(api) => (boxes = api)}
+                    title={m().title}
+                    boxes={m().boxes}
+                    edges={m().edges}
+                    smells={m().smells}
+                    drifted={s().drifted}
+                    symbols={s().symbols}
+                    editable={editable()}
+                    busy={s().working}
+                    describing={s().describing}
+                    animate={boxAnim()}
+                    onEdit={editBox}
+                    onPass={pass}
+                    onMapEdit={editMap}
+                    onDescribe={(id) => post("/api/describe", { id })}
+                    onFix={(line) => editor()!.append(line)}
+                  />
+                  <Show when={!s().working && s().described?.error}>
+                    <div class="map-error" role="alert">Couldn't say what {s().described!.id ?? "the map"} does: {s().described!.error}</div>
+                  </Show>
+                </section>
+              )}
             </Show>
           </main>
         </Show>

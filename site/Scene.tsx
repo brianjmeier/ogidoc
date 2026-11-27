@@ -126,7 +126,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           </div>
           <Show when={boxes().length}>
             <div class="box-pane">
-              <Boxes ref={() => {}} boxes={boxes()} edges={edges()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
+              <Boxes ref={() => {}} title={props.file ?? "tic-tac-toe"} boxes={boxes()} edges={edges()} smells={[]} drifted={[]} symbols={[]} editable={false} busy={false} describing={null} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} onMapEdit={() => {}} onDescribe={() => {}} onFix={() => {}} />
             </div>
           </Show>
         </div>
