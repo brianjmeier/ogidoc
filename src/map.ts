@@ -7,7 +7,7 @@
 import type { Box, BoxEdge, BoxScan, CodeRef, MapView, Pin, Smell, Status } from "./types.ts";
 import type { Skeleton } from "./scan.ts";
 import type { DescribeBrief } from "./describe.ts";
-import { smellIds, smellText } from "./shared/smells.ts";
+import { renameSmell, smellIds, smellText } from "./shared/smells.ts";
 import { GHOST, arrowKey, isGhost, trail, visible } from "./shared/level.ts";
 
 export interface MapNode {
@@ -90,6 +90,7 @@ export function mapView(sk: Skeleton | null, boxes: Box[], edges: BoxEdge[]): Ma
     }),
     edges: m.edges,
     smells: m.smells ?? [],
+    ...(sk && { unread: sk.unread }),
   };
 }
 
@@ -172,9 +173,9 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
   for (const e of sk.edges) {
     const from = idOf(e.from), to = idOf(e.to);
     if (from === to || have.has(arrowKey({ from, to }))) continue;
-    edges.push({ from, to, kind: "import", symbols: e.symbols });
+    edges.push({ from, to, kind: "import", symbols: e.symbols, ...(e.typeOnly && { typeOnly: true }) });
   }
-  const smells = sk.smells.map((x): Smell => ("ids" in x ? { ...x, ids: x.ids.map(idOf) } : "b" in x ? { ...x, a: idOf(x.a), b: idOf(x.b) } : { ...x, a: idOf(x.a) }));
+  const smells = sk.smells.map((x) => renameSmell(x, idOf));
   return { ...checkMap({ title: map?.title && map.title !== "map" ? map.title : sk.title, nodes, edges }), smells };
 }
 

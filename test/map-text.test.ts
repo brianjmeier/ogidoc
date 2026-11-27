@@ -25,7 +25,7 @@ function shop() {
 
 test("the top of the map lists each box with what the scan read, and the arrows between them", () => {
   const text = levelText(shop().view, null);
-  assert.match(text, /^lib {2}· {2}2 files · 3 lines · used by 1 · uses 0 · 2 inside · 1 tangle inside$/m);
+  assert.match(text, /^lib {2}· {2}2 files · 3 lines of code · used by 1 file outside it · uses 0 files outside it · 2 inside · 1 tangle inside$/m);
   assert.match(text, /^ {2}exports: (save, load|load, save)$/m);
   assert.match(text, /^ {2}not described yet$/m);
   assert.match(text, /^ {2}src → lib: save, load$/m);
@@ -36,9 +36,9 @@ test("the top of the map lists each box with what the scan read, and the arrows 
 test("inside a box: its files, the tangles among them, and arrows to the boxes outside", () => {
   const text = levelText(shop().view, "lib");
   assert.match(text, /^\S+ › lib$/m);
-  assert.match(text, /^old\.js {2}lib\/old\.js {2}· {2}file · 1 line/m);
+  assert.match(text, /^old\.js {2}lib\/old\.js {2}· {2}file · 1 line of code/m);
   assert.match(text, /^ {2}unused: old\.js, exports names nothing in the code imports$/m);
-  assert.match(text, /^ {2}src \(outside\) → store\.js: save, load$/m);
+  assert.match(text, /^ {2}src → store\.js: save, load$/m, "a box outside the level by its whole id, one inside by its id from here");
 });
 
 test("what was said about a box shows as its pseudocode, and code changed since is flagged", () => {

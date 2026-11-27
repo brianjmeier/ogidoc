@@ -94,7 +94,7 @@ export function Boxes(props: Props) {
   const fileSmells = createMemo(() => {
     const m = new Map<string, Pin[]>();
     for (const s of props.smells) {
-      if (s.kind !== "unused" && s.kind !== "pass-through") continue;
+      if (s.kind !== "unused" && s.kind !== "pass-through" && s.kind !== "large") continue;
       const pin = { kind: s.kind, text: tangleWords(s)[1] };
       const at = m.get(s.a);
       if (at) at.push(pin);
@@ -198,7 +198,7 @@ export function Boxes(props: Props) {
 
   const picked = createMemo(() => (tangle() ? new Set(smellIds(tangle()!)) : null));
   const impact = createMemo(() => (picked() ? new Set<string>() : impactOf(selected(), v().wires)));
-  const volatile = createMemo(() => new Set(props.smells.flatMap((s) => (s.kind === "volatile import" ? [arrowKey({ from: s.a, to: s.b })] : []))));
+  const volatile = createMemo(() => new Set(props.smells.flatMap((s) => (s.kind === "volatile import" ? s.importers.map((from) => arrowKey({ from, to: s.b })) : []))));
   const loopOf = createMemo(() => {
     const m = new Map<string, string>();
     for (const s of props.smells) if (s.kind === "cycle") for (const id of s.ids) m.set(id, s.ids.join("|"));
@@ -506,7 +506,7 @@ export function Boxes(props: Props) {
         <Show when={scanned() && b().name !== b().id && b().scan!.kind !== "external"}><div class="path">{b().id}</div></Show>
         <Show when={scanned() && b().scan!.kind !== "external"}>
           <div class="facts">
-            {[`${count(b().scan!.size)} lines`, `used by ${b().scan!.usedBy}`, `uses ${b().scan!.uses}`, ...(b().scan!.tests ? [`${b().scan!.tests} test${b().scan!.tests === 1 ? "" : "s"}`] : [])].join(" · ")}
+            {[`${count(b().scan!.size)} lines of code`, `used by ${b().scan!.usedBy} ${b().scan!.usedBy === 1 ? "file" : "files"} outside it`, `uses ${b().scan!.uses} ${b().scan!.uses === 1 ? "file" : "files"} outside it`, ...(b().scan!.tests ? [`${b().scan!.tests} test${b().scan!.tests === 1 ? "" : "s"}`] : [])].join(" · ")}
           </div>
         </Show>
         <Show when={b().scan?.seam.length}>

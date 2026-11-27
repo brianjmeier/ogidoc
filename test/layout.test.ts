@@ -88,7 +88,7 @@ test("an arrow leaves the used box at its seam name and enters the user's side",
 });
 
 test("a tangle shows on the level that holds every box it names", () => {
-  const smells = [{ kind: "cycle" as const, ids: ["api", "db"] }, { kind: "change together" as const, a: "cli", b: "db", count: 3 }, { kind: "unused" as const, a: "cli" }];
+  const smells = [{ kind: "cycle" as const, ids: ["api", "db"], closing: [] }, { kind: "change together" as const, a: "cli", b: "db", count: 3 }, { kind: "unused" as const, a: "cli" }];
   assert.deepEqual(smellIds(smells[1]), ["cli", "db"]);
   assert.deepEqual(tanglesAt(smells, new Set(["api", "db"])), [smells[0]]);
   assert.deepEqual(tanglesAt(smells, new Set(["src", "cli"])), [smells[2]]);

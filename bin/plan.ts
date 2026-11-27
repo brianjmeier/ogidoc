@@ -15,6 +15,7 @@ import { turnLog } from "../src/turn-log.ts";
 import { MAP_FILE, mapStore } from "../src/map-store.ts";
 import { repoMap, type RepoMap } from "../src/repo-map.ts";
 import { levelText } from "../src/map-text.ts";
+import { LANGUAGES } from "../src/languages/index.ts";
 import { describeAsk, describeBox } from "../src/describe-box.ts";
 import { startServer } from "../src/server.ts";
 import { sessionsIn } from "../src/plan-store.ts";
@@ -131,7 +132,7 @@ const commands: Record<string, () => Promise<void> | void> = {
     const read = () => repoMap(cwd, { io, hashes: log.hashes });
     const show = (m: RepoMap, level: string | null) => print(values.json ? m.view : levelText(m.view, level, m.drifted));
     const m = read();
-    if (!m) throw new Error("There is no map here: ogidoc maps a git checkout with JavaScript or TypeScript in it.");
+    if (!m) throw new Error(`There is no map here: ogidoc maps a git checkout with code in it: ${LANGUAGES.map((l) => l.name).join(", ")}.`);
     if (positionals[1] !== "describe") return show(m, positionals[1] ?? null);
 
     const id = positionals[2] ?? null;

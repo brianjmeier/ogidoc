@@ -36,7 +36,7 @@ You are in **read-only** mode: read and search the code, don't change anything.
 
 ## The boxes
 
-${b.children.map((c) => `- \`${c.id}\`${c.file ? " (file)" : ""}: ${c.size} lines, used by ${c.usedBy}, uses ${c.uses}${c.seam.length ? `; its seam: ${c.seam.join(", ")}${c.seamSize > c.seam.length ? ` and ${c.seamSize - c.seam.length} more` : ""}` : ""}`).join("\n")}
+${b.children.map((c) => `- \`${c.id}\`${c.file ? " (file)" : ""}: ${c.size} lines of code, used by ${filesN(c.usedBy)} outside it, uses ${filesN(c.uses)} outside it${c.seam.length ? `; its seam: ${c.seam.join(", ")}${c.seamSize > c.seam.length ? ` and ${c.seamSize - c.seam.length} more` : ""}` : ""}`).join("\n")}
 
 ## Arrows
 
@@ -79,3 +79,4 @@ export interface Described {
   edges: { from: string; to: string; label?: string }[];
 }
 
+const filesN = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;

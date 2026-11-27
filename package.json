@@ -33,7 +33,7 @@
     "prepare": "npm run build",
     "typecheck": "tsc -p . && tsc -p app && tsc -p site",
     "demo": "node bin/ogidoc.ts --demo",
-    "test": "node --test test/*.test.ts",
+    "test": "node --test test/*.test.ts test/languages/*.test.ts",
     "test:e2e": "node test/e2e.ts",
     "test:site": "node test/site-e2e.ts",
     "test:real": "node test/real-agent.ts",

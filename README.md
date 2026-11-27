@@ -183,6 +183,19 @@ the same conversation with `--resume` or `--session`. A command agent runs throu
 its own tools and ends its reply with the JSON block. Tool use streams to the editor as
 activity.
 
+## The languages the map reads
+
+`ogidoc map` reads JavaScript and TypeScript, Go, Rust, Python, Java and Kotlin, with no
+parser to install. Each language is one file in `src/languages/`: which files are its,
+what a file imports, and where each import lands (a file, a package folder, a package
+from outside, or a file that isn't there). The scan does the rest the same way for all of
+them: the folder tree, seams, sizes, history and tangles. What it can't read (imports of
+files that are gone, languages it doesn't know) the map says under "Not read".
+
+To add a language, write `src/languages/<name>.ts` exporting a `Language`, add it to
+`LANGUAGES` in `src/languages/index.ts`, and give it a test in `test/languages/` on a small
+made-up repo, as the others have.
+
 ## Layout
 
 ```
@@ -194,6 +207,7 @@ src/choices.ts        the other ways the agent offered, cycled in place
 src/plan-store.ts     where a plan lives on disk and how it is saved
 src/map-store.ts      the repo's map on disk, merged when two sessions save it
 src/scan.ts           reads the code into a starting map: folders, files, seams, tangles
+src/languages/        one file per language the scan reads: its files, imports, where they land
 src/scan-repo.ts      hands the scan what git tracks
 src/map.ts            the scan and the boxes said about it, as one map
 src/describe.ts       the prompt that asks a reader to say what a box does

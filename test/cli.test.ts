@@ -108,8 +108,10 @@ test("ogidoc map gives an agent the map with no editor: one level as text, or al
   const ogidoc = (...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { cwd: dir, env, encoding: "utf8" });
   const top = ogidoc("map");
   assert.equal(top.status, 0, top.stderr);
-  assert.match(top.stdout, /^links\.js {2}src\/links\.js {2}· {2}file · 20 lines/m);
-  assert.match(top.stdout, /^ {2}unused: server\.js, exports names nothing in the code imports$/m);
+  assert.match(top.stdout, /^test {2}· {2}1 file · /m, "the tests folder is code of its own");
+  const src = ogidoc("map", "src").stdout;
+  assert.match(src, /^links\.js {2}src\/links\.js {2}· {2}file · 20 lines/m);
+  assert.match(src, /^ {2}unused: server\.js, exports names nothing in the code imports$/m);
   const all = JSON.parse(ogidoc("map", "--json").stdout);
   assert.ok(all.boxes.some((b: { id: string }) => b.id === "src/links.js"));
   assert.ok(all.smells.length);

@@ -114,7 +114,8 @@ function Page() {
       <section class="beat wide">
         <div class="copy-col">
           <h2><span>Open it on code you already&nbsp;have.</span><span> The map is your first set of&nbsp;abstractions.</span></h2>
-          <p>Ogidoc reads the repository into boxes: folders, files, what each exports and who imports it, and the tangles worth a look. Write what you want, and the agent changes the code and the boxes&nbsp;together. The map is the repository's, so every session starts from&nbsp;it.</p>
+          <p>Ogidoc reads the repository into boxes: folders, files, what each exports and who imports it, and the tangles worth a look, such as the imports that close a loop. Write what you want, and the agent changes the code and the boxes&nbsp;together. The map is the repository's, so every session starts from&nbsp;it.</p>
+          <p>It reads JavaScript and TypeScript, Go, Rust, Python, Java and Kotlin, with nothing to install, and says what it couldn't read. Your agent can read the same map with <code>ogidoc map</code>, no editor&nbsp;needed.</p>
         </div>
         <Scene label="An existing URL shortener opens as a map of its files; the person asks for links that expire, and the agent changes the links and store boxes" file="shortener" smells={existingRepo.smells} start={existingRepo.start} frames={frames(existingRepo.start, existingRepo.beats)} />
       </section>

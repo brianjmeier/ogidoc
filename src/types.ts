@@ -47,7 +47,7 @@ export interface Box {
 
 export interface BoxScan {
   kind: "module" | "file" | "external";
-  // Lines of code under it, tests left out.
+  // Lines of code under it (blank lines left out), tests left out.
   size: number;
   files: number;
   tests: number;
@@ -55,23 +55,27 @@ export interface BoxScan {
   // many the whole seam has.
   seam: { name: string; file: string; users: number }[];
   seamSize: number;
-  // How many boxes beside it import it, and how many it imports.
+  // How many files outside it import it, and how many files outside it it imports.
   usedBy: number;
   uses: number;
 }
 
 // A tangle the scan sees without an agent (after caldoai's untangle-codebase). A pair is
 // two boxes side by side, so it shows on the level that holds both.
-//  - `volatile import`: `a`, which other code imports, imports `b`, which changes much more often;
+//  - `volatile import`: `importers`, which other code imports, import `b`, which changes much more often;
 //  - `change together`: git changes `a` and `b` in the same commits, with no import between them;
-//  - `unused`: `a` exports names and nothing in the code imports it (an entry point
-//    loaded by convention reads the same; the box says what is true, not that it's dead);
+//  - `unused`: `a` exports names and nothing in the code, its tests included, imports it (an
+//    entry point loaded by convention reads the same; the box says what is true, not that it's dead);
 //  - `pass-through`: `a` only re-exports what other files define;
-//  - `cycle`: boxes side by side that import each other round in a loop.
+//  - `large`: `a` is a file of `size` lines of code;
+//  - `cycle`: boxes side by side that import each other round in a loop, counting only
+//    imports that run (not type-only ones); `closing` are the file imports that close it.
 export type Smell =
-  | { kind: "volatile import" | "change together"; a: string; b: string; count: number }
-  | { kind: "cycle"; ids: string[] }
-  | { kind: "unused" | "pass-through"; a: string };
+  | { kind: "volatile import"; b: string; importers: string[]; count: number }
+  | { kind: "change together"; a: string; b: string; count: number }
+  | { kind: "cycle"; ids: string[]; closing: { from: string; to: string }[] }
+  | { kind: "unused" | "pass-through"; a: string }
+  | { kind: "large"; a: string; size: number };
 
 // The whole map as the person sees it: the scan of the code with every box on it.
 export interface MapView {
@@ -79,6 +83,7 @@ export interface MapView {
   boxes: Box[];
   edges: BoxEdge[];
   smells: Smell[];
+  unread?: Unread;
 }
 
 // One box calling another, or importing from it.
@@ -88,6 +93,16 @@ export interface BoxEdge {
   label?: string;
   kind: "call" | "import";
   symbols?: string[];
+  /** An import that takes only types: it shapes the code but runs none of it. */
+  typeOnly?: boolean;
+}
+
+/** What the scan could not read, so the map can say so instead of looking complete. */
+export interface Unread {
+  /** Imports of code in the repo that isn't there: a moved or deleted file. */
+  imports: { from: string; spec: string }[];
+  /** Files in languages the scan doesn't read, counted by ending: { ".c": 12 }. */
+  files: Record<string, number>;
 }
 
 export interface Message {

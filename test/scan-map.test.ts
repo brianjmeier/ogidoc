@@ -119,7 +119,7 @@ test("tsconfig's paths survive a comment after a path with /* in it", () => {
     "src/b.ts": "export const b = 1;\n",
   };
   const io: RepoIO = {
-    git: (args) => (args[0] === "ls-files" ? ["100644 x 0\tsrc/a.ts", "100644 x 0\tsrc/b.ts"].join("\0") : args[0] === "log" ? "" : null),
+    git: (args) => (args[0] === "ls-files" ? ["100644 x 0\ttsconfig.json", "100644 x 0\tsrc/a.ts", "100644 x 0\tsrc/b.ts"].join("\0") : args[0] === "log" ? "" : null),
     read: (p) => files[p] ?? null,
     readlink: () => null,
   };

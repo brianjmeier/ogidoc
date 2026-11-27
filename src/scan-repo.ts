@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
-import { isCode, scan, type Skeleton } from "./scan.ts";
+import { scan, type Skeleton } from "./scan.ts";
+import { CONFIG_NAMES, isCode } from "./languages/index.ts";
+import { baseOf } from "./languages/text.ts";
 
 // The scan of a checkout: what git tracks, read from disk, and how often things changed
 // together in its history. The scan itself is pure; this hands it the files.
@@ -30,32 +32,21 @@ export function scanRepo(title: string, io: RepoIO): Skeleton | null {
     const to = x.link ? io.readlink(x.path) : null;
     if (to !== null) links[x.path] = to;
   }
-  const files = entries.filter((x) => !x.link && isCode(x.path)).flatMap((x) => {
-    const text = io.read(x.path);
-    return text === null ? [] : [{ path: x.path, text }];
+  const read = (paths: string[]) => paths.flatMap((path) => {
+    const text = io.read(path);
+    return text === null ? [] : [{ path, text }];
   });
+  const plain = entries.filter((x) => !x.link).map((x) => x.path);
+  const files = read(plain.filter(isCode));
   if (!files.length) return null;
+  const config = Object.fromEntries(read(plain.filter((p) => CONFIG_NAMES.has(baseOf(p)))).map((f) => [f.path, f.text]));
   const log = io.git(["log", "-n", String(HISTORY), "--name-only", "--relative", "--format=%x00"]) ?? "";
   const history = log.split("\0").map((c) => c.split("\n").filter(Boolean)).filter((c) => c.length);
-  return scan(title, files, { aliases: aliasesOf(io), links, history });
+  return scan(title, files, { links, history, config, others: plain.filter((p) => !isCode(p)) });
 }
 
 /** The commit the checkout is on, to scan again only when it moved. */
 export const headOf = (io: RepoIO): string => io.git(["rev-parse", "HEAD"])?.trim() ?? "";
-
-// tsconfig's `paths`, relative to the project root. tsconfig may carry comments.
-function aliasesOf(io: RepoIO): Record<string, string[]> {
-  try {
-    const raw = withoutComments(io.read("tsconfig.json") ?? "{}").replace(/,(\s*[}\]])/g, "$1");
-    const { baseUrl = ".", paths = {} } = JSON.parse(raw).compilerOptions ?? {};
-    return Object.fromEntries(Object.entries(paths as Record<string, string[]>).map(([k, v]) => [k, v.map((t) => join(baseUrl, t))]));
-  } catch {
-    return {};
-  }
-}
-
-// JSON with its comments taken out. A string is skipped whole, so `"@/*"` stays as it is.
-const withoutComments = (text: string) => text.replace(/("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (_, str) => str ?? "");
 
 /** The real checkout at `root`. */
 export function repoIO(root: string): RepoIO {

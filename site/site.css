@@ -52,6 +52,7 @@ a:focus-visible, .copy:focus-visible { outline: 2px solid var(--human); outline-
 .beat { display: grid; gap: 22px; padding: clamp(40px, 9vh, 96px) 0; border-top: 1px solid var(--line); }
 .copy-col h2 { margin: 0 0 12px; font: 600 clamp(22px, 1.9vw, 26px)/1.22 var(--font-brand); letter-spacing: -0.005em; text-wrap: balance; }
 .copy-col p { margin: 0; font-size: 16.5px; line-height: 1.6; color: var(--muted); max-width: 30em; text-wrap: pretty; }
+.copy-col p + p { margin-top: 0.8em; }
 .styles { display: grid; gap: 18px; }
 @media (min-width: 1080px) {
   .beat { grid-template-columns: minmax(0, 1fr) minmax(0, 2.1fr); gap: 56px; align-items: start; }

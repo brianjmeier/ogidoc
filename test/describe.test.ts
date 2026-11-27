@@ -52,7 +52,7 @@ test("describing the top of the map names its boxes and says what they do, in a 
   const lib = view().boxes.find((b) => b.id === "lib")!;
   assert.deepEqual([lib.name, lib.status, lib.lines.map((l) => [l.text, l.by])], ["store", "built", [["keeps what was posted", "a"]]]);
   assert.equal(lib.pins?.[0].kind, "special case");
-  assert.match(agent.prompts[0], /- `lib`: \d+ lines, used by 1/, "the agent is told what the scan read");
+  assert.match(agent.prompts[0], /- `lib`: \d+ lines of code, used by 1 file outside it/, "the agent is told what the scan read");
   assert.equal(log()[0], "ogidoc: describe the map");
   assert.deepEqual(onDisk(dir).nodes.map((n: { name: string }) => n.name).sort(), ["app", "store"]);
 

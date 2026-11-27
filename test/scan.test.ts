@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { importsOf, OUTSIDE, scan } from "../src/scan.ts";
+import { OUTSIDE, scan } from "../src/scan.ts";
+import { importsOf } from "../src/languages/javascript.ts";
 
 const f = (path: string, text = "") => ({ path, text });
 
@@ -34,7 +35,7 @@ const repo = () => scan("demo", [
   f("packages/tend/src/index.ts", `export const now = 0`),
   f("README.md", "# not code"),
   f("node_modules/x/index.js", "ignored"),
-], { aliases: { tend: ["./packages/tend/src/index.ts"] } });
+], { config: { "tsconfig.json": `{ "compilerOptions": { "paths": { "tend": ["./packages/tend/src/index.ts"] } } }` } });
 
 test("folders become boxes, a folder holding only one folder folds into it", () => {
   const s = repo();
@@ -91,7 +92,7 @@ test("smells: a volatile import, two boxes that change together, unused and pass
   ];
   const s = scan("smells", files, { history });
   const has = (kind: string, a: string, b?: string) => s.smells.some((x) => x.kind === kind && "a" in x && x.a === a && (b === undefined || ("b" in x && x.b === b)));
-  assert.ok(has("volatile import", "core", "ui"), "core imports the ui, which changes six times as often");
+  assert.deepEqual(s.smells.filter((x) => x.kind === "volatile import").map((x) => "importers" in x && [x.b, x.importers]), [["ui", ["core"]]], "core imports the ui, which changes six times as often");
   assert.ok(has("change together", "billing", "mail"), "billing and mail change in the same commits, with no import");
   assert.ok(has("pass-through", "mail/index.ts"));
   assert.ok(!has("unused", "mail/send.ts"), "send is imported by the pass-through");
@@ -107,6 +108,7 @@ test("boxes that import each other round in a loop are a cycle; each box knows w
     f("d/w.ts", `import { x } from "../a/x"`),
   ]);
   assert.deepEqual(s.smells.filter((x) => x.kind === "cycle").map((x) => "ids" in x && x.ids), [["a", "b", "c"]]);
+  assert.equal(s.smells.find((x) => x.kind === "cycle" && x.closing.length === 1) !== undefined, true, "one import closes the loop");
   const a = s.nodes.find((n) => n.id === "a")!;
   assert.deepEqual([a.usedBy, a.uses], [2, 1]);
 });
