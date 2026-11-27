@@ -56,7 +56,7 @@ export const outsideOf = (spec: string) => {
 };
 
 /** Each go.mod's module path, with the folder it roots. */
-export const modulesOf = (config: Map<string, string>) =>
+const modulesOf = (config: Map<string, string>) =>
   [...config]
     .filter(([path]) => baseOf(path) === "go.mod")
     .flatMap(([path, text]) => {

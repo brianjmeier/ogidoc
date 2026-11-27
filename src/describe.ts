@@ -3,6 +3,7 @@
 // arrows; only an agent can say what the box is for.
 
 import type { CodeRef, Pin } from "./types.ts";
+import { count } from "./shared/words.ts";
 
 const STYLE = `How a good box reads:
 
@@ -36,7 +37,7 @@ You are in **read-only** mode: read and search the code, don't change anything.
 
 ## The boxes
 
-${b.children.map((c) => `- \`${c.id}\`${c.file ? " (file)" : ""}: ${c.size} lines of code, used by ${filesN(c.usedBy)} outside it, uses ${filesN(c.uses)} outside it${c.seam.length ? `; its seam: ${c.seam.join(", ")}${c.seamSize > c.seam.length ? ` and ${c.seamSize - c.seam.length} more` : ""}` : ""}`).join("\n")}
+${b.children.map((c) => `- \`${c.id}\`${c.file ? " (file)" : ""}: ${c.size} lines of code, used by ${count(c.usedBy, "file")} outside it, uses ${count(c.uses, "file")} outside it${c.seam.length ? `; its seam: ${c.seam.join(", ")}${c.seamSize > c.seam.length ? ` and ${c.seamSize - c.seam.length} more` : ""}` : ""}`).join("\n")}
 
 ## Arrows
 
@@ -78,5 +79,3 @@ export interface Described {
   add: { id: string; parent: string; name: string; pseudo: string[]; code?: CodeRef[] }[];
   edges: { from: string; to: string; label?: string }[];
 }
-
-const filesN = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;

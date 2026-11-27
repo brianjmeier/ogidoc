@@ -7,7 +7,7 @@ import { C_LIKE, dirOf, normalize, withoutComments } from "./text.ts";
 
 const EXTS = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/index.tsx", "/index.js"];
 // Template strings are blanked: code written inside one (a fixture, a generated file) is text.
-const strip = (text: string) => withoutComments(text, { ...C_LIKE, quotes: ['"', "'"], template: ["`"] });
+const strip = (text: string) => withoutComments(text, { ...C_LIKE, template: ["`"] });
 
 /** The imports of one file: where from, and which names. */
 export function importsOf(text: string): Import[] {
@@ -46,7 +46,7 @@ const packageOf = (spec: string) =>
   /^(node|bun):/.test(spec) ? spec.split(":")[0] + ":*" : spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
 
 /** tsconfig's `paths`, relative to the project root. tsconfig may carry comments and trailing commas. */
-export function aliasesOf(tsconfig: string | undefined): Record<string, string[]> {
+function aliasesOf(tsconfig: string | undefined): Record<string, string[]> {
   try {
     const raw = withoutComments(tsconfig ?? "{}", { ...C_LIKE, quotes: ['"'] }).replace(/,(\s*[}\]])/g, "$1");
     const { baseUrl = ".", paths = {} } = JSON.parse(raw).compilerOptions ?? {};

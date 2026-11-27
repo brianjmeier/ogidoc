@@ -15,7 +15,8 @@ import { driftOf, mapView, stamped } from "./map.ts";
 import { describeAsk, describeBox } from "./describe-box.ts";
 import { MAP_FILE } from "./map-store.ts";
 import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
-import { isCode, type Skeleton } from "./scan.ts";
+import type { Skeleton } from "./scan.ts";
+import { isCode } from "./languages/index.ts";
 import { CLI } from "./paths.ts";
 
 interface EditInput {

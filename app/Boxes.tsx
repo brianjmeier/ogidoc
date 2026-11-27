@@ -6,6 +6,7 @@ import { smellIds, tangleWords } from "../src/shared/smells.ts";
 import { count, impactOf, namesOf, order, place, ranked, tanglesAt, wirePath, zoomToFit, type Rect, type Size } from "./map/layout.ts";
 import { GHOST, ancestorAt, arrowKey, isGhost, trail, visible } from "../src/shared/level.ts";
 import { Tangles } from "./Tangles.tsx";
+import { count as plural } from "../src/shared/words.ts";
 
 // The map of the repo. One level shows at a time: the boxes inside the box you opened,
 // the arrows between them, and ghosts for the ends outside. Boxes sit in columns by what
@@ -506,7 +507,7 @@ export function Boxes(props: Props) {
         <Show when={scanned() && b().name !== b().id && b().scan!.kind !== "external"}><div class="path">{b().id}</div></Show>
         <Show when={scanned() && b().scan!.kind !== "external"}>
           <div class="facts">
-            {[`${count(b().scan!.size)} lines of code`, `used by ${b().scan!.usedBy} ${b().scan!.usedBy === 1 ? "file" : "files"} outside it`, `uses ${b().scan!.uses} ${b().scan!.uses === 1 ? "file" : "files"} outside it`, ...(b().scan!.tests ? [`${b().scan!.tests} test${b().scan!.tests === 1 ? "" : "s"}`] : [])].join(" · ")}
+            {[`${count(b().scan!.size)} lines of code`, `used by ${plural(b().scan!.usedBy, "file")} outside it`, `uses ${plural(b().scan!.uses, "file")} outside it`, ...(b().scan!.tests ? [plural(b().scan!.tests, "test")] : [])].join(" · ")}
           </div>
         </Show>
         <Show when={b().scan?.seam.length}>

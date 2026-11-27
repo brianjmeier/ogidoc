@@ -10,8 +10,6 @@ import { arrowKey } from "./shared/level.ts";
 import { isTest, languageOf, unreadKind, type Import, type Language, type Repo, type Target } from "./languages/index.ts";
 import { dirOf, normalize } from "./languages/text.ts";
 
-export { isCode } from "./languages/index.ts";
-
 interface SourceFile {
   path: string;
   text: string;
@@ -67,6 +65,10 @@ export interface Skeleton {
 
 export const OUTSIDE = "(outside)";
 
+/** The value at `key`, made and kept the first time it is asked for. */
+const getOr = <K, V>(m: Map<K, V>, key: K, make: () => V): V => (m.has(key) ? m.get(key)! : m.set(key, make()).get(key)!);
+const newSet = () => new Set<string>();
+
 const blank = (id: string, name: string, parent: string | null, kind: ScanNode["kind"]): ScanNode =>
   ({ id, name, parent, kind, size: 0, files: 0, tests: 0, seam: [], seamSize: 0, churn: 0, usedBy: 0, uses: 0 });
 
@@ -108,7 +110,7 @@ export function scan(title: string, all: SourceFile[], { links = {}, history = [
   const codeTops = new Set(files.filter((f) => !isTest(f.path)).map((f) => topOf(f.path)));
   const code = files.filter((f) => !isTest(f.path) || !codeTops.has(topOf(f.path)));
   const children = new Map<string, Set<string>>();
-  const add = (parent: string, child: string) => (children.get(parent) ?? children.set(parent, new Set()).get(parent)!).add(child);
+  const add = (parent: string, child: string) => getOr(children, parent, newSet).add(child);
   for (const f of code) {
     let p = f.path;
     while (p) {
@@ -199,22 +201,19 @@ export function scan(title: string, all: SourceFile[], { links = {}, history = [
   // A seam name is used by an importing file outside the box.
   const users = new Map<string, Map<string, Set<string>>>(); // box → "file#name" → importers
   const usedBy = new Map<string, Set<string>>(), uses = new Map<string, Set<string>>();
-  const note = (m: Map<string, Set<string>>, id: string, file: string) => (m.get(id) ?? m.set(id, new Set()).get(id)!).add(file);
   for (const e of edges.values()) {
     if (e.to.startsWith(OUTSIDE)) continue;
-    const inFrom = new Set(ancestors(e.from)), inTo = new Set(ancestors(e.to));
-    for (const a of ancestors(e.from)) {
+    const up = ancestors(e.from), inFrom = new Set(up), inTo = new Set(ancestors(e.to));
+    for (const a of up) {
       if (inTo.has(a)) break;
-      note(uses, a, e.to);
+      getOr(uses, a, newSet).add(e.to);
     }
     for (const a of ancestors(e.to)) {
       if (inFrom.has(a)) break; // from here up, the importer is inside
-      note(usedBy, a, e.from);
-      const m = users.get(a) ?? users.set(a, new Map()).get(a)!;
-      for (const s of e.symbols) {
-        const k = `${e.to}#${s}`;
-        (m.get(k) ?? m.set(k, new Set()).get(k)!).add(e.from);
-      }
+      getOr(usedBy, a, newSet).add(e.from);
+      const m = getOr(users, a, () => new Map<string, Set<string>>());
+      // `*` takes the whole module and names nothing the box offers
+      for (const s of e.symbols) if (s !== "*") getOr(m, `${e.to}#${s}`, newSet).add(e.from);
     }
   }
   for (const [id, who] of usedBy) nodes.get(id)!.usedBy = who.size;
@@ -284,7 +283,7 @@ function smellsOf({ code, nodes, edges, history, ancestors, imported }: {
   const uses = new Map<string, Set<string>>();
   const runs = new Map<string, Set<string>>();
   const along = new Map<string, ScanEdge[]>(); // "a|b" between boxes → the file imports that make it
-  const link = (m: Map<string, Set<string>>, a: string, b: string) => (m.get(a) ?? m.set(a, new Set()).get(a)!).add(b);
+  const link = (m: Map<string, Set<string>>, a: string, b: string) => getOr(m, a, newSet).add(b);
   for (const e of edges) {
     if (!nodes.has(e.to) || nodes.get(e.to)!.kind === "external") continue;
     const p = sideBySide(e.from, e.to);
@@ -294,7 +293,7 @@ function smellsOf({ code, nodes, edges, history, ancestors, imported }: {
     if (e.typeOnly) continue;
     link(runs, ...p);
     const k = `${p[0]}|${p[1]}`;
-    (along.get(k) ?? along.set(k, []).get(k)!).push(e);
+    getOr(along, k, () => []).push(e);
   }
   const volatile = new Map<string, string[]>();
   for (const [a, bs] of uses) {
@@ -302,7 +301,7 @@ function smellsOf({ code, nodes, edges, history, ancestors, imported }: {
     for (const b of bs) {
       const to = nodes.get(b)!;
       // Only code others rely on: a box nothing imports may lean on anything.
-      if (from.seamSize > 0 && to.churn >= 5 && to.churn >= 2 * from.churn) (volatile.get(b) ?? volatile.set(b, []).get(b)!).push(a);
+      if (from.seamSize > 0 && to.churn >= 5 && to.churn >= 2 * from.churn) getOr(volatile, b, () => []).push(a);
     }
   }
   for (const [b, importers] of volatile) smells.push({ kind: "volatile import", b, importers: importers.sort(), count: nodes.get(b)!.churn });

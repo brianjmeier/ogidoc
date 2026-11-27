@@ -13,7 +13,7 @@ const CHAR = /'(?:\\(?:u\{[0-9a-fA-F]*\}|x[0-9a-fA-F]{2}|.)|[^\\'\n])'/uy;
 
 /** Source with comments, strings, raw strings and char literals blanked, places kept.
  *  Rust strings may span lines and block comments nest, so this is its own small scanner. */
-export function strip(text: string): string {
+function strip(text: string): string {
   let out = "";
   let i = 0;
   const take = (end: number) => {
@@ -183,6 +183,10 @@ function resolver(repo: Repo) {
   const fileOf = (root: string, segs: string[]) =>
     !segs.length ? root : [".rs", "/mod.rs"].map((e) => under(dirOf(root), segs.join("/") + e)).find((p) => repo.files.has(p));
 
+  // A file without its comments and strings, read once per scan however many imports land on it.
+  const stripped = new Map<string, string>();
+  const code = (file: string) => stripped.get(file) ?? stripped.set(file, strip(repo.files.get(file)!)).get(file)!;
+
   // The longest prefix that is a module file; what follows is an item in it. `anchored`
   // paths (crate/self/super) surely name this repo's code, so a module with no file is dead.
   // The prefix with nothing taken is the base module itself, which always has its file.
@@ -195,7 +199,7 @@ function resolver(repo: Repo) {
       const next = rest[k];
       // a lowercase name with more after it is a module; it may still be an inline `mod x { }`
       const module = next !== undefined && /^[a-z_]/.test(next) && (k < rest.length - 1 || wholeModule);
-      if (anchored && module && !new RegExp(String.raw`\bmod\s+${next}\s*\{`).test(strip(repo.files.get(file)!))) return null;
+      if (anchored && module && !new RegExp(String.raw`\bmod\s+${next}\s*\{`).test(code(file))) return null;
       return { at: file };
     }
     return null;

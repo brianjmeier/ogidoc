@@ -1,4 +1,5 @@
 import type { Smell } from "../types.ts";
+import { clip } from "./words.ts";
 
 // A tangle the scan sees, in the one wording the person and the agent both read.
 
@@ -19,8 +20,7 @@ const within = (ids: string[], path: string) => {
   return base && ids.every((id) => id.startsWith(base)) && path.startsWith(base) ? path.slice(base.length) : path;
 };
 
-const few = (ids: string[], nameOf: (id: string) => string, n = 4) =>
-  ids.slice(0, n).map(nameOf).join(", ") + (ids.length > n ? ` and ${ids.length - n} more` : "");
+const few = (ids: string[], nameOf: (id: string) => string, n = 4) => clip(ids.map(nameOf), n);
 
 /** A tangle in words: what it is, and why it is one. */
 export function tangleWords(s: Smell, nameOf: (id: string) => string = (id) => id): [string, string] {

@@ -1,5 +1,5 @@
 import type { Import, Language, Repo, Target } from "./index.ts";
-import { C_LIKE, dirOf, withoutComments } from "./text.ts";
+import { C_LIKE, dirOf, inTestFolder, withoutComments } from "./text.ts";
 
 // Java and Kotlin: `import a.b.C`, `import a.b.*`, `import static a.b.C.m` and Kotlin's
 // `import a.b.C as D`. Names are packages, not paths, so the resolver indexes every
@@ -29,10 +29,11 @@ export function importsOf(text: string): Import[] {
 }
 
 /** An outside package as a person names it: `std` for the platform, else its first two segments. */
-export const outsideOf = (spec: string) => (/^(java|javax|kotlin)\./.test(spec) ? "std" : spec.split(".").slice(0, 2).join("."));
+const outsideOf = (spec: string) => (/^(java|javax|kotlin)\./.test(spec) ? "std" : spec.split(".").slice(0, 2).join("."));
 
 const isJvm = (path: string) => path.endsWith(".java") || path.endsWith(".kt");
-const inTests = (path: string) => /(^|\/)tests?\//.test(path) || jvm.isTest(path);
+
+const inTests = (path: string) => inTestFolder(path) || jvm.isTest(path);
 
 function resolver(repo: Repo) {
   // package → its folder (one of its main code's, when it spans several), and package.Type → file

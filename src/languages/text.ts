@@ -3,6 +3,9 @@
 export const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 export const baseOf = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 
+/** Whether a path is under a folder that holds tests, in every language. */
+export const inTestFolder = (path: string) => /(^|\/)(tests?|test-support|__tests__|testdata|spec)\//.test(path);
+
 /** A path with `.` and `..` worked out. */
 export function normalize(path: string): string {
   const parts: string[] = [];

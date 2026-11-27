@@ -1,6 +1,7 @@
 import type { Box, MapView, Smell } from "./types.ts";
 import { GHOST, ancestorAt, isGhost, trail, visible } from "./shared/level.ts";
 import { smellIds, tangleWords } from "./shared/smells.ts";
+import { clip, count } from "./shared/words.ts";
 import { OUTSIDE } from "./scan.ts";
 
 // One level of the map as text, for an agent reading it at a terminal: the boxes on the
@@ -100,8 +101,8 @@ function boxText(b: Box, inside: number, tangles: number, changed: boolean): str
   if (inside) facts.push(`${inside} inside`);
   if (tangles) facts.push(`${count(tangles, "tangle")} inside`);
   const out = [`${b.name === b.id || s?.kind === "external" ? b.name : `${b.name}  ${b.id}`}  ·  ${facts.join(" · ")}`];
-  // The same name offered by two files reads once; `*` (a whole-module import) names nothing.
-  const names = [...new Set((s?.seam ?? []).map((x) => x.name))].filter((n) => n !== "*");
+  // The same name offered by two files reads once.
+  const names = [...new Set((s?.seam ?? []).map((x) => x.name))];
   if (names.length) out.push(`  exports: ${clip(names, SEAM_SHOWN, names.length + (s!.seamSize - s!.seam.length))}`);
   if (b.lines.length) out.push(...b.lines.map((l) => `  | ${l.text}`));
   else if (s?.kind !== "external") out.push("  not described yet");
@@ -110,5 +111,3 @@ function boxText(b: Box, inside: number, tangles: number, changed: boolean): str
   return out;
 }
 
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const clip = (names: string[], max: number, total = names.length) => names.slice(0, max).join(", ") + (total > max ? `, and ${total - max} more` : "");

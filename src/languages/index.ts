@@ -10,6 +10,7 @@ import { go } from "./go.ts";
 import { rust } from "./rust.ts";
 import { python } from "./python.ts";
 import { jvm } from "./jvm.ts";
+import { inTestFolder } from "./text.ts";
 
 export interface Import {
   /** The import as written: a path, a package, a module path. */
@@ -61,8 +62,6 @@ export const LANGUAGES: Language[] = [javascript, go, rust, python, jvm];
 
 // Files under these are never the repo's own code, even when committed.
 const SKIP = /(^|\/)(node_modules|dist|coverage|target|vendor|\.git|__pycache__|\.venv|venv)\//;
-// Folders that hold tests, in every language.
-const TEST_DIR = /(^|\/)(tests?|test-support|__tests__|testdata|spec)\//;
 
 const byExt = new Map(LANGUAGES.flatMap((l) => l.extensions.map((e) => [e, l] as const)));
 const extOf = (path: string) => {
@@ -74,7 +73,7 @@ const extOf = (path: string) => {
 /** The language a file is written in, or undefined for anything the scan doesn't read. */
 export const languageOf = (path: string): Language | undefined => (SKIP.test(path) || path.endsWith(".d.ts") ? undefined : byExt.get(extOf(path)));
 export const isCode = (path: string) => languageOf(path) !== undefined;
-export const isTest = (path: string) => TEST_DIR.test(path) || !!languageOf(path)?.isTest(path);
+export const isTest = (path: string) => inTestFolder(path) || !!languageOf(path)?.isTest(path);
 /** The file ending of something the scan can't read, to say what it left out. */
 export const unreadKind = (path: string): string | null => {
   const ext = extOf(path);
