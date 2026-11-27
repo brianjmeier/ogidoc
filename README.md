@@ -156,6 +156,12 @@ feature.plan                         the plan
 .ogidoc/feature/state.json       what the editor knows per line (git-ignored)
 ```
 
+The map is committed with the code, so it is still there next time: open Ogidoc on the
+branch that holds it, and boxes whose code changed since show "code changed" until a
+turn catches them up. Merge the branch to share it; every checkout cut from there starts
+from that map. It also works with no change in mind: open a box to have the agent say
+what the code does, and nothing is built unless you edit a box and hand over.
+
 ## What the agent reads
 
 - `agent/SKILL.md` teaches the plan agent what Ogidoc is: the shared plan, taking turns,
