@@ -3,6 +3,7 @@
 // draws what this returns.
 
 import type { Box, BoxEdge, Smell } from "../../src/types.ts";
+import { smellIds } from "../../src/shared/smells.ts";
 
 export interface Rect {
   x: number;
@@ -33,7 +34,7 @@ export interface Wire {
 
 // A box outside the level that an arrow comes from or goes to. "in": the level uses it;
 // "out": it uses the level.
-export type GhostSide = "in" | "out" | "both";
+type GhostSide = "in" | "out" | "both";
 
 export const GHOST = "ghost:";
 export const isGhost = (key: string) => key.startsWith(GHOST);
@@ -45,8 +46,6 @@ export function ancestorAt(id: string, level: string | null, byId: ById): string
   return b?.id ?? null;
 }
 
-export const isInside = (id: string, level: string | null, byId: ById) => ancestorAt(id, level, byId) !== null;
-
 // The boxes from the top down to `level`, for the breadcrumb.
 export function trail(level: string | null, byId: ById): string[] {
   const out: string[] = [];
@@ -55,9 +54,9 @@ export function trail(level: string | null, byId: ById): string[] {
 }
 
 // An arrow end outside the level shows as the nearest box beside one of the level's
-// ancestors, so it reads like "from routes".
-export function outsideEnd(id: string, level: string | null, byId: ById): string | null {
-  const chain: (string | null)[] = [...trail(level, byId).reverse(), null];
+// ancestors, so it reads like "from routes". `chain` is the level and its ancestors, up
+// to the top (null).
+function outsideEnd(id: string, chain: (string | null)[], byId: ById): string | null {
   for (const lvl of chain.slice(1)) {
     const a = ancestorAt(id, lvl, byId);
     if (a && !chain.includes(a)) return a;
@@ -70,35 +69,45 @@ export function visible(boxes: Box[], edges: BoxEdge[], level: string | null) {
   const byId: ById = new Map(boxes.map((b) => [b.id, b]));
   const shown = boxes.filter((b) => (b.parent ?? null) === level);
   const ghosts = new Map<string, GhostSide>();
-  const wires = new Map<string, Wire>();
+  const wires = new Map<string, Omit<Wire, "labels" | "symbols"> & { labels: Set<string>; symbols: Set<string> }>();
   const ghost = (id: string, side: GhostSide) => {
     const was = ghosts.get(id);
     ghosts.set(id, was && was !== side ? "both" : side);
     return GHOST + id;
   };
+  // Where each end shows on this level: the box inside holding it, or the box outside.
+  const chain: (string | null)[] = [...trail(level, byId).reverse(), null];
+  const ends = new Map<string, { inside: boolean; at: string | null }>();
+  const endOf = (id: string) => {
+    let end = ends.get(id);
+    if (!end) {
+      const at = ancestorAt(id, level, byId);
+      end = at ? { inside: true, at } : { inside: false, at: outsideEnd(id, chain, byId) };
+      ends.set(id, end);
+    }
+    return end;
+  };
   for (const e of edges) {
-    const inA = isInside(e.from, level, byId);
-    const inB = isInside(e.to, level, byId);
-    if (!inA && !inB) continue;
-    const a0 = inA ? ancestorAt(e.from, level, byId) : outsideEnd(e.from, level, byId);
-    const b0 = inB ? ancestorAt(e.to, level, byId) : outsideEnd(e.to, level, byId);
-    if (!a0 || !b0 || a0 === b0) continue;
-    const a = inA ? a0 : ghost(a0, "out");
-    const b = inB ? b0 : ghost(b0, "in");
+    const from = endOf(e.from);
+    const to = endOf(e.to);
+    if (!from.inside && !to.inside) continue;
+    if (!from.at || !to.at || from.at === to.at) continue;
+    const a = from.inside ? from.at : ghost(from.at, "out");
+    const b = to.inside ? to.at : ghost(to.at, "in");
     const key = `${a}→${b}`;
-    const w = wires.get(key) ?? { key, from: a, to: b, members: [], labels: [], symbols: [], imports: true, ghost: !inA || !inB };
+    let w = wires.get(key);
+    if (!w) wires.set(key, (w = { key, from: a, to: b, members: [], labels: new Set(), symbols: new Set(), imports: true, ghost: !from.inside || !to.inside }));
     w.members.push(e);
-    if (e.label && !w.labels.includes(e.label)) w.labels.push(e.label);
-    for (const s of e.symbols ?? []) if (!w.symbols.includes(s)) w.symbols.push(s);
+    if (e.label) w.labels.add(e.label);
+    for (const s of e.symbols ?? []) w.symbols.add(s);
     w.imports &&= e.kind === "import";
-    wires.set(key, w);
   }
-  return { byId, shown, ghosts, wires: [...wires.values()] };
+  return { byId, shown, ghosts, wires: [...wires.values()].map((w): Wire => ({ ...w, labels: [...w.labels], symbols: [...w.symbols] })) };
 }
 
 // Columns by what a box uses: what is used sits left of what uses it. The longest path
 // from the boxes that use nothing; a loop stops where it meets itself.
-export function ranks(ids: string[], wires: Wire[]): Map<string, number> {
+function ranks(ids: string[], wires: Wire[]): Map<string, number> {
   const out = new Map(ids.map((id) => [id, [] as string[]]));
   for (const w of wires) if (out.has(w.from) && out.has(w.to)) out.get(w.to)!.push(w.from);
   const rank = new Map(ids.map((id) => [id, 0]));
@@ -131,11 +140,11 @@ export function order(rank: Map<string, number>, wires: Wire[]): string[] {
   return [...rank.keys()].sort((a, b) => rank.get(a)! - rank.get(b)! || (ahead.get(b) ?? 0) - (ahead.get(a) ?? 0));
 }
 
-export const PAD = 8;
+const PAD = 8;
 const GAP = 22;
 const GAP_RANK = { across: 96, down: 52 };
 
-export interface Placed {
+interface Placed {
   pos: Map<string, { x: number; y: number }>;
   width: number;
   height: number;
@@ -160,7 +169,9 @@ function arrange(ids: string[], rank: Map<string, number>, size: Map<string, Siz
   const byRank = new Map<number, string[]>();
   for (const id of ids) {
     const r = rank.get(id) ?? 0;
-    byRank.set(r, [...(byRank.get(r) ?? []), id]);
+    const at = byRank.get(r);
+    if (at) at.push(id);
+    else byRank.set(r, [id]);
   }
   const pos = new Map<string, { x: number; y: number }>();
   let at = PAD;
@@ -227,7 +238,11 @@ export function impactOf(selected: string | null, wires: Wire[]): Set<string> {
   const seen = new Set<string>();
   if (!selected) return seen;
   const users = new Map<string, string[]>();
-  for (const w of wires) users.set(w.to, [...(users.get(w.to) ?? []), w.from]);
+  for (const w of wires) {
+    const u = users.get(w.to);
+    if (u) u.push(w.from);
+    else users.set(w.to, [w.from]);
+  }
   const todo = [selected];
   while (todo.length) {
     for (const u of users.get(todo.pop()!) ?? []) {
@@ -247,25 +262,7 @@ export function namesOf(symbols: string[]): string {
   return names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3}` : "");
 }
 
-export const smellIds = (s: Smell): string[] => ("ids" in s ? s.ids : "b" in s ? [s.a, s.b] : [s.a]);
-
 // The tangles that lie on a level: every box they name is shown there.
 export const tanglesAt = (smells: Smell[], shown: Set<string>) => smells.filter((s) => smellIds(s).every((id) => shown.has(id)));
-
-// A tangle in words: what it is, and why it is one.
-export function tangleWords(s: Smell, nameOf: (id: string) => string): [string, string] {
-  switch (s.kind) {
-    case "volatile import":
-      return [`${nameOf(s.a)} imports ${nameOf(s.b)}`, `${nameOf(s.b)} changed in ${s.count} recent commits, far more often, and code relies on ${nameOf(s.a)}`];
-    case "change together":
-      return [`${nameOf(s.a)} and ${nameOf(s.b)} change together`, `in ${s.count} commits, with no import between them: a link the code doesn't show`];
-    case "cycle":
-      return [`${s.ids.map(nameOf).join(" → ")} → …`, "import each other round in a loop"];
-    case "unused":
-      return [nameOf(s.a), "exports names nothing in the code imports"];
-    case "pass-through":
-      return [nameOf(s.a), "only re-exports what other files define"];
-  }
-}
 
 export const count = (k: number) => (k >= 1000 ? `${(k / 1000).toFixed(k >= 10000 ? 0 : 1)}k` : String(k));

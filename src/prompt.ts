@@ -4,6 +4,7 @@ import { AGENT_DIR } from "./paths.ts";
 import { hasContent } from "./shared/diff.ts";
 import { landmarks, mapOf, regionIds } from "./map.ts";
 import type { Box, BoxEdge, Choice, HumanDiff, LastTurn, Line, LineChange, MapChange, Reply, Thread, Who } from "./types.ts";
+import type { Described } from "./describe.ts";
 
 export function readAgentFile(name: string): string {
   return readFileSync(join(AGENT_DIR, name), "utf8");
@@ -75,14 +76,20 @@ function describeMap(boxes: Box[], edges: BoxEdge[], seeds: string[], drifted: S
     const others = landmarks(map).filter((n) => !keep.has(n.id));
     if (others.length) rest = `\n\nOther boxes on the map, by id and name. Their bodies aren't shown; leave them out of your reply unless you change them:\n\n${others.map((n) => `- ${n.id}${n.name !== n.id ? ` (${n.name})` : ""}`).join("\n")}`;
   }
-  const calls = (id: string) => edges.filter((e) => e.from === id && e.kind === "call").map((e) => e.to);
+  const calls = new Map<string, string[]>();
+  for (const e of edges) {
+    if (e.kind !== "call") continue;
+    const to = calls.get(e.from);
+    if (to) to.push(e.to);
+    else calls.set(e.from, [e.to]);
+  }
   return jsonLines(shown.map((b) => ({
     id: b.id,
     ...(b.name !== b.id && { name: b.name }),
     parent: b.parent,
     lines: b.lines.map((l) => l.text),
     status: b.status,
-    uses: calls(b.id),
+    uses: calls.get(b.id) ?? [],
     code: b.code ?? [],
     ...(drifted.has(b.id) && { codeChanged: true }),
   }))) + rest;
@@ -153,17 +160,42 @@ Whatever you changed in the code is still there. Carry on from where you are and
 building until your turn ends the way "When your turn ends" says. Then end with the
 reply the turn's instructions describe.`;
 
-// The agent ends its reply with a fenced JSON object. Take the last one that parses.
-export function parseReply(text: string): Reply {
+/** The last JSON object in an agent's reply that `fits`: from the reply's fenced blocks
+ *  and the bare object from `bare` on (no bare one when it is -1), the last first. Text
+ *  after an object's closing brace is left off. Null when none fits. */
+function lastJson(text: string, fits: (obj: any) => boolean, bare: number): any {
   const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
-  const start = text.lastIndexOf('{"plan"') >= 0 ? text.lastIndexOf('{"plan"') : text.lastIndexOf("{\n  \"plan\"");
-  if (start >= 0) blocks.push(text.slice(start));
+  if (bare >= 0) blocks.push(text.slice(bare));
   for (const raw of blocks.reverse()) {
     const obj = tryParse(raw);
-    if (obj && Array.isArray(obj.plan)) return normalize(obj);
+    if (obj && fits(obj)) return obj;
   }
+  return null;
+}
+
+// The agent ends its reply with a fenced JSON object. Take the last one that parses.
+export function parseReply(text: string): Reply {
+  const start = text.lastIndexOf('{"plan"') >= 0 ? text.lastIndexOf('{"plan"') : text.lastIndexOf("{\n  \"plan\"");
+  const obj = lastJson(text, (o) => Array.isArray(o.plan), start);
+  if (obj) return normalize(obj);
   const said = text.trim().slice(-300);
   throw new Error(`The agent's reply had no JSON block with a plan in it.${said ? ` It said: ${said}` : ""}`);
+}
+
+// What a describe turn said, from the reader agent's reply.
+export function parseDescribed(text: string): Described {
+  const r = lastJson(text, (o) => typeof o === "object", text.indexOf("{"));
+  if (r) {
+    const lines = (x: unknown) => (Array.isArray(x) ? x.map(String) : []);
+    return {
+      summary: String(r.summary ?? ""),
+      boxes: (Array.isArray(r.boxes) ? r.boxes : []).filter((x: any) => typeof x?.id === "string").map((x: any) => ({ id: x.id, name: typeof x.name === "string" ? x.name : undefined, pseudo: lines(x.pseudo), pins: Array.isArray(x.pins) ? x.pins.filter((p: any) => typeof p?.text === "string") : [] })),
+      add: (Array.isArray(r.add) ? r.add : []).filter((x: any) => typeof x?.id === "string" && typeof x?.parent === "string").map((x: any) => ({ ...x, name: String(x.name ?? x.id), pseudo: lines(x.pseudo) })),
+      edges: (Array.isArray(r.edges) ? r.edges : []).filter((e: any) => typeof e?.from === "string" && typeof e?.to === "string"),
+    };
+  }
+  const said = text.trim().split("\n").at(-1)?.slice(0, 200) || "nothing";
+  throw new Error(`The agent didn't describe it; it said: ${said}`);
 }
 
 function tryParse(raw: string): any {

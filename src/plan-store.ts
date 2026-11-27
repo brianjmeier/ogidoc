@@ -75,6 +75,10 @@ export function planStore(cwd: string, name: string) {
   const at = (f: string) => join(dir, f);
   const readJson = (f: string) => (existsSync(at(f)) ? JSON.parse(readFileSync(at(f), "utf8")) : undefined);
   const readText = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").replace(/\n$/, "") : "");
+  // What was written last, to skip writing it again: the map's boxes and arrows, and the
+  // history, by identity (every change makes new ones), then the history as text.
+  let mapSaved: { boxes: Box[]; edges: BoxEdge[] } | null = null;
+  let historySaved: HistoryEntry[] | null = null;
   let historyWritten = "";
 
   return {
@@ -126,14 +130,20 @@ export function planStore(cwd: string, name: string) {
     save({ history, threads, edges, ...s }: SessionState, log: LogState) {
       mkdirSync(dir, { recursive: true });
       writeFileSync(planPath, joinLines(s.lines) + "\n");
-      map.save(s.boxes, edges);
+      if (mapSaved?.boxes !== s.boxes || mapSaved.edges !== edges || !existsSync(map.path)) {
+        map.save(s.boxes, edges);
+        mapSaved = { boxes: s.boxes, edges };
+      }
       rmSync(boxDir, { recursive: true, force: true });
       writeFileSync(at("state.json"), JSON.stringify({ ...s, log }, null, 1));
       writeFileSync(at("comments.json"), JSON.stringify(threads, null, 1) + "\n");
       // History only changes with an agent turn or an undo, and it is the biggest file.
-      const h = JSON.stringify(history);
-      if (h !== historyWritten || !existsSync(at("history.json"))) writeFileSync(at("history.json"), h);
-      historyWritten = h;
+      if (history !== historySaved || !existsSync(at("history.json"))) {
+        const h = JSON.stringify(history);
+        if (h !== historyWritten || !existsSync(at("history.json"))) writeFileSync(at("history.json"), h);
+        historyWritten = h;
+        historySaved = history;
+      }
     },
 
     rules: () => readFileSync(rulesPath, "utf8"),

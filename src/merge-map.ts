@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { checkMap, mergeMaps, type FlowMap } from "./map.ts";
+import { EMPTY_MAP, checkMap, mergeMaps, type FlowMap } from "./map.ts";
 
 // Git's merge driver for .ogidoc/map.json: a branch's map merges with another's box by
 // box, the way their code merges, without line conflicts. `ogidoc` installs it in a
@@ -10,11 +10,9 @@ import { checkMap, mergeMaps, type FlowMap } from "./map.ts";
 //
 // `base` is the map both sides started from, `ours` the one the result goes to.
 
-const EMPTY: FlowMap = { title: "", nodes: [], edges: [], flows: [] };
-
 function read(path: string): FlowMap {
   const text = readFileSync(path, "utf8").trim();
-  return text ? checkMap(JSON.parse(text)) : EMPTY;
+  return text ? checkMap(JSON.parse(text)) : EMPTY_MAP;
 }
 
 /** Merge the three maps git hands over; false when one doesn't parse, so git says so. */

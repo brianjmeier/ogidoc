@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { scanRepo, type RepoIO } from "../src/scan-repo.ts";
-import { open, recording, repo, replying } from "./support/index.ts";
+import { open, recording, repo, replying, texts } from "./support/index.ts";
 
 // A small app in a git checkout: an app that posts through its routes to a store.
 function shop() {
@@ -44,7 +44,7 @@ test("a box the agent describes joins the map file with the folders holding it, 
   assert.deepEqual(view().boxes.map((b) => [b.id, b.parent]).sort(), [["lib", null], ["lib/store.js", "lib"]]);
   const nodes = onDisk(dir).nodes.sort((a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id));
   assert.deepEqual(nodes.map((n: { id: string }) => n.id), ["lib", "lib/store.js"]);
-  assert.equal(nodes[1].size, undefined, "the next scan finds the numbers again");
+  assert.equal(nodes[1].scan, undefined, "the next scan finds the numbers again");
   assert.deepEqual(nodes[1].code, [{ file: "lib/store.js" }], "a file box points at its file");
   assert.equal(s.map().boxes.find((b) => b.id === "lib/store.js")!.scan?.kind, "file", "on the map it still has them");
 });
@@ -55,6 +55,22 @@ test("the person draws an arrow to code the scan found, and can't cross code out
   s.editMap({ edits: [{ op: "add", key: "k", name: "audit", parent: "lib", lines: ["log every save"] }, { op: "connect", from: "lib/store.js", to: "k" }] });
   assert.ok(s.map().edges.some((e) => e.from === "lib/store.js" && e.to === "audit" && e.kind === "call"));
   assert.throws(() => s.editMap({ edits: [{ op: "remove", id: "src/routes.js" }] }), /code the scan found/);
+});
+
+test("the person writes in a box only the scan knows, by an edit or with the hand-over, and it keeps the lines", async () => {
+  const { dir } = shop();
+  const agent = recording(replying("fake", [{ plan: [{ text: "audit saves", status: "built" }], steps: [{ kind: "stop", what: "which store?" }] }]));
+  const { session: s, view } = open(dir, { agent });
+  const box = (id: string) => view().boxes.find((b) => b.id === id);
+  s.edit({ boxes: { "lib/store.js": "save(x), load()" } });
+  assert.deepEqual(texts(box("lib/store.js")!.lines), ["save(x), load()"]);
+  assert.equal(box("lib/store.js")!.parent, "lib");
+  assert.ok(box("lib"), "with the folder holding it");
+  await s.pass({ text: "audit saves", boxes: { "src/routes.js": "post(x) -> save" } });
+  assert.equal(view().last?.error, undefined);
+  assert.deepEqual(texts(box("src/routes.js")!.lines), ["post(x) -> save"]);
+  assert.deepEqual(texts(box("lib/store.js")!.lines), ["save(x), load()"]);
+  assert.match(agent.prompts[0], /post\(x\) -> save/, "and the turn reads them");
 });
 
 test("the turn prompt reads the scanned map and the person's arrow to it", async () => {

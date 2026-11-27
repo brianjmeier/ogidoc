@@ -2,7 +2,8 @@ import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, on
 import { joinLines, splitLines } from "../src/shared/diff.ts";
 import type { Box, BoxChanges, BoxEdge, Edit, Pin, Smell, Snapshot } from "../src/types.ts";
 import { STATUS_LABEL, decorate, keys, symbolPattern } from "./text.ts";
-import { GHOST, ancestorAt, count, impactOf, isGhost, namesOf, order, place, ranked, smellIds, tanglesAt, trail, visible, wirePath, zoomToFit, type Rect, type Size } from "./map/layout.ts";
+import { smellIds, tangleWords } from "../src/shared/smells.ts";
+import { GHOST, ancestorAt, count, impactOf, isGhost, namesOf, order, place, ranked, tanglesAt, trail, visible, wirePath, zoomToFit, type Rect, type Size } from "./map/layout.ts";
 import { Tangles } from "./Tangles.tsx";
 
 // The map of the repo. One level shows at a time: the boxes inside the box you opened,
@@ -46,18 +47,20 @@ interface Props {
 
 type Measured = Size & { ports: Record<string, number> };
 const kindLabel = (b: Box) => (b.scan!.kind === "external" ? "outside" : b.scan!.kind === "file" ? "file" : "folder");
-const PIN_TEXT = { unused: "nothing in the code imports it", "pass-through": "only re-exports other files" } as const;
+const sameSize = (a: Measured | undefined, b: Measured) => !!a && a.w === b.w && a.h === b.h && JSON.stringify(a.ports) === JSON.stringify(b.ports);
 
 export function Boxes(props: Props) {
   let viewport!: HTMLDivElement;
   let canvas!: HTMLDivElement;
   let editor: HTMLTextAreaElement | undefined;
   const [level, setLevel] = createSignal<string | null>(null);
-  const [selected, setSelected] = createSignal<string | null>(null);
-  const [wireSel, setWireSel] = createSignal<string | null>(null);
+  // One thing is selected at a time: a box, an arrow, or a tangle.
+  const [sel, setSel] = createSignal<{ box: string } | { wire: string } | { tangle: Smell } | null>(null);
+  const selected = () => { const s = sel(); return s && "box" in s ? s.box : null; };
+  const wireSel = () => { const s = sel(); return s && "wire" in s ? s.wire : null; };
+  const tangle = () => { const s = sel(); return s && "tangle" in s ? s.tangle : null; };
   // The selected box after one ⌫: the next one takes it off the map.
   const [crossed, setCrossed] = createSignal<string | null>(null);
-  const [tangle, setTangle] = createSignal<Smell | null>(null);
   const [editing, setEditing] = createSignal<string | null>(null);
   const [renaming, setRenaming] = createSignal<string | null>(null);
   const [sketch, setSketch] = createSignal<{ x: number; y: number } | null>(null);
@@ -86,7 +89,18 @@ export function Boxes(props: Props) {
   const drifted = createMemo(() => new Set(props.drifted));
   const shownIds = createMemo(() => new Set(v().shown.map((b) => b.id)));
   const tangles = createMemo(() => tanglesAt(props.smells, shownIds()));
-  const fileSmells = (id: string): Pin[] => props.smells.flatMap((s) => ((s.kind === "unused" || s.kind === "pass-through") && s.a === id ? [{ kind: s.kind, text: PIN_TEXT[s.kind] }] : []));
+  // A tangle in one file shows on the file's box, as a pin.
+  const fileSmells = createMemo(() => {
+    const m = new Map<string, Pin[]>();
+    for (const s of props.smells) {
+      if (s.kind !== "unused" && s.kind !== "pass-through") continue;
+      const pin = { kind: s.kind, text: tangleWords(s)[1] };
+      const at = m.get(s.a);
+      if (at) at.push(pin);
+      else m.set(s.a, [pin]);
+    }
+    return m;
+  });
 
   // The level's box went away (an undo, a rescan): back to the top.
   createEffect(() => {
@@ -118,16 +132,20 @@ export function Boxes(props: Props) {
     return { width: w, height: h };
   });
 
-  function measure() {
-    const next = new Map<string, Measured>();
-    for (const el of canvas.querySelectorAll<HTMLElement>("[data-key]")) {
+  // Measure the boxes that resized; the map only changes when one measures differently.
+  function measure(els: Element[]) {
+    let next: Map<string, Measured> | null = null;
+    for (const el of els) {
+      if (!(el instanceof HTMLElement) || !el.dataset.key) continue;
       const ports: Record<string, number> = {};
       for (const p of el.querySelectorAll<HTMLElement>("[data-port]")) ports[p.dataset.port!] = p.offsetTop + p.offsetHeight / 2;
-      next.set(el.dataset.key!, { w: el.offsetWidth, h: el.offsetHeight, ports });
+      const m = { w: el.offsetWidth, h: el.offsetHeight, ports };
+      if (sameSize((next ?? sizes()).get(el.dataset.key), m)) continue;
+      (next ??= new Map(sizes())).set(el.dataset.key, m);
     }
-    setSizes(next);
+    if (next) setSizes(next);
   }
-  const boxRo = new ResizeObserver(() => measure());
+  const boxRo = new ResizeObserver((entries) => measure(entries.map((e) => e.target)));
   const observe = (el: HTMLElement) => {
     boxRo.observe(el);
     onCleanup(() => boxRo.unobserve(el));
@@ -217,10 +235,8 @@ export function Boxes(props: Props) {
 
   function goTo(to: string | null, focus: string | null = null) {
     setLevel(to);
-    setSelected(focus);
-    setWireSel(null);
+    setSel(focus ? { box: focus } : null);
     setCrossed(null);
-    setTangle(null);
     // Opening a box nobody described yet asks the agent what it and its boxes do.
     const undescribed = props.boxes.some((b) => (b.parent ?? null) === to && b.scan && b.scan.kind !== "external" && !b.lines.length);
     if (to && undescribed && props.editable && !props.busy && !asked.has(to)) {
@@ -230,9 +246,7 @@ export function Boxes(props: Props) {
   }
 
   function select(id: string | null) {
-    setSelected(id);
-    setWireSel(null);
-    setTangle(null);
+    setSel(id ? { box: id } : null);
     if (crossed() !== id) setCrossed(null);
   }
 
@@ -345,7 +359,7 @@ export function Boxes(props: Props) {
       e.preventDefault();
       const calls = w.members.filter((m) => m.kind === "call");
       if (calls.length) props.onMapEdit(calls.map((m) => ({ op: "disconnect", from: m.from, to: m.to })));
-      setWireSel(null);
+      setSel(null);
       return;
     }
     const id = selected();
@@ -353,7 +367,7 @@ export function Boxes(props: Props) {
     e.preventDefault();
     if (crossed() !== id) return setCrossed(id);
     setCrossed(null);
-    setSelected(null);
+    setSel(null);
     props.onMapEdit([{ op: "remove", id }]);
   }
 
@@ -414,12 +428,14 @@ export function Boxes(props: Props) {
   };
 
   function BoxCard(p: { b: Box; i: number }) {
-    const b = p.b;
-    const scanned = () => !!b.scan;
-    const described = () => b.lines.length > 0;
-    const anim = () => animOf(b.id, p.i);
-    const pins = () => [...(b.pins ?? []), ...fileSmells(b.id)];
-    const pinsShown = () => pinsOpen().has(b.id);
+    // Read through `p` each time: the card stays while the map is fetched again, so an
+    // open box editor survives.
+    const b = () => p.b;
+    const scanned = () => !!b().scan;
+    const described = () => b().lines.length > 0;
+    const anim = () => animOf(b().id, p.i);
+    const pins = () => [...(b().pins ?? []), ...(fileSmells().get(b().id) ?? [])];
+    const pinsShown = () => pinsOpen().has(b().id);
     const pinCounts = () => {
       const n = new Map<string, number>();
       for (const x of pins()) n.set(x.kind, (n.get(x.kind) ?? 0) + 1);
@@ -427,79 +443,79 @@ export function Boxes(props: Props) {
     };
     const cls = () =>
       [
-        "box", b.status, anim()?.cls,
+        "box", b().status, anim()?.cls,
         scanned() && !described() && "bare",
-        b.scan?.kind === "external" && "external",
-        (selected() === b.id || picked()?.has(b.id)) && "selected",
-        impact().has(b.id) && "impact",
-        crossed() === b.id && "crossed",
-        drop() === b.id && "drop",
+        b().scan?.kind === "external" && "external",
+        (selected() === b().id || picked()?.has(b().id)) && "selected",
+        impact().has(b().id) && "impact",
+        crossed() === b().id && "crossed",
+        drop() === b().id && "drop",
         reading() && "reading",
       ].filter(Boolean).join(" ");
-    const reading = () => props.describing && (props.describing.id === b.id || (props.describing.id === level() && scanned() && !described()));
+    const reading = () => props.describing && (props.describing.id === b().id || (props.describing.id === level() && scanned() && !described()));
     let cancelRename = false;
     return (
       <div
         class={cls()}
-        style={{ ...styleAt(b.id), "--d": `${anim()?.delay ?? 0}ms` }}
-        data-name={b.id}
-        data-key={b.id}
+        style={{ ...styleAt(b().id), "--d": `${anim()?.delay ?? 0}ms` }}
+        data-name={b().id}
+        data-key={b().id}
         ref={observe}
         onMouseDown={(e) => {
           if ((e.target as HTMLElement).closest("button, input, textarea, .port")) return;
           e.stopPropagation();
-          select(b.id);
+          select(b().id);
         }}
         onDblClick={(e) => {
           e.stopPropagation();
           if (!props.editable || (e.target as HTMLElement).closest("button, input, textarea, .bb")) return;
-          setEditing(b.id);
+          setEditing(b().id);
         }}
       >
-        <div class="bt" onMouseDown={(e) => startMove(e, b.id)}>
+        <div class="bt" onMouseDown={(e) => startMove(e, b().id)}>
           <Show
-            when={renaming() === b.id}
-            fallback={<span class="name" title={b.id} onDblClick={(e) => { e.stopPropagation(); if (props.editable) setRenaming(b.id); }}>{b.name}</span>}
+            when={renaming() === b().id}
+            fallback={<span class="name" title={b().id} onDblClick={(e) => { e.stopPropagation(); if (props.editable) setRenaming(b().id); }}>{b().name}</span>}
           >
             <input
               class="rename"
-              aria-label={`Rename ${b.name}`}
-              value={untrack(() => b.name)}
+              aria-label={`Rename ${b().name}`}
+              value={untrack(() => b().name)}
               ref={(el) => { cancelRename = false; queueMicrotask(() => { el.focus(); el.select(); }); }}
-              onBlur={(e) => !cancelRename && rename(b.id, e.currentTarget.value)}
+              onBlur={(e) => !cancelRename && rename(b().id, e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") e.currentTarget.blur();
                 if (e.key === "Escape") { cancelRename = true; setRenaming(null); }
               }}
             />
           </Show>
-          <Show when={drifted().has(b.id)}><span class="drift">code changed</span></Show>
-          <span class="st">{scanned() && !described() ? kindLabel(b) : STATUS_LABEL[b.status]}</span>
+          <Show when={drifted().has(b().id)}><span class="drift">code changed</span></Show>
+          <span class="st">{scanned() && !described() ? kindLabel(b()) : STATUS_LABEL[b().status]}</span>
         </div>
-        <Show when={scanned() && b.name !== b.id && b.scan!.kind !== "external"}><div class="path">{b.id}</div></Show>
-        <Show when={scanned() && b.scan!.kind !== "external"}>
+        <Show when={scanned() && b().name !== b().id && b().scan!.kind !== "external"}><div class="path">{b().id}</div></Show>
+        <Show when={scanned() && b().scan!.kind !== "external"}>
           <div class="facts">
-            {[`${count(b.scan!.size)} lines`, `used by ${b.scan!.usedBy}`, `uses ${b.scan!.uses}`, ...(b.scan!.tests ? [`${b.scan!.tests} test${b.scan!.tests === 1 ? "" : "s"}`] : [])].join(" · ")}
+            {[`${count(b().scan!.size)} lines`, `used by ${b().scan!.usedBy}`, `uses ${b().scan!.uses}`, ...(b().scan!.tests ? [`${b().scan!.tests} test${b().scan!.tests === 1 ? "" : "s"}`] : [])].join(" · ")}
           </div>
         </Show>
-        <Show when={b.scan?.seam.length}>
+        <Show when={b().scan?.seam.length}>
           <div class="seam">
-            <For each={b.scan!.seam.slice(0, 6)}>
+            <For each={b().scan!.seam.slice(0, 6)}>
               {(x) => <span data-port={x.name} title={`${x.file} · imported by ${x.users} file${x.users === 1 ? "" : "s"} outside`}>{x.name === "*" ? "the whole module" : x.name}</span>}
             </For>
-            <Show when={b.scan!.seamSize - Math.min(6, b.scan!.seam.length) > 0}>
-              <span class="more">+{b.scan!.seamSize - Math.min(6, b.scan!.seam.length)} more</span>
+            <Show when={b().scan!.seamSize - Math.min(6, b().scan!.seam.length) > 0}>
+              <span class="more">+{b().scan!.seamSize - Math.min(6, b().scan!.seam.length)} more</span>
             </Show>
           </div>
         </Show>
         <Show
-          when={editing() === b.id}
+          when={editing() === b().id}
           fallback={
             <Show
               when={described() || !scanned()}
               fallback={
-                <Show when={b.scan!.kind !== "external"}>
-                  <button type="button" class="describe" disabled={!props.editable || props.busy} onClick={() => props.onDescribe(b.id)}>
+                <Show when={b().scan!.kind !== "external"}>
+                  <button type="button" class="describe" disabled={!props.editable || props.busy} onClick={() => props.onDescribe(b().id)}>
                     {reading() ? "the agent is reading it…" : "Say what this does"}
                   </button>
                 </Show>
@@ -509,17 +525,17 @@ export function Boxes(props: Props) {
                 class="bb"
                 role={props.editable ? "button" : undefined}
                 tabIndex={props.editable ? 0 : -1}
-                aria-label={props.editable ? `Edit ${b.name}` : undefined}
+                aria-label={props.editable ? `Edit ${b().name}` : undefined}
                 title={props.editable ? "Click or press Enter to edit" : ""}
-                onClick={() => props.editable && !editing() && setEditing(b.id)}
+                onClick={() => props.editable && !editing() && setEditing(b().id)}
                 onKeyDown={(e) => {
                   if ((e.key === "Enter" && !keys.pass.is(e)) || e.key === " ") {
                     e.preventDefault();
-                    if (props.editable && !editing()) setEditing(b.id);
+                    if (props.editable && !editing()) setEditing(b().id);
                   }
                 }}
               >
-                <For each={b.lines}>
+                <For each={b().lines}>
                   {(l) => <span class={l.chg ? `chg ${l.by}` : ""} innerHTML={decorate(l.text, symRe()) || " "} />}
                 </For>
               </div>
@@ -529,18 +545,18 @@ export function Boxes(props: Props) {
           <textarea
             class="box-edit"
             spellcheck={false}
-            rows={Math.max(3, b.lines.length + 1)}
+            rows={Math.max(3, b().lines.length + 1)}
             ref={(el) => { editor = el; queueMicrotask(() => el.focus()); }}
             // Read once: an update from the server must not replace the text being typed.
-            value={untrack(() => joinLines(b.lines))}
-            onBlur={() => finish(b.id)}
+            value={untrack(() => joinLines(b().lines))}
+            onBlur={() => finish(b().id)}
             onKeyDown={(e) => {
               if (keys.pass.is(e)) { e.preventDefault(); props.onPass(); }
               // Esc leaves the box like clicking away does, keeping what was typed, and
               // the keyboard stays on the box.
               if (e.key === "Escape") {
-                finish(b.id);
-                body(b.id)?.focus();
+                finish(b().id);
+                body(b().id)?.focus();
               }
             }}
           />
@@ -551,7 +567,7 @@ export function Boxes(props: Props) {
             type="button"
             class="pinsum"
             aria-expanded={pinsShown()}
-            onClick={() => setPinsOpen((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}
+            onClick={() => setPinsOpen((s) => { const n = new Set(s); n.has(b().id) ? n.delete(b().id) : n.add(b().id); return n; })}
           >
             {pinsShown() ? "▾" : "▸"} {pinCounts()}
           </button>
@@ -568,11 +584,11 @@ export function Boxes(props: Props) {
             </ul>
           </Show>
         </Show>
-        <Show when={kids().get(b.id)}>
-          <button type="button" class="open" onClick={() => goTo(b.id)}>▸ {kids().get(b.id)} inside</button>
+        <Show when={kids().get(b().id)}>
+          <button type="button" class="open" onClick={() => goTo(b().id)}>▸ {kids().get(b().id)} inside</button>
         </Show>
-        <Show when={crossed() === b.id}><div class="cross">⌫ again takes it off the map</div></Show>
-        <Show when={props.editable}><span class="port" title="Drag onto a box that uses this one" onMouseDown={(e) => startWire(e, b.id)} /></Show>
+        <Show when={crossed() === b().id}><div class="cross">⌫ again takes it off the map</div></Show>
+        <Show when={props.editable}><span class="port" title="Drag onto a box that uses this one" onMouseDown={(e) => startWire(e, b().id)} /></Show>
       </div>
     );
   }
@@ -632,7 +648,7 @@ export function Boxes(props: Props) {
             <Index each={wires()}>
               {(w) => (
                 <>
-                  <path class="hit" d={w().d} onMouseDown={(e) => { e.stopPropagation(); select(null); setWireSel(w().key); }} />
+                  <path class="hit" d={w().d} onMouseDown={(e) => { e.stopPropagation(); select(null); setSel({ wire: w().key }); }} />
                   <path class="wire" classList={w().cls} d={w().d} marker-end="url(#arr)" style={{ "stroke-width": w().width }} />
                   <Show when={w().label}><text x={w().mid.x} y={w().mid.y - 5} text-anchor="middle" classList={{ dim: w().cls.dim }}>{w().label}</text></Show>
                 </>
@@ -674,7 +690,7 @@ export function Boxes(props: Props) {
           <button type="button" class="btn fit" onClick={fit}>Fit</button>
         </Show>
       </div>
-      <Tangles smells={tangles()} wires={v().wires} nameOf={nameOf} picked={tangle()} editable={props.editable} onPick={(s) => { select(null); setTangle(s); }} onFix={props.onFix} />
+      <Tangles smells={tangles()} wires={v().wires} nameOf={nameOf} picked={tangle()} editable={props.editable} onPick={(s) => { select(null); setSel(s && { tangle: s }); }} onFix={props.onFix} />
     </div>
   );
 }

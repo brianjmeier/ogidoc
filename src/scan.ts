@@ -4,7 +4,7 @@
 //
 // Pure: the caller hands in the files and the import aliases. Nothing here reads disk.
 
-export interface SourceFile {
+interface SourceFile {
   path: string;
   text: string;
 }
@@ -17,7 +17,7 @@ export interface SeamName {
   users: number;
 }
 
-export interface ScanNode {
+interface ScanNode {
   id: string;
   name: string;
   parent: string | null;
@@ -37,7 +37,7 @@ export interface ScanNode {
   uses: number;
 }
 
-export interface ScanEdge {
+interface ScanEdge {
   from: string;
   to: string;
   /** The names the importing file takes, or `*` for a whole-module import. */
@@ -63,7 +63,6 @@ export interface Skeleton {
  *    loaded by convention reads the same; the box says what is true, not that it's dead);
  *  - `pass-through`: `a` only re-exports what other files define;
  *  - `cycle`: boxes side by side that import each other round in a loop. */
-export type { Smell } from "./types.ts";
 import type { Smell } from "./types.ts";
 
 const CODE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
@@ -130,7 +129,7 @@ function normalize(path: string): string {
 const packageOf = (spec: string) =>
   /^(node|bun):/.test(spec) ? spec.split(":")[0] + ":*" : spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
 
-export interface ScanOptions {
+interface ScanOptions {
   /** The project's import aliases, as tsconfig's `paths`, relative to the root. */
   aliases?: Record<string, string[]>;
   /** The project's symlinks: path → what it points at, relative to the link. Their
@@ -383,7 +382,7 @@ function cyclesOf(uses: Map<string, Set<string>>): string[][] {
 
 /** The order a box lists its seam in, which is also what a box shows first when its seam
  *  is too long to show whole. */
-export function seamOf(names: SeamName[]): SeamName[] {
+function seamOf(names: SeamName[]): SeamName[] {
   // TODO(Brian): rank and cut the seam — see the note in the conversation.
   return [...names].sort((a, b) => b.users - a.users || a.name.localeCompare(b.name)).slice(0, 24);
 }

@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import type { Smell } from "../src/types.ts";
-import { namesOf, smellIds, tangleWords, type Wire } from "./map/layout.ts";
+import { smellIds, tangleWords } from "../src/shared/smells.ts";
+import { namesOf, type Wire } from "./map/layout.ts";
 
 // The tangles the scan sees on the level on show, each with what makes it true and a way
 // into fixing it: a line in the plan for the next turn.

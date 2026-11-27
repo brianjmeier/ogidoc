@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { impactOf, order, place, ranked, smellIds, tanglesAt, trail, visible, wirePath } from "../app/map/layout.ts";
+import { impactOf, order, place, ranked, tanglesAt, trail, visible, wirePath } from "../app/map/layout.ts";
+import { smellIds } from "../src/shared/smells.ts";
 import type { Box, BoxEdge } from "../src/types.ts";
 
 const box = (id: string, parent: string | null = null): Box => ({ id, name: id, parent, lines: [], status: "built" });

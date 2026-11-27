@@ -1,6 +1,8 @@
 // Describing a box when the person opens it: what the reader agent is handed, and what
-// it answers. The scan knows a box's size, seam and arrows; only an agent can say what
-// the box is for.
+// it answers (read by prompt.ts `parseDescribed`). The scan knows a box's size, seam and
+// arrows; only an agent can say what the box is for.
+
+import type { CodeRef, Pin } from "./types.ts";
 
 const STYLE = `How a good box reads:
 
@@ -8,15 +10,6 @@ const STYLE = `How a good box reads:
   compile: names, arrows, conditions, results.
 - Real names stay real: when a line names something from the code, use its real name.
 - "code" points at where the box lives, so the person can open it.`;
-
-/** The last JSON block in an agent's reply, or the reply itself when it is bare JSON. */
-export function lastJson(text: string): any {
-  const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]).reverse();
-  for (const c of blocks.length ? blocks : [text.slice(text.indexOf("{"))]) {
-    try { return JSON.parse(c); } catch {}
-  }
-  return null;
-}
 
 /** What a describe turn is handed: one box (or the top of the map) and what sits inside. */
 export interface DescribeBrief {
@@ -72,7 +65,7 @@ Reply with only:
 {
   "summary": "one short line",
   "boxes": [{ "id": "${b.children[0]?.id ?? "id"}", "name": "…", "pseudo": ["…"], "pins": [{ "kind": "special case", "text": "…", "file": "…", "line": 12 }] }],
-  "add": [{ "id": "…#fn", "parent": "…", "name": "…", "kind": "step", "pseudo": ["…"], "code": [{ "file": "…", "line": 3, "symbol": "fn" }] }],
+  "add": [{ "id": "…#fn", "parent": "…", "name": "…", "pseudo": ["…"], "code": [{ "file": "…", "line": 3, "symbol": "fn" }] }],
   "edges": [{ "from": "…#fn", "to": "…#other", "label": "…" }]
 }
 \`\`\`
@@ -81,22 +74,7 @@ Reply with only:
 
 export interface Described {
   summary: string;
-  boxes: { id: string; name?: string; pseudo: string[]; pins?: { kind: string; text: string; file?: string; line?: number }[] }[];
-  add: { id: string; parent: string; name: string; kind?: string; pseudo: string[]; code?: { file: string; line?: number; symbol?: string }[] }[];
+  boxes: { id: string; name?: string; pseudo: string[]; pins?: Pin[] }[];
+  add: { id: string; parent: string; name: string; pseudo: string[]; code?: CodeRef[] }[];
   edges: { from: string; to: string; label?: string }[];
-}
-
-export function parseDescribed(text: string): Described {
-  const r = lastJson(text);
-  if (r) {
-    const lines = (x: unknown) => (Array.isArray(x) ? x.map(String) : []);
-    return {
-      summary: String(r.summary ?? ""),
-      boxes: (Array.isArray(r.boxes) ? r.boxes : []).filter((x: any) => typeof x?.id === "string").map((x: any) => ({ id: x.id, name: typeof x.name === "string" ? x.name : undefined, pseudo: lines(x.pseudo), pins: Array.isArray(x.pins) ? x.pins.filter((p: any) => typeof p?.text === "string") : [] })),
-      add: (Array.isArray(r.add) ? r.add : []).filter((x: any) => typeof x?.id === "string" && typeof x?.parent === "string").map((x: any) => ({ ...x, name: String(x.name ?? x.id), pseudo: lines(x.pseudo) })),
-      edges: (Array.isArray(r.edges) ? r.edges : []).filter((e: any) => typeof e?.from === "string" && typeof e?.to === "string"),
-    };
-  }
-  const said = text.trim().split("\n").at(-1)?.slice(0, 200) || "nothing";
-  throw new Error(`The agent didn't describe it; it said: ${said}`);
 }

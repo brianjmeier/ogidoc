@@ -26,8 +26,8 @@ export interface Base {
 }
 
 // The person's edits: new plan text, proposals they accepted, box bodies they changed,
-// by box id.
-export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; accepted?: number[]; boxes?: Record<string, string> }): Plan {
+// by box id. A box only the scan knows (in `frame`) joins the plan once its text changes.
+export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; accepted?: number[]; boxes?: Record<string, string> }, frame: Box[] = []): Plan {
   let { lines, threads: ts } = plan;
   let ops: DiffOp[] = lines.map((_, i) => ({ op: "eq", a: i, b: i }));
   if (typeof text === "string") {
@@ -39,16 +39,25 @@ export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; acc
   const take = new Set((accepted ?? []).filter((i) => lines[i]?.kind === "proposal"));
   const built = anyBuilt(lines, plan.boxes);
   if (take.size) lines = lines.map((l, i) => (take.has(i) ? acceptProposal(l, built) : l));
-  return { ...plan, lines, threads: ts, choices: choices.follow(plan.choices, ops, lines), boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
+  let have = plan.boxes;
+  if (boxes) {
+    const scanned = new Map(frame.map((b) => [b.id, b]));
+    for (const [id, body] of Object.entries(boxes)) if (scanned.has(id) && joinLines(scanned.get(id)!.lines) !== body) have = materialize(have, scanned, id);
+    have = editBoxes(have, boxes);
+  }
+  return { ...plan, lines, threads: ts, choices: choices.follow(plan.choices, ops, lines), boxes: have };
 }
 
 // A box's body is plain text, edited on the map or in the map file.
 function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
-  return boxes.map((b) => {
+  let changed = false;
+  const next = boxes.map((b): Box => {
     if (!(b.id in bodies) || joinLines(b.lines) === bodies[b.id]) return b;
+    changed = true;
     const lines = carryMeta(b.lines, splitLines(bodies[b.id]), { anyBuilt: true }).map((l) => ({ ...l, kind: null }));
     return { ...b, lines, status: "stale" };
   });
+  return changed ? next : boxes;
 }
 
 // The plan as the files on disk have it; the text there wins over what was saved. A box
@@ -204,7 +213,7 @@ export function agree(plan: Plan): Plan {
   return {
     ...plan,
     lines: plan.lines.map((l, i) => (l.kind === "proposal" || offered.has(i) ? l : own(l))),
-    boxes: plan.boxes.map((b) => (b.lines.some((l) => l.by === "a") ? { ...b, lines: b.lines.map(own) } : b)),
+    boxes: plan.boxes.some((b) => b.lines.some((l) => l.by === "a")) ? plan.boxes.map((b) => (b.lines.some((l) => l.by === "a") ? { ...b, lines: b.lines.map(own) } : b)) : plan.boxes,
   };
 }
 

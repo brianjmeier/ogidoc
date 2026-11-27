@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { checkMap, mapOf, mergeMaps, type FlowMap } from "./map.ts";
+import { EMPTY_MAP, boxEdge, checkMap, mapOf, mergeMaps, type FlowMap } from "./map.ts";
 import type { Box, BoxEdge, MapOnDisk } from "./types.ts";
 
 // The repo's map of abstractions, `.ogidoc/map.json`, shared in git by every session in
@@ -13,13 +13,9 @@ import type { Box, BoxEdge, MapOnDisk } from "./types.ts";
 
 export const MAP_FILE = join(".ogidoc", "map.json");
 
-const EMPTY: FlowMap = { title: "map", nodes: [], edges: [], flows: [] };
-
-export type MapStore = ReturnType<typeof mapStore>;
-
 export function mapStore(root: string) {
   const path = join(root, MAP_FILE);
-  const read = (): FlowMap => (existsSync(path) ? checkMap(JSON.parse(readFileSync(path, "utf8"))) : structuredClone(EMPTY));
+  const read = (): FlowMap => (existsSync(path) ? checkMap(JSON.parse(readFileSync(path, "utf8"))) : structuredClone(EMPTY_MAP));
   let lastRead = read();
   let written = "";
 
@@ -58,6 +54,6 @@ function fromFlowMap(m: FlowMap): MapOnDisk {
       ...(n.seen && { seen: n.seen }),
       ...(n.pins && { pins: n.pins }),
     })),
-    edges: m.edges.map(({ from, to, label, kind, symbols }) => ({ from, to, ...(label && { label }), kind: kind === "import" ? "import" : "call", ...(symbols && { symbols }) })),
+    edges: m.edges.map(boxEdge),
   };
 }

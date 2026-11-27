@@ -3,7 +3,7 @@ import * as plan from "./plan.ts";
 import type { Plan } from "./plan.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import { buildPrompt, notATurn, parseReply, readAgentFile } from "./prompt.ts";
+import { buildPrompt, notATurn, parseDescribed, parseReply, readAgentFile } from "./prompt.ts";
 import { planStore, type Loaded, type PlanStore, type SessionState } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
@@ -12,10 +12,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, MapView, Reply, Settings, Snapshot, Thread } from "./types.ts";
 import { describeBrief, driftOf, mapOf, mapView, stamped } from "./map.ts";
-import { describePrompt, parseDescribed } from "./describe.ts";
+import { describePrompt } from "./describe.ts";
 import { MAP_FILE } from "./map-store.ts";
 import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
-import type { Skeleton } from "./scan.ts";
+import { isCode, type Skeleton } from "./scan.ts";
 import { CLI } from "./paths.ts";
 
 interface EditInput {
@@ -34,14 +34,18 @@ export function openSession({ cwd, name, agent, reader, clock, commit = true }: 
   const log = turnLog({ cwd: store.cwd, ownFiles: store.ownFiles, commit, saved: saved.log });
   const io = repoIO(store.cwd);
   if (log.commits) versionTheMap(store.cwd, io);
-  const scanner: Scanner = { scan: () => scanRepo(basename(store.cwd), io), head: () => headOf(io) };
+  // The scan reads the working tree, so it reads again when the commit or an uncommitted
+  // code file changed.
+  const stamp = () => [headOf(io), ...[...log.begin()].filter(([p]) => isCode(p)).map(([p, hash]) => `${p} ${hash}`)].join("\n");
+  const scanner: Scanner = { scan: () => scanRepo(basename(store.cwd), io), stamp };
   return new Session({ store, saved, log, agent, reader, clock, scanner });
 }
 
-// Reads the code into the skeleton of the map, and says which commit it read.
+// Reads the code into the skeleton of the map, and says which code it would read: the
+// scan runs again only when that changed.
 export interface Scanner {
   scan(): Skeleton | null;
-  head(): string;
+  stamp(): string;
 }
 
 // A checkout the editor commits to versions its map like code: git merges the map box by
@@ -76,9 +80,9 @@ export class Session extends EventEmitter {
   // The box being described while one is, and how the last describe went.
   private describing: { id: string | null } | null = null;
   private described: { id: string | null; summary?: string; error?: string } | null = null;
-  // The code as the last scan read it, and the commit it read.
+  // The code as the last scan read it, and the stamp of what it read.
   private skeleton: Skeleton | null = null;
-  private scannedAt = "";
+  private scannedAt: string | null = null;
   private shown: { key: unknown[]; view: MapView } | null = null;
   // Goes up whenever the map changes, so the browser knows to fetch it again.
   private mapRev = 0;
@@ -88,8 +92,8 @@ export class Session extends EventEmitter {
   constructor({ store, saved, log, agent, reader, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; reader?: Agent; clock: Clock; scanner?: Scanner }) {
     super();
     this.reader = reader ?? agent;
-    this.scanner = scanner ?? { scan: () => null, head: () => "" };
-    this.rescan(true);
+    this.scanner = scanner ?? { scan: () => null, stamp: () => "" };
+    this.rescan();
     this.store = store;
     this.log = log;
     this.agent = agent;
@@ -134,6 +138,7 @@ export class Session extends EventEmitter {
   // The whole map: the scan of the code with the boxes on it. Too big to send with every
   // keystroke, so the browser fetches it when \`mapRev\` moves.
   map(): MapView {
+    this.rescan();
     const key = [this.skeleton, this.s.boxes, this.s.edges];
     if (!this.shown || this.shown.key.some((k, i) => k !== key[i])) this.shown = { key, view: mapView(this.skeleton, this.s.boxes, this.s.edges) };
     return this.shown.view;
@@ -145,12 +150,12 @@ export class Session extends EventEmitter {
     return this.map().boxes.filter((b) => !own.has(b.id));
   }
 
-  // Scan again when the checkout moved to another commit, or when asked.
-  private rescan(always = false) {
-    const head = this.scanner.head();
-    if (!always && head === this.scannedAt) return;
+  // Scan again when the code changed since the last scan.
+  private rescan() {
+    const stamp = this.scanner.stamp();
+    if (stamp === this.scannedAt) return;
     this.skeleton = this.scanner.scan();
-    this.scannedAt = head;
+    this.scannedAt = stamp;
     this.mapRev++;
   }
 
@@ -244,7 +249,9 @@ export class Session extends EventEmitter {
 
   edit(input: EditInput) {
     this.guard();
-    this.setPlan(plan.edit(this.plan, input));
+    // A box only the scan knows joins the plan through its text, as a map edit does.
+    const scanOnly = Object.keys(input.boxes ?? {}).some((id) => !this.s.boxes.some((b) => b.id === id));
+    this.setPlan(plan.edit(this.plan, input, scanOnly ? this.frame() : []));
     this.changed();
   }
 
@@ -370,7 +377,6 @@ export class Session extends EventEmitter {
     this.guard("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     this.setPlan(plan.agree(this.plan));
-    this.rescan();
     const s = this.s;
     const view = this.map();
     // Boxes the scan found were on the map before anyone said anything about them.
@@ -417,7 +423,6 @@ export class Session extends EventEmitter {
       const vouched = next.plan.boxes.filter((b) => said.has(b.id) || !this.drifted.includes(b.id));
       this.setPlan({ ...next.plan, boxes: stamped(next.plan.boxes, vouched.map((b) => b.id), this.hashOf(vouched)) });
       this.drifted = this.driftNow();
-      this.rescan(true);
       ({ animation, boxChanges } = next);
       this.s = { ...this.s, symbols: reply.symbols, suggestions: reply.suggestions, base: plan.baseOf(next.plan) };
       this.save();
@@ -435,6 +440,8 @@ export class Session extends EventEmitter {
       error ??= (e as Error).message;
     }
     if (reply || commit) this.s.history = [...this.s.history, { ...prev, commit }].slice(-20);
+    // What the turn did to the code shows on the map.
+    this.rescan();
     if (reply) {
       this.s.last = { summary: reply.summary, steps: reply.steps, files: reply.files, checks: reply.checks, seconds: Math.round((this.clock.now() - started) / 1000) };
       this.s.turn += 1;
@@ -460,13 +467,13 @@ export class Session extends EventEmitter {
     const mark = this.log.begin();
     if (commit) this.log.revert(commit);
     this.s = { ...this.s, ...state, history: this.s.history.slice(0, -1) };
-    // The code went back too, so what the scan reads of it may have.
-    this.rescan(true);
     this.save();
     if (commit) {
       this.log.record(mark, `ogidoc: undo turn ${h.turn} on ${this.name}`, { ownFiles: true });
       this.save();
     }
+    // The code went back too, so what the scan reads of it may have.
+    this.rescan();
     this.emit("change", {});
   }
 }

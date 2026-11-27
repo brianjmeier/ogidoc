@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync, rmSync, statSync } from "node:fs";
+import { realpathSync, rmSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Where each agent turn is recorded, so it can be undone and so changes made outside a
@@ -41,7 +41,7 @@ export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ow
   // is /private/tmp), so own files are placed against the real path of `cwd`.
   const here = relative(root, realpathSync(cwd));
   const log = { ...gitLog(root, ownFiles.map((f) => join(here, relative(cwd, f))), saved), hashes: (files: string[]) => hashFiles(root, here, files) };
-  return commit ? log : { ...noLog, revert: log.revert, discard: log.discard, hashes: log.hashes };
+  return commit ? log : { ...noLog, begin: log.begin, revert: log.revert, discard: log.discard, hashes: log.hashes };
 }
 
 const noLog: TurnLog = {
@@ -140,11 +140,16 @@ function status(root: string, paths?: string[]): Entry[] {
   return out;
 }
 
+// One git call hashes every path that is a file on disk; a path that isn't has no hash.
+function hashPaths(root: string, paths: string[]): Map<string, string> {
+  const present = paths.filter((p) => statSync(join(root, p), { throwIfNoEntry: false })?.isFile());
+  const hashes = present.length ? run(root, ["hash-object", "--stdin-paths"], present.join("\n")).out.trim().split("\n") : [];
+  return new Map(present.flatMap((p, i) => (hashes[i] ? [[p, hashes[i]] as const] : [])));
+}
+
 function hashFiles(root: string, here: string, files: string[]): Map<string, string | null> {
-  const present = [...new Set(files)].filter((f) => existsSync(join(root, here, f)) && statSync(join(root, here, f)).isFile());
-  const out = present.length ? run(root, ["hash-object", "--stdin-paths"], present.map((f) => join(here, f)).join("\n")).out.trim().split("\n") : [];
-  const hashOf = new Map(present.map((f, i) => [f, out[i] || null]));
-  return new Map(files.map((f) => [f, hashOf.get(f) ?? null]));
+  const hashOf = hashPaths(root, [...new Set(files)].map((f) => join(here, f)));
+  return new Map(files.map((f) => [f, hashOf.get(join(here, f)) ?? null]));
 }
 
 // Uncommitted paths mapped to a content hash, so a file that was already dirty but
@@ -152,10 +157,7 @@ function hashFiles(root: string, here: string, files: string[]): Map<string, str
 function dirtyFiles(root: string): Map<string, string> {
   // A rename also changes the path it came from.
   const paths = status(root).flatMap((e) => (e.from ? [e.path, e.from] : [e.path]));
-  // One git call hashes every file still on disk; a deleted one has no hash.
-  const present = paths.filter((p) => statSync(join(root, p), { throwIfNoEntry: false })?.isFile());
-  const hashes = present.length ? run(root, ["hash-object", "--stdin-paths"], present.join("\n")).out.trim().split("\n") : [];
-  const hashOf = new Map(present.map((p, i) => [p, hashes[i]]));
+  const hashOf = hashPaths(root, paths);
   return new Map(paths.map((p) => [p, hashOf.get(p) ?? "deleted"]));
 }
 
