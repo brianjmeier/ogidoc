@@ -38,7 +38,7 @@ export function openSession({ cwd, name, agent, reader, clock, commit = true }: 
   // code file changed.
   const stamp = () => [headOf(io), ...[...log.begin()].filter(([p]) => isCode(p)).map(([p, hash]) => `${p} ${hash}`)].join("\n");
   const scanner: Scanner = { scan: () => scanRepo(basename(store.cwd), io), stamp };
-  return new Session({ store, saved, log, agent, reader, clock, scanner });
+  return new Session({ store, saved, log, agent, reader: reader ?? agent, clock, scanner });
 }
 
 // Reads the code into the skeleton of the map, and says which code it would read: the
@@ -89,10 +89,10 @@ export class Session extends EventEmitter {
   // Boxes whose code changed since they last said what it does, as of the last look.
   private drifted: string[] = [];
 
-  constructor({ store, saved, log, agent, reader, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; reader?: Agent; clock: Clock; scanner?: Scanner }) {
+  constructor({ store, saved, log, agent, reader, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; reader: Agent; clock: Clock; scanner: Scanner }) {
     super();
-    this.reader = reader ?? agent;
-    this.scanner = scanner ?? { scan: () => null, stamp: () => "" };
+    this.reader = reader;
+    this.scanner = scanner;
     this.rescan();
     this.store = store;
     this.log = log;
@@ -144,11 +144,9 @@ export class Session extends EventEmitter {
     return this.shown.view;
   }
 
-  // The boxes only the scan knows, which an edit or a reply turns into boxes of the map.
-  private frame(): Box[] {
-    const own = new Set(this.s.boxes.map((b) => b.id));
-    return this.map().boxes.filter((b) => !own.has(b.id));
-  }
+  // The boxes of the code, as the map shows them now. Looked up only when an edit or a
+  // reply names a box, so typing in the plan doesn't read the code.
+  private scanned: plan.Scanned = (id) => plan.scannedIn(this.map())(id);
 
   // Scan again when the code changed since the last scan.
   private rescan() {
@@ -249,9 +247,7 @@ export class Session extends EventEmitter {
 
   edit(input: EditInput) {
     this.guard();
-    // A box only the scan knows joins the plan through its text, as a map edit does.
-    const scanOnly = Object.keys(input.boxes ?? {}).some((id) => !this.s.boxes.some((b) => b.id === id));
-    this.setPlan(plan.edit(this.plan, input, scanOnly ? this.frame() : []));
+    this.setPlan(plan.edit(this.plan, input, this.scanned));
     this.changed();
   }
 
@@ -260,7 +256,7 @@ export class Session extends EventEmitter {
   editMap({ edits }: { edits: Edit[] }) {
     this.guard();
     if (!Array.isArray(edits)) throw new Error("Send the map edits as a list.");
-    this.setPlan(plan.editMap(this.plan, edits, this.frame()));
+    this.setPlan(plan.editMap(this.plan, edits, this.scanned));
     this.changed();
   }
 
@@ -346,7 +342,7 @@ export class Session extends EventEmitter {
       if (signal.aborted) throw new Error("The turn was stopped.");
       try {
         const reply = parseReply(out);
-        const next = plan.fromReply(this.plan, reply, turn, this.frame());
+        const next = plan.fromReply(this.plan, reply, turn, this.scanned);
         const why = plan.whyNotATurn(this.plan, reply, next);
         if (!why) return { reply, next };
         problem = why;
@@ -380,7 +376,7 @@ export class Session extends EventEmitter {
     const s = this.s;
     const view = this.map();
     // Boxes the scan found were on the map before anyone said anything about them.
-    const diff = plan.humanDiff(s.base, this.plan, view.boxes.filter((b) => b.scan));
+    const diff = plan.humanDiff(s.base, this.plan, this.scanned);
     const changedFiles = this.log.drift();
     this.drifted = this.driftNow();
     const prompt = buildPrompt({

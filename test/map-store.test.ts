@@ -55,3 +55,45 @@ test("a box another session made shows up as the map has it", () => {
   assert.equal(b.status, "built", "a box this session never saw is not made stale by opening it");
   assert.deepEqual(texts(b.lines), ["built elsewhere"]);
 });
+
+// ---------- two branches' maps, merged box by box ----------
+
+import { mergeMaps, type FlowMap, type MapNode } from "../src/map.ts";
+
+const node = (id: string, more: Partial<MapNode> = {}): MapNode => ({ id, name: id, parent: null, pseudo: [`${id} does its job`], status: "built", ...more });
+const flow = (nodes: MapNode[], edges: FlowMap["edges"] = []): FlowMap => ({ title: "map", nodes, edges });
+const byId = (m: FlowMap) => Object.fromEntries(m.nodes.map((n) => [n.id, n]));
+
+test("both branches change the same field of a box differently: ours wins, and a field only theirs changed comes along", () => {
+  const base = flow([node("cart")]);
+  const merged = mergeMaps(base, flow([node("cart", { name: "basket" })]), flow([node("cart", { name: "trolley", status: "stale" })]));
+  assert.deepEqual([byId(merged).cart.name, byId(merged).cart.status], ["basket", "stale"]);
+});
+
+test("both branches rewrite a box's pseudocode: ours stays, stale and unstamped, for the next turn to read again", () => {
+  const base = flow([node("cart", { seen: { "src/cart.js": "a1" } })]);
+  const ours = flow([node("cart", { pseudo: ["holds items, at most 10"], seen: { "src/cart.js": "b2" } })]);
+  const theirs = flow([node("cart", { pseudo: ["holds items and prices"], seen: { "src/cart.js": "c3" } })]);
+  const cart = byId(mergeMaps(base, ours, theirs)).cart;
+  assert.deepEqual(cart.pseudo, ["holds items, at most 10"]);
+  assert.equal(cart.status, "stale");
+  assert.equal(cart.seen, undefined);
+});
+
+test("one branch deletes a box's parent while the other changes the box: the box moves to the top", () => {
+  const base = flow([node("shop"), node("cart", { parent: "shop" })]);
+  const ours = flow([node("cart", { parent: "shop" })]);
+  const theirs = flow([node("shop"), node("cart", { parent: "shop", pseudo: ["holds items, at most 10"] })]);
+  const merged = mergeMaps(base, ours, theirs);
+  assert.deepEqual(merged.nodes.map((n) => [n.id, n.parent]), [["cart", null]]);
+  assert.deepEqual(byId(merged).cart.pseudo, ["holds items, at most 10"]);
+});
+
+test("a box or arrow one branch adds is added, and one a branch deletes is deleted", () => {
+  const base = flow([node("cart"), node("pay"), node("old")], [{ from: "pay", to: "cart", kind: "call" }, { from: "pay", to: "old", kind: "call" }]);
+  const ours = flow([node("cart"), node("pay"), node("tax")], [{ from: "pay", to: "cart", kind: "call" }, { from: "pay", to: "old", kind: "call" }, { from: "pay", to: "tax", kind: "call" }]);
+  const theirs = flow([node("cart"), node("pay"), node("old"), node("ship")], [{ from: "pay", to: "old", kind: "call" }, { from: "ship", to: "cart", kind: "call" }]);
+  const merged = mergeMaps(base, ours, theirs);
+  assert.deepEqual(merged.nodes.map((n) => n.id).sort(), ["cart", "pay", "ship", "tax"]);
+  assert.deepEqual(merged.edges.map((e) => `${e.from}→${e.to}`).sort(), ["pay→tax", "ship→cart"], "pay→old goes with old, pay→cart theirs deleted");
+});

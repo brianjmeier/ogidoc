@@ -46,13 +46,16 @@ export const headOf = (io: RepoIO): string => io.git(["rev-parse", "HEAD"])?.tri
 // tsconfig's `paths`, relative to the project root. tsconfig may carry comments.
 function aliasesOf(io: RepoIO): Record<string, string[]> {
   try {
-    const raw = (io.read("tsconfig.json") ?? "{}").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1");
+    const raw = withoutComments(io.read("tsconfig.json") ?? "{}").replace(/,(\s*[}\]])/g, "$1");
     const { baseUrl = ".", paths = {} } = JSON.parse(raw).compilerOptions ?? {};
     return Object.fromEntries(Object.entries(paths as Record<string, string[]>).map(([k, v]) => [k, v.map((t) => join(baseUrl, t))]));
   } catch {
     return {};
   }
 }
+
+// JSON with its comments taken out. A string is skipped whole, so `"@/*"` stays as it is.
+const withoutComments = (text: string) => text.replace(/("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (_, str) => str ?? "");
 
 /** The real checkout at `root`. */
 export function repoIO(root: string): RepoIO {

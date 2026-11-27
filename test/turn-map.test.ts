@@ -10,6 +10,8 @@ import { jsonReply, open, recording, repo, replying } from "./support/index.ts";
 const box = (id: string, lines: string[], more: Partial<Box> = {}): Box => ({ id, name: id, parent: null, lines: lines.map((text) => ({ text, by: "a" as const })), status: "built", code: [{ file: `src/${id}.js` }], ...more });
 const plan = (boxes: Box[], edges: Plan["edges"] = []): Plan => ({ lines: [{ text: "app", by: "h" }], boxes, edges, threads: [], choices: [] });
 const reply = (o: object): Reply => parseReply(jsonReply({ plan: [{ text: "app" }], ...o }));
+// The boxes a scan found, looked up by id.
+const scanOf = (...boxes: Box[]) => (id: string) => boxes.find((b) => b.id === id);
 
 test("a reply names only the boxes it changed; every other box stays as it was", () => {
   const before = plan([box("cart", ["holds items"]), box("pay", ["charges"], { parent: "cart" })], [{ from: "pay", to: "cart", kind: "call" }]);
@@ -23,9 +25,9 @@ test("a reply names only the boxes it changed; every other box stays as it was",
 
 test("a reply that leaves out a box's name keeps the name the map has", () => {
   const before = plan([box("src/links.js", ["shorten, follow"], { name: "links" })]);
-  const { plan: after } = fromReply(before, reply({ boxes: [{ id: "src/links.js", lines: ["shorten, follow, expire"], status: "built" }] }), 2, [box("src/store.js", [], { name: "store.js" })]);
+  const { plan: after } = fromReply(before, reply({ boxes: [{ id: "src/links.js", lines: ["shorten, follow, expire"], status: "built" }] }), 2, scanOf(box("src/store.js", [], { name: "store.js" })));
   assert.equal(after.boxes[0].name, "links");
-  const { plan: scanned } = fromReply(before, reply({ boxes: [{ id: "src/store.js", lines: ["keeps links"], status: "built" }] }), 2, [box("src/store.js", [], { name: "store.js" })]);
+  const { plan: scanned } = fromReply(before, reply({ boxes: [{ id: "src/store.js", lines: ["keeps links"], status: "built" }] }), 2, scanOf(box("src/store.js", [], { name: "store.js" })));
   assert.equal(scanned.boxes.find((b) => b.id === "src/store.js")!.name, "store.js", "a scanned box keeps the scan's name");
 });
 
@@ -49,6 +51,20 @@ test("a box that says it's built but not where its code is sends the turn back",
   const before = plan([]);
   const r = reply({ boxes: [{ id: "cart", lines: ["holds items"], status: "built" }], steps: [{ kind: "red-green" }, { kind: "refactor" }] });
   assert.match(whyNotATurn(before, r, fromReply(before, r, 1)) ?? "", /cart says it is built but not where the code is/);
+});
+
+test("a reply that only echoes boxes the scan knows shows nothing new, and the turn goes on", () => {
+  const scanned = scanOf(box("lib", [], { code: [] }), box("lib/store.js", [], { parent: "lib", code: [{ file: "lib/store.js" }] }));
+  const before = plan([box("cart", ["holds items"])]);
+  const refused = (o: object) => {
+    const r = reply(o);
+    return whyNotATurn(before, r, fromReply(before, r, 2, scanned));
+  };
+  assert.match(refused({}) ?? "", /the plan shows nothing new/);
+  assert.match(refused({ boxes: [{ id: "lib/store.js", lines: [] }] }) ?? "", /the plan shows nothing new/, "naming a scanned box without saying anything");
+  assert.equal(refused({ boxes: [{ id: "cart", lines: ["holds items"], status: "built", uses: ["lib/store.js"] }] }), null, "an arrow to one is new");
+  assert.equal(refused({ boxes: [{ id: "lib/store.js", lines: ["keeps carts"] }] }), null, "saying what it does is new");
+  assert.equal(refused({ removed: ["cart"] }), null, "so is taking a box off");
 });
 
 test("a map too big for one prompt shows the boxes the turn is about, and names the rest", () => {

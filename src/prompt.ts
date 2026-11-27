@@ -141,6 +141,7 @@ function mapLine(c: MapChange): string {
   const where = (p: string | null) => (p ? `inside ${p}` : "at the top");
   if (c.op === "add") return `+ box ${c.id} "${c.name}" ${where(c.parent)}`;
   if (c.op === "del") return `- box ${c.id} "${c.name}"`;
+  if (c.op === "forget") return `~ box ${c.id}: what was said about it is cleared`;
   if (c.op === "rename") return `~ box ${c.id} renamed "${c.old}" to "${c.name}"`;
   if (c.op === "move") return `~ box ${c.id} moved ${where(c.parent)}`;
   return `${c.op === "connect" ? "+" : "-"} arrow ${c.from} → ${c.to}${c.op === "connect" && c.label ? `: ${c.label}` : ""}`;

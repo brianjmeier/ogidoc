@@ -137,8 +137,9 @@ export function regionIds(map: FlowMap, seeds: Iterable<string>): Set<string> {
 // person said about them, and what they drew that the scan can't see (functions, plans).
 // The running map is `overlay(scan, map.json)`.
 
-/** Top-level map boxes anchored to exactly one file stand in for that file's box, so a
- *  map drawn before the scan (the demo's `links`, for `src/links.js`) keeps its ids. */
+/** A top-level box an agent anchored to exactly one file stands in for that file's box,
+ *  keeping the agent's id: the weekly plan's `weekWindow`, pointing at `src/week.js`, is
+ *  that file's box, so what else lives in the file sits inside it. */
 function standIns(sk: Skeleton, map: FlowMap): Map<string, string> {
   const scanIds = new Set(sk.nodes.map((n) => n.id));
   const out = new Map<string, string>();

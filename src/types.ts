@@ -78,8 +78,14 @@ export interface BoxScan {
   uses: number;
 }
 
-// A tangle the scan sees. A pair is two boxes side by side, so it shows on the level
-// that holds both.
+// A tangle the scan sees without an agent (after caldoai's untangle-codebase). A pair is
+// two boxes side by side, so it shows on the level that holds both.
+//  - `volatile import`: `a`, which other code imports, imports `b`, which changes much more often;
+//  - `change together`: git changes `a` and `b` in the same commits, with no import between them;
+//  - `unused`: `a` exports names and nothing in the code imports it (an entry point
+//    loaded by convention reads the same; the box says what is true, not that it's dead);
+//  - `pass-through`: `a` only re-exports what other files define;
+//  - `cycle`: boxes side by side that import each other round in a loop.
 export type Smell =
   | { kind: "volatile import" | "change together"; a: string; b: string; count: number }
   | { kind: "cycle"; ids: string[] }
@@ -184,6 +190,7 @@ export type LineChange = { op: "add" | "del"; text: string } | { op: "mod"; old:
 export type MapChange =
   | { op: "add"; id: string; name: string; parent: string | null }
   | { op: "del"; id: string; name: string }
+  | { op: "forget"; id: string }
   | { op: "rename"; id: string; old: string; name: string }
   | { op: "move"; id: string; parent: string | null }
   | { op: "connect" | "disconnect"; from: string; to: string; label?: string };

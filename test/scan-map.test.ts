@@ -112,6 +112,20 @@ test("scanning reads what git tracks, follows its links, and gives up outside a 
   assert.equal(scanRepo("app", { ...io, git: () => null }), null);
 });
 
+test("tsconfig's paths survive a comment after a path with /* in it", () => {
+  const files: Record<string, string> = {
+    "tsconfig.json": '{\n  "compilerOptions": {\n    "paths": { "@/*": ["./src/*"] } /* the app code */\n  }\n}\n',
+    "src/a.ts": "import { b } from '@/b';\n",
+    "src/b.ts": "export const b = 1;\n",
+  };
+  const io: RepoIO = {
+    git: (args) => (args[0] === "ls-files" ? ["100644 x 0\tsrc/a.ts", "100644 x 0\tsrc/b.ts"].join("\0") : args[0] === "log" ? "" : null),
+    read: (p) => files[p] ?? null,
+    readlink: () => null,
+  };
+  assert.deepEqual(scanRepo("app", io)!.edges.map((e) => [e.from, e.to]), [["src/a.ts", "src/b.ts"]]);
+});
+
 test("the person says what a scanned box does, and undo brings the map back", async () => {
   const { dir } = shop();
   const { session: s, view } = open(dir, { agent: replying("fake", [{ plan: [{ text: "x", status: "built" }], steps: [] }]) });
@@ -121,4 +135,21 @@ test("the person says what a scanned box does, and undo brings the map back", as
   const rev = view().mapRev;
   s.undo();
   assert.notEqual(view().mapRev, rev, "the map pane fetches the map again");
+});
+
+test("the person removes code someone said something about: what was said goes, the box and what is inside it stay", async () => {
+  const { dir } = shop();
+  const agent = recording(replying("fake", [{ plan: [{ text: "keep what was posted", status: "built" }], steps: [] }]));
+  const { session: s, view } = open(dir, { agent, commit: false });
+  s.editMap({ edits: [{ op: "pseudo", id: "lib/store.js", lines: ["keeps what was posted"] }, { op: "add", key: "k", name: "save", parent: "lib/store.js", lines: ["keep x"] }] });
+  await s.pass({ text: "x" });
+  s.editMap({ edits: [{ op: "remove", id: "lib/store.js" }] });
+  const store = s.map().boxes.find((b) => b.id === "lib/store.js")!;
+  assert.deepEqual([store.parent, store.lines], ["lib", []], "the code stays on the map, with nothing said about it");
+  assert.ok(!view().boxes.some((b) => b.id === "lib/store.js"), "the session no longer keeps it");
+  assert.equal(s.map().boxes.find((b) => b.id === "save")!.parent, "lib/store.js", "what was drawn inside it stays inside");
+  await s.pass();
+  assert.match(agent.prompts[1], /~ box lib\/store.js: what was said about it is cleared/);
+  assert.doesNotMatch(agent.prompts[1], /- box lib\/store.js/, "it doesn't read as deleting the file");
+  assert.doesNotMatch(agent.prompts[1], /~ box save moved/);
 });

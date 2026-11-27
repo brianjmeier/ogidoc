@@ -4,6 +4,8 @@
 //
 // Pure: the caller hands in the files and the import aliases. Nothing here reads disk.
 
+import type { Smell } from "./types.ts";
+
 interface SourceFile {
   path: string;
   text: string;
@@ -49,30 +51,17 @@ export interface Skeleton {
   nodes: ScanNode[];
   /** File to file (or file to an outside package). The editor lifts them to its level. */
   edges: ScanEdge[];
-  /** Imports that pointed at nothing the scan could find. */
-  unresolved: number;
   /** Where the code is tangled, as far as the files and their history show it. A pair
    *  smell is between two boxes side by side, so it shows on the level that has both. */
   smells: Smell[];
 }
 
-/** The tangles a scan can see without an agent (after caldoai's untangle-codebase):
- *  - `volatile import`: `a`, which other code imports, imports `b`, which changes much more often;
- *  - `change together`: git changes `a` and `b` in the same commits, with no import between them;
- *  - `unused`: `a` exports names and nothing in the code imports it (an entry point
- *    loaded by convention reads the same; the box says what is true, not that it's dead);
- *  - `pass-through`: `a` only re-exports what other files define;
- *  - `cycle`: boxes side by side that import each other round in a loop. */
-import type { Smell } from "./types.ts";
 
 const CODE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 // Files come from `git ls-files`, so .gitignore already leaves most build output out; this
 // catches build output a repository committed anyway. It is not a second ignore list.
 const SKIP = /(^|\/)(node_modules|dist|coverage|\.git)\//;
 const TEST = /(\.(test|spec)\.[a-z]+$)|(^|\/)(tests?|test-support|__tests__)\//;
-// A path ending in a file type that isn't code (`./x.css`, `./data.json`, `./a.svg?raw`).
-const ASSET = /\.[a-z0-9]+(\?.*)?$/i;
-const isAsset = (spec: string) => spec.includes("/") && ASSET.test(spec) && !CODE.test(spec.replace(/\?.*$/, ""));
 const EXTS = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/index.tsx", "/index.js"];
 export const OUTSIDE = "(outside)";
 
@@ -218,12 +207,10 @@ export function scan(title: string, all: SourceFile[], { aliases = {}, links = {
 
   // ---- arrows ----
   const edges = new Map<string, ScanEdge>();
-  let unresolved = 0;
   for (const f of code) {
     for (const { spec, symbols } of importsOf(f.text)) {
       const hit = resolveSpec(f.path, spec);
-      // A path that names no code file is an asset (a stylesheet, data, an image), not a miss.
-      if (hit === null) { if (!isAsset(spec)) unresolved++; continue; }
+      if (hit === null) continue;
       if (hit && isTest(hit)) continue;
       const to = hit ? box(hit) : `${OUTSIDE}/${packageOf(spec)}`;
       if (to === f.path) continue;
@@ -278,7 +265,7 @@ export function scan(title: string, all: SourceFile[], { aliases = {}, links = {
   }
 
   const smells = smellsOf({ code, nodes, edges: [...edges.values()], history, ancestors });
-  return { title, nodes: [...nodes.values()], edges: [...edges.values()], unresolved, smells };
+  return { title, nodes: [...nodes.values()], edges: [...edges.values()], smells };
 }
 
 // A commit that touches more files than this is a sweep (a rename, a format), not a sign

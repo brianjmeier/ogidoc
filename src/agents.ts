@@ -247,6 +247,9 @@ interface MockTurn {
   delay?: number;
 }
 
+// How long the mock agent takes to describe a box, so the browser shows it describing.
+const DESCRIBE_DELAY = 600;
+
 function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] }): Agent {
   // A list of turns, or a demo: the plan it starts from and its turns.
   const read = JSON.parse(readFileSync(script, "utf8"));
@@ -263,7 +266,7 @@ function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] })
       const describing = /^# Say what (?:`([^`]+)`|the top)/m.exec(prompt);
       if (describing && read.describe) {
         const d = read.describe[describing[1] ?? ""] ?? { summary: "nothing to say here", boxes: [], add: [], edges: [] };
-        await sleep(read.describeDelay ?? 600);
+        await sleep(DESCRIBE_DELAY);
         return `\`\`\`json\n${JSON.stringify(d, null, 2)}\n\`\`\``;
       }
       const t = turns[Math.min(i++, turns.length - 1)];

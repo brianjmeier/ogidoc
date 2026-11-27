@@ -73,7 +73,6 @@ test("an import through a symlink lands on the file it points at", () => {
     f("stations/fixers/entry.ts", `import { read } from "./lib/io"`),
   ], { links: { "stations/fixers/lib": "../../shared/lib" } });
   assert.deepEqual(s.edges.map((e) => [e.from, e.to]), [["stations/fixers/entry.ts", "shared/lib/io.ts"]]);
-  assert.equal(s.unresolved, 0);
 });
 
 test("smells: a volatile import, two boxes that change together, unused and pass-through files", () => {
