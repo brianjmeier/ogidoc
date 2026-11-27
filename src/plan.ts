@@ -73,12 +73,14 @@ const edgeKey = (e: { from: string; to: string }) => `${e.from} → ${e.to}`;
 // The person's edits to the map, as the browser reports them. A box added in the same
 // batch is named by its \`key\` in later edits. An edit that names a box the map doesn't
 // have is refused, naming it.
-export function editMap(plan: Plan, edits: Edit[]): Plan {
+export function editMap(plan: Plan, edits: Edit[], frame: Box[] = []): Plan {
   let boxes = plan.boxes;
   let edges = plan.edges;
+  const scanned = new Map(frame.map((b) => [b.id, b]));
   const keys = new Map<string, string>();
   const idOf = (ref: string) => {
     const id = keys.get(ref) ?? ref;
+    boxes = materialize(boxes, scanned, id);
     if (!boxes.some((b) => b.id === id)) throw new Error(`There is no box ${ref} on the map.`);
     return id;
   };
@@ -87,6 +89,7 @@ export function editMap(plan: Plan, edits: Edit[]): Plan {
     if (e.op === "pseudo") boxes = editBoxes(boxes, { [idOf(e.id)]: e.lines.join("\n") });
     else if (e.op === "rename") change(idOf(e.id), (b) => ({ ...b, name: e.name.trim() || b.name }));
     else if (e.op === "remove") {
+      if (scanned.has(e.id) && !boxes.some((b) => b.id === e.id)) throw new Error(`${e.id} is code the scan found. Say in the plan what should happen to it.`);
       const id = idOf(e.id);
       const gone = boxes.find((b) => b.id === id)!;
       boxes = boxes.filter((b) => b.id !== id).map((b) => (b.parent === id ? { ...b, parent: gone.parent } : b));
@@ -109,12 +112,26 @@ export function editMap(plan: Plan, edits: Edit[]): Plan {
   return { ...plan, boxes, edges };
 }
 
-function mapChanges(base: Base["map"], plan: Plan): MapChange[] {
+// A box only the scan knew joins the plan's boxes, with the boxes that hold it, once
+// someone says something about it.
+function materialize(boxes: Box[], scanned: Map<string, Box>, id: string): Box[] {
+  const have = new Set(boxes.map((b) => b.id));
+  const add: Box[] = [];
+  for (let cur: string | null = id; cur && !have.has(cur) && scanned.has(cur); cur = scanned.get(cur)!.parent) {
+    const { scan: _, ...b } = scanned.get(cur)!;
+    add.unshift(b);
+    have.add(cur);
+  }
+  return add.length ? [...boxes, ...add] : boxes;
+}
+
+function mapChanges(base: Base["map"], plan: Plan, scan: Box[]): MapChange[] {
   if (!base) return [];
   const out: MapChange[] = [];
   const now = new Map(plan.boxes.map((b) => [b.id, b]));
+  const scanned = new Map(scan.map((b) => [b.id, b]));
   for (const b of plan.boxes) {
-    const was = base.boxes[b.id];
+    const was = base.boxes[b.id] ?? scanned.get(b.id);
     if (!was) out.push({ op: "add", id: b.id, name: b.name, parent: b.parent });
     else {
       if (was.name !== b.name) out.push({ op: "rename", id: b.id, old: was.name, name: b.name });
@@ -134,7 +151,7 @@ function mapChanges(base: Base["map"], plan: Plan): MapChange[] {
 }
 
 // What the person changed since the agent last saw the plan.
-export function humanDiff(base: Base, plan: Plan): HumanDiff {
+export function humanDiff(base: Base, plan: Plan, scanned: Box[] = []): HumanDiff {
   const changes = (oldT: string[], newT: string[]): HumanDiff["lines"] =>
     diffLines(oldT, newT)
       .filter((o) => o.op !== "eq")
@@ -142,7 +159,7 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
   const boxes = plan.boxes
     .map((b) => ({ id: b.id, name: b.name, lines: changes(base.boxes[b.id] || [], b.lines.map((l) => l.text)) }))
     .filter((b) => b.lines.length);
-  return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes, map: mapChanges(base.map, plan) };
+  return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes, map: mapChanges(base.map, plan, scanned) };
 }
 
 // Every line with something to build is built, and every box. Proposals aren't code yet.
@@ -195,7 +212,7 @@ export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; box
 
 // Take the agent's reply apart into lines, boxes, threads and choices, keeping authorship, and
 // describe the change so the browser can animate it.
-export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges } {
+export function fromReply(plan: Plan, reply: Reply, turn: number, frame: Box[] = []): { plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges } {
   const oldLines = plan.lines;
   const newTexts = reply.plan.map((l) => l.text);
   const ops = diffLines(oldLines.map((l) => l.text), newTexts);
@@ -203,8 +220,12 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
 
   // The reply names only the boxes the agent made, changed or removed; every other box
   // stays exactly as it was. What the reply leaves out of a box stays as the map has it.
-  const oldBoxes = new Map(plan.boxes.map((b) => [b.id, b]));
-  const removed = new Set(reply.removed);
+  const scanned = new Map(frame.map((b) => [b.id, b]));
+  let have = plan.boxes;
+  for (const rb of reply.boxes) have = materialize(materialize(have, scanned, rb.id), scanned, rb.parent ?? "");
+  for (const rb of reply.boxes) for (const u of rb.uses ?? []) have = materialize(have, scanned, u);
+  const oldBoxes = new Map(have.map((b) => [b.id, b]));
+  const removed = new Set(reply.removed.filter((id) => !scanned.has(id)));
   const boxChanges: BoxChanges = {};
   const touched = new Map<string, Box>();
   for (const rb of reply.boxes) {
@@ -222,7 +243,7 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
     const code = rb.code ?? old?.code;
     touched.set(rb.id, { ...old, id: rb.id, name: rb.name, parent: rb.parent === undefined ? (old?.parent ?? null) : rb.parent, lines, status: rb.status, ...(code && { code }) });
   }
-  const kept = plan.boxes.filter((b) => !removed.has(b.id)).map((b) => touched.get(b.id) ?? b);
+  const kept = have.filter((b) => !removed.has(b.id)).map((b) => touched.get(b.id) ?? b);
   const boxes = [...kept, ...[...touched.values()].filter((b) => !oldBoxes.has(b.id))];
   // A box whose parent is gone, or was never there, sits at the top.
   const ids = new Set(boxes.map((b) => b.id));

@@ -58,6 +58,39 @@ export interface Box {
   // The git blob hash of each file in `code` when the box last said what it does.
   seen?: Record<string, string>;
   pins?: Pin[];
+  // What the scan of the code reads under the box. Never kept in the map file: the next
+  // scan finds it again.
+  scan?: BoxScan;
+}
+
+export interface BoxScan {
+  kind: "module" | "file" | "external";
+  // Lines of code under it, tests left out.
+  size: number;
+  files: number;
+  tests: number;
+  // The names code outside it imports from it, the most used first, cut short; and how
+  // many the whole seam has.
+  seam: { name: string; file: string; users: number }[];
+  seamSize: number;
+  // How many boxes beside it import it, and how many it imports.
+  usedBy: number;
+  uses: number;
+}
+
+// A tangle the scan sees. A pair is two boxes side by side, so it shows on the level
+// that holds both.
+export type Smell =
+  | { kind: "volatile import" | "change together"; a: string; b: string; count: number }
+  | { kind: "cycle"; ids: string[] }
+  | { kind: "unused" | "pass-through"; a: string };
+
+// The whole map as the person sees it: the scan of the code with every box on it.
+export interface MapView {
+  title: string;
+  boxes: Box[];
+  edges: BoxEdge[];
+  smells: Smell[];
 }
 
 // One box calling another, or importing from it.
@@ -205,6 +238,8 @@ export interface Snapshot {
   canUndo: boolean;
   // Boxes whose code changed since they last said what it does.
   drifted: string[];
+  // Goes up when the map changes: fetch \`GET /api/map\` again.
+  mapRev: number;
 }
 
 /** What a person did to the map. A box added in the same hand-over is named by its

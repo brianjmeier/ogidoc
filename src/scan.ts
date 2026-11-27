@@ -63,12 +63,8 @@ export interface Skeleton {
  *    loaded by convention reads the same; the box says what is true, not that it's dead);
  *  - `pass-through`: `a` only re-exports what other files define;
  *  - `cycle`: boxes side by side that import each other round in a loop. */
-/** A tangle the scan sees. A pair is two boxes side by side, so it shows on the level
- *  that holds both. */
-export type Smell =
-  | { kind: "volatile import" | "change together"; a: string; b: string; count: number }
-  | { kind: "cycle"; ids: string[] }
-  | { kind: "unused" | "pass-through"; a: string };
+export type { Smell } from "./types.ts";
+import type { Smell } from "./types.ts";
 
 const CODE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 // Files come from `git ls-files`, so .gitignore already leaves most build output out; this

@@ -375,7 +375,7 @@ test("an agent's renames, deletions and staged edits all land in its turn's comm
   const { session: s } = open(dir, { name: "p", agent });
   await s.pass({ text: "hello" });
   const files = git("show", "--name-status", "--format=", "HEAD").trim().split("\n").filter((l) => !l.includes(".ogidoc"));
-  assert.deepEqual(files.sort(), ["A\tp.plan", "D\tgone.js", "M\tstaged.js", "R100\told.js\tnew.js"]);
+  assert.deepEqual(files.sort(), ["A\t.gitattributes", "A\tp.plan", "D\tgone.js", "M\tstaged.js", "R100\told.js\tnew.js"]);
   assert.equal(git("status", "--porcelain", "--", "new.js", "old.js", "gone.js", "staged.js"), "");
 });
 

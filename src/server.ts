@@ -57,6 +57,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
     if (!trusted(req)) return json(res, { error: "Ogidoc only takes requests from its own page on this machine." }, 403);
     try {
       if (url.pathname === "/api/state") return json(res, session.snapshot());
+      if (url.pathname === "/api/map") return json(res, session.map());
       if (url.pathname === "/api/events") {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
         res.write(`data: ${JSON.stringify({ state: session.snapshot() })}\n\n`);

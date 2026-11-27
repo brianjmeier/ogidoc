@@ -82,7 +82,7 @@ export function planStore(cwd: string, name: string) {
     planPath,
     name,
     // Written only by the editor, never the agent's drift.
-    ownFiles: [planPath, shared],
+    ownFiles: [planPath, shared, join(root, ".gitattributes")],
     displayPath: relative(root, planPath),
 
     load(): Loaded {

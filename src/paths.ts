@@ -19,5 +19,9 @@ export const AGENT_DIR = join(ROOT, "agent");
 export const DEMO_DIR = join(ROOT, "demo");
 // Ogimap: its editor and its demo ship as files beside the compiled code.
 export const MAP_DIR = join(ROOT, "labs", "ogimap");
+// The ogidoc command itself, as this copy runs it: compiled in the package, the source in
+// a checkout. Git calls it back to merge the map.
+const HERE = fileURLToPath(import.meta.url);
+export const CLI = HERE.includes(`${join("dist", "src")}`) ? join(ROOT, "dist", "bin", "ogidoc.js") : join(ROOT, "bin", "ogidoc.ts");
 // Built by `npm run build`.
 export const WEB_DIR = join(ROOT, "dist", "web");

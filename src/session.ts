@@ -8,8 +8,14 @@ import { planStore, type Loaded, type PlanStore, type SessionState } from "./pla
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent } from "./agents.ts";
-import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, Reply, Settings, Snapshot, Thread } from "./types.ts";
-import { driftOf, stamped } from "./map.ts";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, MapView, Reply, Settings, Snapshot, Thread } from "./types.ts";
+import { driftOf, mapView, stamped } from "./map.ts";
+import { MAP_FILE } from "./map-store.ts";
+import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
+import type { Skeleton } from "./scan.ts";
+import { CLI } from "./paths.ts";
 
 interface EditInput {
   text?: string;
@@ -25,7 +31,27 @@ export function openSession({ cwd, name, agent, clock, commit = true }: { cwd: s
   const store = planStore(cwd, name);
   const saved = store.load();
   const log = turnLog({ cwd: store.cwd, ownFiles: store.ownFiles, commit, saved: saved.log });
-  return new Session({ store, saved, log, agent, clock });
+  const io = repoIO(store.cwd);
+  if (log.commits) versionTheMap(store.cwd, io);
+  const scanner: Scanner = { scan: () => scanRepo(basename(store.cwd), io), head: () => headOf(io) };
+  return new Session({ store, saved, log, agent, clock, scanner });
+}
+
+// Reads the code into the skeleton of the map, and says which commit it read.
+export interface Scanner {
+  scan(): Skeleton | null;
+  head(): string;
+}
+
+// A checkout the editor commits to versions its map like code: git merges the map box by
+// box, through \`ogidoc merge-map\`.
+function versionTheMap(root: string, io: RepoIO) {
+  io.git(["config", "merge.ogidoc.name", "Ogidoc map, merged box by box"]);
+  io.git(["config", "merge.ogidoc.driver", `'${process.execPath}' '${CLI}' merge-map %O %A %B`]);
+  const rule = `${MAP_FILE} merge=ogidoc`;
+  const path = join(root, ".gitattributes");
+  const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
+  if (!lines.includes(rule)) writeFileSync(path, [...lines.filter(Boolean), rule].join("\n") + "\n");
 }
 
 // One plan file and its boxes, shared by a person and an agent who take turns.
@@ -43,11 +69,20 @@ export class Session extends EventEmitter {
   finished = false;
   activity: string[] = [];
   private s: SessionState;
+  private scanner: Scanner;
+  // The code as the last scan read it, and the commit it read.
+  private skeleton: Skeleton | null = null;
+  private scannedAt = "";
+  private shown: { key: unknown[]; view: MapView } | null = null;
+  // Goes up whenever the map changes, so the browser knows to fetch it again.
+  private mapRev = 0;
   // Boxes whose code changed since they last said what it does, as of the last look.
   private drifted: string[] = [];
 
-  constructor({ store, saved, log, agent, clock }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; clock: Clock }) {
+  constructor({ store, saved, log, agent, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; clock: Clock; scanner?: Scanner }) {
     super();
+    this.scanner = scanner ?? { scan: () => null, head: () => "" };
+    this.rescan(true);
     this.store = store;
     this.log = log;
     this.agent = agent;
@@ -83,7 +118,31 @@ export class Session extends EventEmitter {
       finished: this.finished,
       canUndo: history.length > 0 && !this.working,
       drifted: this.drifted,
+      mapRev: this.mapRev,
     };
+  }
+
+  // The whole map: the scan of the code with the boxes on it. Too big to send with every
+  // keystroke, so the browser fetches it when \`mapRev\` moves.
+  map(): MapView {
+    const key = [this.skeleton, this.s.boxes, this.s.edges];
+    if (!this.shown || this.shown.key.some((k, i) => k !== key[i])) this.shown = { key, view: mapView(this.skeleton, this.s.boxes, this.s.edges) };
+    return this.shown.view;
+  }
+
+  // The boxes only the scan knows, which an edit or a reply turns into boxes of the map.
+  private frame(): Box[] {
+    const own = new Set(this.s.boxes.map((b) => b.id));
+    return this.map().boxes.filter((b) => !own.has(b.id));
+  }
+
+  // Scan again when the checkout moved to another commit, or when asked.
+  private rescan(always = false) {
+    const head = this.scanner.head();
+    if (!always && head === this.scannedAt) return;
+    this.skeleton = this.scanner.scan();
+    this.scannedAt = head;
+    this.mapRev++;
   }
 
   // Each box remembers the hash of the files it points at; one that hashes differently now
@@ -132,6 +191,7 @@ export class Session extends EventEmitter {
   }
 
   private setPlan(p: Plan) {
+    if (p.boxes !== this.s.boxes || p.edges !== this.s.edges) this.mapRev++;
     this.s = { ...this.s, ...p };
   }
 
@@ -184,7 +244,7 @@ export class Session extends EventEmitter {
   editMap({ edits }: { edits: Edit[] }) {
     this.guard();
     if (!Array.isArray(edits)) throw new Error("Send the map edits as a list.");
-    this.setPlan(plan.editMap(this.plan, edits));
+    this.setPlan(plan.editMap(this.plan, edits, this.frame()));
     this.changed();
   }
 
@@ -224,7 +284,7 @@ export class Session extends EventEmitter {
       if (signal.aborted) throw new Error("The turn was stopped.");
       try {
         const reply = parseReply(out);
-        const next = plan.fromReply(this.plan, reply, turn);
+        const next = plan.fromReply(this.plan, reply, turn, this.frame());
         const why = plan.whyNotATurn(this.plan, reply, next);
         if (!why) return { reply, next };
         problem = why;
@@ -255,8 +315,11 @@ export class Session extends EventEmitter {
     this.guard("It's already the agent's turn.");
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     this.setPlan(plan.agree(this.plan));
+    this.rescan();
     const s = this.s;
-    const diff = plan.humanDiff(s.base, this.plan);
+    const view = this.map();
+    // Boxes the scan found were on the map before anyone said anything about them.
+    const diff = plan.humanDiff(s.base, this.plan, view.boxes.filter((b) => b.scan));
     const changedFiles = this.log.drift();
     this.drifted = this.driftNow();
     const prompt = buildPrompt({
@@ -267,8 +330,8 @@ export class Session extends EventEmitter {
       planPath: this.store.displayPath,
       cwd: this.store.cwd,
       lines: s.lines,
-      boxes: s.boxes,
-      edges: s.edges,
+      boxes: view.boxes,
+      edges: view.edges,
       seeds: this.seeds(diff, changedFiles),
       drifted: this.drifted,
       threads: s.threads,
@@ -299,6 +362,7 @@ export class Session extends EventEmitter {
       const vouched = next.plan.boxes.filter((b) => said.has(b.id) || !this.drifted.includes(b.id));
       this.setPlan({ ...next.plan, boxes: stamped(next.plan.boxes, vouched.map((b) => b.id), this.hashOf(vouched)) });
       this.drifted = this.driftNow();
+      this.rescan(true);
       ({ animation, boxChanges } = next);
       this.s = { ...this.s, symbols: reply.symbols, suggestions: reply.suggestions, base: plan.baseOf(next.plan) };
       this.save();

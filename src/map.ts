@@ -6,7 +6,7 @@
 // named path through the map, like "follow a link", that the editor can play.
 
 import { diffLines } from "./shared/diff.ts";
-import type { Box, BoxEdge, CodeRef, Edit, Pin } from "./types.ts";
+import type { Box, BoxEdge, BoxScan, CodeRef, Edit, MapView, Pin } from "./types.ts";
 export type { CodeRef, Pin };
 import type { SeamName, Skeleton, Smell } from "./scan.ts";
 import type { DescribeBrief, Described } from "./describe.ts";
@@ -43,6 +43,7 @@ export interface MapNode {
   seamSize?: number;
   usedBy?: number;
   uses?: number;
+  scanKind?: "module" | "file" | "external";
   // Said by an agent when it described the box: tangles only reading the code shows
   // (an `if` for one value, a parameter for one caller, a copy, a call order to know).
   pins?: Pin[];
@@ -110,18 +111,36 @@ export function checkMap(raw: unknown): FlowMap {
 
 /** Boxes and their arrows as a map, for the functions here. */
 export function mapOf(title: string, boxes: Box[], edges: BoxEdge[]): FlowMap {
-  const nodes = boxes.map(({ id, name, parent, lines, status, code, seen, pins }): MapNode => ({
+  const nodes = boxes.map(({ id, name, parent, lines, status, code, seen, pins, scan }): MapNode => ({
     id,
     name,
     parent,
-    kind: "step",
+    kind: scan?.kind === "external" ? "external" : "step",
     pseudo: lines.map((l) => l.text),
     status,
     ...(code?.length && { code }),
     ...(seen && { seen }),
     ...(pins?.length && { pins }),
+    ...(scan && { size: scan.size, files: scan.files, tests: scan.tests, seam: scan.seam, seamSize: scan.seamSize, usedBy: scan.usedBy, uses: scan.uses, scanKind: scan.kind }),
   }));
   return { title, nodes, edges: edges.map((e) => ({ ...e, kind: e.kind ?? "call" })), flows: [] };
+}
+
+/** The whole map as the person sees it: the scan of the code, with the boxes someone said
+ *  something about on it. A box the scan doesn't know sits where its code is. */
+export function mapView(sk: Skeleton | null, boxes: Box[], edges: BoxEdge[]): MapView {
+  const m = overlay(sk, mapOf("map", boxes, edges));
+  const own = new Map(boxes.map((b) => [b.id, b]));
+  return {
+    title: m.title,
+    boxes: m.nodes.map((n): Box => {
+      const { scan: _, ...b } = own.get(n.id) ?? { id: n.id, name: n.name, parent: null, lines: [], status: "built" as const, ...(n.code && { code: n.code }) };
+      const scan: BoxScan | null = n.size === undefined ? null : { kind: n.scanKind ?? "module", size: n.size, files: n.files ?? 0, tests: n.tests ?? 0, seam: n.seam ?? [], seamSize: n.seamSize ?? 0, usedBy: n.usedBy ?? 0, uses: n.uses ?? 0 };
+      return { ...b, parent: n.parent ?? null, ...(scan && { scan }) };
+    }),
+    edges: m.edges.map(({ from, to, label, kind, symbols }): BoxEdge => ({ from, to, ...(label && { label }), kind: kind === "import" ? "import" : "call", ...(symbols && { symbols }) })),
+    smells: m.smells ?? [],
+  };
 }
 
 
@@ -242,6 +261,7 @@ export function overlay(sk: Skeleton | null, map: FlowMap | null): FlowMap {
       seamSize: s.seamSize,
       usedBy: s.usedBy,
       uses: s.uses,
+      scanKind: s.kind,
     };
   });
   const placed = new Set(nodes.map((n) => n.id));

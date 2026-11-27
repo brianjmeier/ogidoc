@@ -33,7 +33,7 @@ export function mapStore(root: string) {
 
     /** Write this session's boxes, keeping what others saved since it last read. */
     save(boxes: Box[], edges: BoxEdge[]) {
-      const mine = mapOf(lastRead.title, boxes, edges);
+      const mine = mapOf(lastRead.title, boxes.map(({ scan, ...b }) => b), edges.filter((e) => e.kind === "call"));
       const merged = mergeMaps(lastRead, mine, read());
       const text = JSON.stringify(merged, null, 1) + "\n";
       if (text !== written || !existsSync(path)) {
