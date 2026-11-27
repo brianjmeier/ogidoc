@@ -188,22 +188,26 @@
         ],
         "boxes": [
           {
+            "id": "click",
             "name": "click",
             "lines": [
               "put turn's mark there, swap turn",
               "a taken cell does nothing"
             ],
             "status": "built",
-            "uses": []
+            "uses": [],
+            "code": [{ "file": "src/game.js", "symbol": "click" }]
           },
           {
+            "id": "winner",
             "name": "winner",
             "lines": [
               "three in a row, a column or a diagonal -> that mark",
               "X X X across the top -> X wins"
             ],
             "status": "built",
-            "uses": []
+            "uses": [],
+            "code": [{ "file": "src/winner.js", "symbol": "winner" }]
           }
         ],
         "suggestions": [
@@ -277,26 +281,7 @@
             "status": "built"
           }
         ],
-        "boxes": [
-          {
-            "name": "click",
-            "lines": [
-              "put turn's mark there, swap turn",
-              "a taken cell does nothing"
-            ],
-            "status": "built",
-            "uses": []
-          },
-          {
-            "name": "winner",
-            "lines": [
-              "three in a row, a column or a diagonal -> that mark",
-              "X X X across the top -> X wins"
-            ],
-            "status": "built",
-            "uses": []
-          }
-        ],
+        "boxes": [],
         "steps": [
           {
             "kind": "red-green",

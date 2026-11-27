@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { checkMap, mergeMaps, type FlowMap, type MapNode } from "./map.ts";
+import { checkMap, mapOf, mergeMaps, type FlowMap } from "./map.ts";
 import type { Box, BoxEdge, MapOnDisk } from "./types.ts";
 
 // The repo's map of abstractions, `.ogidoc/map.json`, shared in git by every session in
@@ -33,7 +33,7 @@ export function mapStore(root: string) {
 
     /** Write this session's boxes, keeping what others saved since it last read. */
     save(boxes: Box[], edges: BoxEdge[]) {
-      const mine = toFlowMap(lastRead.title, boxes, edges);
+      const mine = mapOf(lastRead.title, boxes, edges);
       const merged = mergeMaps(lastRead, mine, read());
       const text = JSON.stringify(merged, null, 1) + "\n";
       if (text !== written || !existsSync(path)) {
@@ -44,21 +44,6 @@ export function mapStore(root: string) {
       lastRead = merged;
     },
   };
-}
-
-function toFlowMap(title: string, boxes: Box[], edges: BoxEdge[]): FlowMap {
-  const nodes = boxes.map(({ id, name, parent, lines, status, code, seen, pins }): MapNode => ({
-    id,
-    name,
-    parent,
-    kind: "step",
-    pseudo: lines.map((l) => l.text),
-    status,
-    ...(code?.length && { code }),
-    ...(seen && { seen }),
-    ...(pins?.length && { pins }),
-  }));
-  return { title, nodes, edges: edges.map((e) => ({ ...e, kind: e.kind ?? "call" })), flows: [] };
 }
 
 function fromFlowMap(m: FlowMap): MapOnDisk {

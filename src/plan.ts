@@ -112,6 +112,8 @@ export function whyNotATurn(before: Plan, reply: Reply, after: { plan: Plan; box
   const kinds = reply.steps.map((s) => s.kind);
   if (kinds.lastIndexOf("red-green") > kinds.lastIndexOf("refactor")) return "The last red-green step has no refactor step after it.";
   const p = after.plan;
+  const lost = reply.boxes.filter((b) => b.status === "built" && !p.boxes.find((x) => x.id === b.id)?.code?.length).map((b) => b.id);
+  if (lost.length) return `${lost.join(", ")} ${lost.length > 1 ? "say they are" : "says it is"} built but not where the code is. Give every box its \`code\`.`;
   if (allBuilt(p)) return null;
   const ids = (x: Plan) => x.choices.map((c) => c.id).sort().join(" ");
   if (joinLines(before.lines) !== joinLines(p.lines) || ids(before) !== ids(p)) return null;
@@ -130,12 +132,15 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
   const ops = diffLines(oldLines.map((l) => l.text), newTexts);
   const ts = threads.fromAgent(threads.move(plan.threads, ops, oldLines.length), reply, turn);
 
-  // An agent's box is named by its id. What the reply doesn't say about it (where it sits,
-  // its code) stays as the map has it.
+  // The reply names only the boxes the agent made, changed or removed; every other box
+  // stays exactly as it was. What the reply leaves out of a box stays as the map has it.
   const oldBoxes = new Map(plan.boxes.map((b) => [b.id, b]));
+  const removed = new Set(reply.removed);
   const boxChanges: BoxChanges = {};
-  const boxes = reply.boxes.map((rb): Box => {
-    const old = oldBoxes.get(rb.name);
+  const touched = new Map<string, Box>();
+  for (const rb of reply.boxes) {
+    if (removed.has(rb.id)) continue;
+    const old = oldBoxes.get(rb.id);
     const oldL = old ? old.lines : [];
     const bops = diffLines(oldL.map((l) => l.text), rb.lines);
     const lines: Line[] = new Array(rb.lines.length);
@@ -143,14 +148,20 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
       if (o.op === "eq") lines[o.b] = { ...oldL[o.a], chg: false };
       else if (o.op !== "del") lines[o.b] = { text: rb.lines[o.b], by: "a", chg: true };
     }
-    if (!old) boxChanges[rb.name] = "new";
-    else if (bops.some((o) => o.op !== "eq")) boxChanges[rb.name] = "changed";
-    return { ...old, id: rb.name, name: old?.name ?? rb.name, parent: old?.parent ?? null, lines, status: rb.status };
-  });
+    if (!old) boxChanges[rb.id] = "new";
+    else if (bops.some((o) => o.op !== "eq")) boxChanges[rb.id] = "changed";
+    const code = rb.code ?? old?.code;
+    touched.set(rb.id, { ...old, id: rb.id, name: rb.name, parent: rb.parent === undefined ? (old?.parent ?? null) : rb.parent, lines, status: rb.status, ...(code && { code }) });
+  }
+  const kept = plan.boxes.filter((b) => !removed.has(b.id)).map((b) => touched.get(b.id) ?? b);
+  const boxes = [...kept, ...[...touched.values()].filter((b) => !oldBoxes.has(b.id))];
+  // A box whose parent is gone, or was never there, sits at the top.
   const ids = new Set(boxes.map((b) => b.id));
+  for (const [k, b] of boxes.entries()) if (b.parent !== null && (!ids.has(b.parent) || b.parent === b.id)) boxes[k] = { ...b, parent: null };
+  const said = new Set(reply.boxes.filter((rb) => rb.uses).map((rb) => rb.id));
   const edges: BoxEdge[] = [
-    ...plan.edges.filter((e) => e.kind !== "call" && ids.has(e.from) && ids.has(e.to)),
-    ...reply.boxes.flatMap((rb) => rb.uses.filter((u) => ids.has(u) && u !== rb.name).map((to): BoxEdge => ({ from: rb.name, to, kind: "call" }))),
+    ...plan.edges.filter((e) => ids.has(e.from) && ids.has(e.to) && !(e.kind === "call" && said.has(e.from))),
+    ...reply.boxes.flatMap((rb) => (rb.uses ?? []).filter((u) => ids.has(u) && u !== rb.id && ids.has(rb.id)).map((to): BoxEdge => ({ from: rb.id, to, kind: "call" }))),
   ];
 
   // A line that left the plan and shows up in a box was moved there.

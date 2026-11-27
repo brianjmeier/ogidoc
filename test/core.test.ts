@@ -62,6 +62,8 @@ test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
     lines: [{ text: "weekly reflection", by: "h", kind: null, status: null }],
     boxes: [],
     edges: [],
+    seeds: [],
+    drifted: [],
     threads: [{ id: "t1", line: 0, by: "a", resolved: false, messages: [{ by: "a", text: "whose timezone?", turn: 1 }, { by: "h", text: "mine", turn: 1 }] }],
     choices: [{ id: "c1", line: 0, current: 1, options: [[{ text: "weekly reflection" }], [{ text: "daily reflection" }]] }],
     humanDiff: { lines: [{ op: "add", text: "weekly reflection" }], boxes: [] },
@@ -99,7 +101,8 @@ test("parseReply takes the last JSON block and normalizes it", () => {
   assert.deepEqual(r.replies, [{ thread: "t1", text: "ok", resolve: true }]);
   assert.equal(r.plan[1].text, "  plain");
   assert.equal(r.plan[2].status, null);
-  assert.equal(r.boxes[0].name, "summarizeweek");
+  assert.equal(r.boxes[0].id, "summarizeweek", "an id keeps only what a path or a name can have");
+  assert.equal(r.boxes[0].name, "summarize week!");
   assert.equal(r.boxes[0].status, "stale");
   assert.deepEqual(r.boxes[0].uses, ["a"]);
   assert.equal(r.checks[0].ok, false);

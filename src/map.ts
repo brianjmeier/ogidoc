@@ -6,7 +6,7 @@
 // named path through the map, like "follow a link", that the editor can play.
 
 import { diffLines } from "./shared/diff.ts";
-import type { CodeRef, Edit, Pin } from "./types.ts";
+import type { Box, BoxEdge, CodeRef, Edit, Pin } from "./types.ts";
 export type { CodeRef, Pin };
 import type { SeamName, Skeleton, Smell } from "./scan.ts";
 import type { DescribeBrief, Described } from "./describe.ts";
@@ -107,6 +107,23 @@ export function checkMap(raw: unknown): FlowMap {
   m.title ||= "map";
   return m;
 }
+
+/** Boxes and their arrows as a map, for the functions here. */
+export function mapOf(title: string, boxes: Box[], edges: BoxEdge[]): FlowMap {
+  const nodes = boxes.map(({ id, name, parent, lines, status, code, seen, pins }): MapNode => ({
+    id,
+    name,
+    parent,
+    kind: "step",
+    pseudo: lines.map((l) => l.text),
+    status,
+    ...(code?.length && { code }),
+    ...(seen && { seen }),
+    ...(pins?.length && { pins }),
+  }));
+  return { title, nodes, edges: edges.map((e) => ({ ...e, kind: e.kind ?? "call" })), flows: [] };
+}
+
 
 // ---------- regions: the map grows task by task ----------
 //
@@ -357,27 +374,31 @@ export function withDescription(map: FlowMap, id: string | null, d: Described): 
   return { map: next, ids };
 }
 
-/** Nodes whose code changed since the map last said what it does: a file it saw hashes
- *  differently now, or is gone (`hashOf` answers null). A node never stamped is not drift. */
-export function driftOf(map: FlowMap, hashOf: (file: string) => string | null): string[] {
-  return map.nodes.filter((n) => n.seen && Object.entries(n.seen).some(([file, hash]) => hashOf(file) !== hash)).map((n) => n.id);
+/** Anything on the map that points at code and remembers what the code was. */
+interface Anchored {
+  id: string;
+  code?: CodeRef[];
+  seen?: Record<string, string>;
 }
 
-/** The map with these nodes stamped as true to the code as it is now. */
-export function stamped(map: FlowMap, ids: Iterable<string>, hashOf: (file: string) => string | null): FlowMap {
+/** Boxes whose code changed since they last said what they do: a file they saw hashes
+ *  differently now, or is gone (`hashOf` answers null). A box never stamped is not drift. */
+export function driftOf(nodes: Anchored[], hashOf: (file: string) => string | null): string[] {
+  return nodes.filter((n) => n.seen && Object.entries(n.seen).some(([file, hash]) => hashOf(file) !== hash)).map((n) => n.id);
+}
+
+/** These boxes stamped as true to the code as it is now. */
+export function stamped<N extends Anchored>(nodes: N[], ids: Iterable<string>, hashOf: (file: string) => string | null): N[] {
   const fresh = new Set(ids);
-  return {
-    ...map,
-    nodes: map.nodes.map((n) => {
-      if (!fresh.has(n.id) || !n.code?.length) return n;
-      const seen: Record<string, string> = {};
-      for (const c of n.code) {
-        const hash = hashOf(c.file);
-        if (hash !== null) seen[c.file] = hash;
-      }
-      return Object.keys(seen).length ? { ...n, seen } : n;
-    }),
-  };
+  return nodes.map((n) => {
+    if (!fresh.has(n.id) || !n.code?.length) return n;
+    const seen: Record<string, string> = {};
+    for (const c of n.code) {
+      const hash = hashOf(c.file);
+      if (hash !== null) seen[c.file] = hash;
+    }
+    return Object.keys(seen).length ? { ...n, seen } : n;
+  });
 }
 
 // ---------- three-way merge: a branch's map onto main's, as git merges code ----------

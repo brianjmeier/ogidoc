@@ -8,7 +8,8 @@ import { planStore, type Loaded, type PlanStore, type SessionState } from "./pla
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent } from "./agents.ts";
-import type { AnimationOp, BoxChanges, Reply, Settings, Snapshot, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, HumanDiff, Reply, Settings, Snapshot, Thread } from "./types.ts";
+import { driftOf, stamped } from "./map.ts";
 
 interface EditInput {
   text?: string;
@@ -42,6 +43,8 @@ export class Session extends EventEmitter {
   finished = false;
   activity: string[] = [];
   private s: SessionState;
+  // Boxes whose code changed since they last said what it does, as of the last look.
+  private drifted: string[] = [];
 
   constructor({ store, saved, log, agent, clock }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; clock: Clock }) {
     super();
@@ -52,6 +55,7 @@ export class Session extends EventEmitter {
     this.s = saved.state;
     // Someone may have edited the files in another editor; carry what we know across.
     this.setPlan(plan.fromFiles(this.plan, saved.planText, saved.map));
+    this.drifted = this.driftNow();
   }
 
   get name() {
@@ -78,7 +82,29 @@ export class Session extends EventEmitter {
       done: plan.isDone(this.plan, s.last),
       finished: this.finished,
       canUndo: history.length > 0 && !this.working,
+      drifted: this.drifted,
     };
+  }
+
+  // Each box remembers the hash of the files it points at; one that hashes differently now
+  // says what the code did before someone changed it.
+  private hashOf(boxes: Box[]): (file: string) => string | null {
+    const hashes = this.log.hashes([...new Set(boxes.flatMap((b) => [...(b.code ?? []).map((c) => c.file), ...Object.keys(b.seen ?? {})]))]);
+    return (file) => hashes.get(file) ?? null;
+  }
+
+  // The boxes a turn is about: the ones the person changed, the ones not built yet, and the
+  // ones on code that changed, by drift or by the last turn.
+  private seeds(diff: HumanDiff, changedFiles: string[]): string[] {
+    const files = new Set([...changedFiles, ...(this.s.last?.files ?? []).map((f) => f.path)]);
+    return this.s.boxes
+      .filter((b) => diff.boxes.some((d) => d.id === b.id) || b.status !== "built" || this.drifted.includes(b.id) || b.code?.some((c) => files.has(c.file)))
+      .map((b) => b.id);
+  }
+
+  private driftNow(): string[] {
+    const seen = this.s.boxes.filter((b) => b.seen);
+    return seen.length ? driftOf(seen, this.hashOf(seen)) : [];
   }
 
   // The model and effort the next agent turn runs with; empty means the CLI's default.
@@ -221,6 +247,9 @@ export class Session extends EventEmitter {
     if (text !== undefined || boxes || accepted) this.edit({ text, boxes, accepted });
     this.setPlan(plan.agree(this.plan));
     const s = this.s;
+    const diff = plan.humanDiff(s.base, this.plan);
+    const changedFiles = this.log.drift();
+    this.drifted = this.driftNow();
     const prompt = buildPrompt({
       skill: readAgentFile("SKILL.md"),
       rules: this.store.rules(),
@@ -231,10 +260,12 @@ export class Session extends EventEmitter {
       lines: s.lines,
       boxes: s.boxes,
       edges: s.edges,
+      seeds: this.seeds(diff, changedFiles),
+      drifted: this.drifted,
       threads: s.threads,
       choices: s.choices,
-      humanDiff: plan.humanDiff(s.base, this.plan),
-      drift: this.log.drift(),
+      humanDiff: diff,
+      drift: changedFiles.filter((f) => !s.boxes.some((b) => b.code?.some((c) => c.file === f))),
       last: s.last,
     });
     const mark = this.log.begin();
@@ -252,7 +283,13 @@ export class Session extends EventEmitter {
     try {
       let next: ReturnType<typeof plan.fromReply>;
       ({ reply, next } = await this.runTurn(prompt, s.turn));
-      this.setPlan(next.plan);
+      // A turn vouches for the code as it leaves it: what it said about a box, and every box
+      // it left alone. Only a box whose code had already changed before the turn, and that
+      // the turn didn't bring back, still says what the code used to do.
+      const said = new Set(reply.boxes.map((b) => b.id));
+      const vouched = next.plan.boxes.filter((b) => said.has(b.id) || !this.drifted.includes(b.id));
+      this.setPlan({ ...next.plan, boxes: stamped(next.plan.boxes, vouched.map((b) => b.id), this.hashOf(vouched)) });
+      this.drifted = this.driftNow();
       ({ animation, boxChanges } = next);
       this.s = { ...this.s, symbols: reply.symbols, suggestions: reply.suggestions, base: plan.baseOf(next.plan) };
       this.save();

@@ -128,6 +128,12 @@ decided things stop getting in the way. You decide when a piece is ready. The pe
 can open a box and edit inside it, and that is how they disagree with an abstraction.
 Treat an edited box like any other change: rebuild what it now says.
 
+Boxes belong to the repository, not to one plan: every session sees them, and they outlive
+the plan that made them. Put a new box where it lives, inside the box that holds its code
+(`parent`), and point it at that code (`code`), so the person can open it and the editor
+can tell when the code under it changes. When someone changes that code outside a turn,
+the box is marked as changed: read the code and bring the box back to what it does.
+
 When a line is about something that has a name in the codebase, use that name, so the
 editor can link it to the code.
 

@@ -217,7 +217,7 @@ const hasherFor = (nodes: MapNode[]) => {
   const hashes = hashesOf([...new Set(nodes.flatMap((n) => [...(n.code ?? []).map((c) => c.file), ...Object.keys(n.seen ?? {})]))]);
   return (file: string) => hashes.get(file) ?? null;
 };
-const drift = (): string[] => (state.map ? driftOf(state.map, hasherFor(state.map.nodes.filter((n) => n.seen))) : []);
+const drift = (): string[] => (state.map ? driftOf(state.map.nodes, hasherFor(state.map.nodes.filter((n) => n.seen))) : []);
 
 // The map back to disk: only what the scan can't find again. Returns the running map.
 function saveMap(map: FlowMap): FlowMap | null {
@@ -241,7 +241,7 @@ function restamp(before: FlowMap | null, after: FlowMap, alsoFresh: Iterable<str
     return old?.seen && !fresh.has(n.id) ? { ...n, seen: old.seen } : n;
   });
   const map = { ...after, nodes: kept };
-  return stamped(map, fresh, hasherFor(kept.filter((n) => fresh.has(n.id))));
+  return { ...map, nodes: stamped(map.nodes, fresh, hasherFor(kept.filter((n) => fresh.has(n.id)))) };
 }
 
 // A checkout Ogimap runs in versions its map like code: the map rebases and merges by
@@ -408,7 +408,7 @@ async function describe(id: string | null) {
     const d = parseDescribed(await reader.run({ prompt: describePrompt(brief), cwd: project, onActivity: activity }));
     putBack(before);
     const { map, ids } = withDescription(state.map!, id, d);
-    state.map = saveMap(stamped(map, ids, hasherFor(map.nodes.filter((n) => ids.includes(n.id)))));
+    state.map = saveMap({ ...map, nodes: stamped(map.nodes, ids, hasherFor(map.nodes.filter((n) => ids.includes(n.id)))) });
     return { summary: d.summary || `described ${id ?? "the top of the map"}`, changed: [] };
   });
   state.describing = null;

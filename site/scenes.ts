@@ -21,7 +21,7 @@ export type Frame =
   | { kind: "model"; plan: Plan; model: string }
   | { kind: "turn"; plan: Plan; animation: AnimationOp[]; boxChanges: BoxChanges; last: LastTurn };
 
-const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], choices: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
+const NO_REPLY: Omit<Reply, "plan"> = { boxes: [], removed: [], choices: [], replies: [], symbols: [], suggestions: [], steps: [], files: [], checks: [], summary: "" };
 
 export function frames(start: Plan, beats: Beat[]): Frame[] {
   const out: Frame[] = [];
@@ -121,7 +121,7 @@ export const abstractions = {
     {
       agent: {
         plan: builtReply([...played, "  winner(board) -> see winner", "  game over when winner(board) or board is full"]),
-        boxes: [{ name: "winner", lines: winnerRules, status: "built", uses: [] }],
+        boxes: [{ id: "winner", name: "winner", lines: winnerRules, status: "built", code: [{ file: "src/game.ts", symbol: "winner" }] }],
       },
       last: {
         summary: "The game ends on a win or a full board, and the winning lines moved into winner",

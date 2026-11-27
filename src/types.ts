@@ -130,7 +130,11 @@ export interface LastTurn {
 
 export interface Reply {
   plan: { text: string; kind: Kind | null; status: Status | null }[];
-  boxes: { name: string; lines: string[]; status: Status; uses: string[] }[];
+  // Only the boxes the agent made or changed this turn. What it leaves out of a box it
+  // names (`parent`, `uses`, `code`) stays as the map has it.
+  boxes: { id: string; name: string; parent?: string | null; lines: string[]; status: Status; uses?: string[]; code?: CodeRef[] }[];
+  // Boxes the agent took off the map.
+  removed: string[];
   choices: { id?: string; line: number; options: string[][] }[];
   replies: { thread: string; text: string; resolve: boolean }[];
   symbols: Symbol[];
@@ -190,6 +194,8 @@ export interface Snapshot {
   // The plan was done and the person removed it.
   finished: boolean;
   canUndo: boolean;
+  // Boxes whose code changed since they last said what it does.
+  drifted: string[];
 }
 
 /** What a person did to the map. A box added in the same hand-over is named by its

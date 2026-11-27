@@ -130,12 +130,12 @@ test("a region that points at a parent nowhere in the map is refused", () => {
 
 test("nodes whose code changed are drift, and the index says so", () => {
   const hashes: Record<string, string> = { "src/cart.js": "c1", "src/pay.js": "p1" };
-  const seenNow = stamped(tiny(), tiny().nodes.map((n) => n.id), (f) => hashes[f] ?? null);
+  const seenNow = { ...tiny(), nodes: stamped(tiny().nodes, tiny().nodes.map((n) => n.id), (f) => hashes[f] ?? null) };
   assert.deepEqual(seenNow.nodes.find((n) => n.id === "cart.add")!.seen, { "src/cart.js": "c1" });
   assert.equal(seenNow.nodes.find((n) => n.id === "cart")!.seen, undefined);
-  assert.deepEqual(driftOf(seenNow, (f) => hashes[f] ?? null), []);
+  assert.deepEqual(driftOf(seenNow.nodes, (f) => hashes[f] ?? null), []);
   hashes["src/cart.js"] = "c2";
-  const drift = driftOf(seenNow, (f) => hashes[f] ?? null);
+  const drift = driftOf(seenNow.nodes, (f) => hashes[f] ?? null);
   assert.deepEqual(drift, ["cart.add", "cart.total"]);
   const index = indexOf(tiny(), drift);
   assert.match(index, /- cart\.add \(in cart\): push item \[src\/cart\.js\] — code changed since mapped/);
@@ -155,7 +155,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 test("three-way: each side's changes land, both-changed keeps ours unstamped, deletes and parents carry", () => {
-  const base = stamped(tiny(), tiny().nodes.map((n) => n.id), () => "h0");
+  const base = { ...tiny(), nodes: stamped(tiny().nodes, tiny().nodes.map((n) => n.id), () => "h0") };
   const ours = structuredClone(base);
   ours.nodes.find((n) => n.id === "cart.add")!.pseudo = ["push item, merge duplicates"];
   ours.nodes.find((n) => n.id === "pay.charge")!.pseudo = ["ours: stripe.charge(total, idempotent)"];

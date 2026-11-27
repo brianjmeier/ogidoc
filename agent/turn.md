@@ -9,7 +9,7 @@ It is your turn in an Ogidoc session. The skill below explains what that means.
 # Where things stand
 
 This is turn {{turn}} of the Ogidoc session `{{session}}`. The plan file is `{{planPath}}`, and you work in `{{cwd}}`.
-Don't edit the plan file or the box files yourself. Return them in your reply and the
+Don't edit the plan file or the map file yourself. Return them in your reply and the
 editor will write them. Edit the code directly, run the tests, and leave the code in a
 state you would commit. The editor commits your turn when you finish.
 
@@ -18,9 +18,12 @@ The plan, one entry per line, as you will return it. `by` says who last wrote th
 
 {{plan}}
 
-The boxes:
+The map: the boxes this repository's abstractions live in, from every session. `id` is
+how you name a box in your reply, `parent` the box it sits inside, `uses` the boxes it
+calls, `code` where it lives. `codeChanged` means someone changed that code since the box
+last said what it does:
 
-{{boxes}}
+{{map}}
 
 Comments the person left on the plan. Line numbers count from 0 in the plan above:
 
@@ -49,7 +52,8 @@ Nothing in it is optional. Use empty arrays when there is nothing to say.
   "plan": [{ "text": "the line, with its indentation", "kind": "proposal | example | null", "status": "built | stale | blocked | null" }],
   "choices": [{ "id": "c1", "line": 3, "options": [["your pick, as it is in the plan"], ["another way", "  can be a block"]] }],
   "replies": [{ "thread": "t1", "text": "your reply in that thread, or empty", "resolve": true }],
-  "boxes": [{ "name": "summarizeWeek", "lines": ["settled line", "another"], "status": "built | stale | blocked", "uses": ["otherBoxName"] }],
+  "boxes": [{ "id": "summarizeWeek", "name": "summarizeWeek", "parent": "the id of the box it sits in, or null", "lines": ["settled line", "another"], "status": "built | stale | blocked", "uses": ["otherBoxId"], "code": [{ "file": "src/summarize.ts", "line": 12, "symbol": "summarizeWeek" }] }],
+  "removed": ["the id of a box you took off the map"],
   "symbols": [{ "name": "a real name from the codebase used in the plan", "where": "path/to/file.ts:12" }],
   "suggestions": ["a whole line the person is likely to write next, with its indentation"],
   "steps": [{ "kind": "red-green | refactor | stop | done", "what": "a few words" }],
@@ -60,8 +64,12 @@ Nothing in it is optional. Use empty arrays when there is nothing to say.
 ```
 
 `plan` is the whole plan after your turn, every line in order, blank lines included
-with an empty `text`. `boxes` is every box after your turn, not only the ones you
-touched. `status` is `null` for blank lines and proposals.
+with an empty `text`. `status` is `null` for blank lines and proposals.
+
+`boxes` holds only the boxes you made or changed this turn, each whole: every line it
+has after your turn. A box you leave out stays as it is, so never resend the map. A new
+box's `id` is its name, or `file#name` for one function in a file. Every box says in
+`code` where it lives. `removed` lists the boxes you took off the map.
 
 `choices` is every choice still open after your turn. `line` counts from 0 in the
 `plan` you return, and the first option is exactly the lines the plan has there, one

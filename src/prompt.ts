@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./paths.ts";
 import { hasContent } from "./shared/diff.ts";
+import { landmarks, mapOf, regionIds } from "./map.ts";
 import type { Box, BoxEdge, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
 
 export function readAgentFile(name: string): string {
@@ -18,6 +19,11 @@ interface PromptInput {
   lines: Line[];
   boxes: Box[];
   edges: BoxEdge[];
+  // Boxes to show in full when the map is too big to show whole: what the person changed,
+  // what drifted, what isn't built.
+  seeds: string[];
+  // Boxes whose code changed since they last said what it does.
+  drifted: string[];
   threads: Thread[];
   choices: Choice[];
   humanDiff: HumanDiff;
@@ -25,7 +31,7 @@ interface PromptInput {
   last: LastTurn | null;
 }
 
-export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines, boxes, edges, threads, choices, humanDiff, drift, last }: PromptInput): string {
+export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines, boxes, edges, seeds, drifted, threads, choices, humanDiff, drift, last }: PromptInput): string {
   const vars: Record<string, string> = {
     skill: skill.replace(/^---[\s\S]*?---\n/, "").trim(),
     rules: rules.trim(),
@@ -34,18 +40,52 @@ export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines,
     planPath,
     cwd,
     plan: jsonLines(lines.map(({ text, kind, status, by }) => ({ text, kind: kind ?? null, status: status ?? null, by }))),
-    boxes: boxes.length
-      ? jsonLines(boxes.map(({ id, lines: body, status }) => ({ name: id, lines: body.map((l) => l.text), status, uses: edges.filter((e) => e.from === id && e.kind === "call").map((e) => e.to) })))
-      : "None yet.",
+    map: describeMap(boxes, edges, seeds, new Set(drifted)),
     comments: describeThreads(threads, lines),
     choices: describeChoices(choices),
     humanDiff: describeHumanDiff(humanDiff, turn),
-    drift: drift.length
-      ? `# Code that changed outside a turn\n\nThese files changed since your last turn, and you didn't change them:\n\n${drift.map((f) => `- ${f}`).join("\n")}`
-      : "",
+    drift: describeDrift(drift, drifted),
     last: last?.summary ? `# Your previous turn\n\n${last.summary}` : "",
   };
   return readAgentFile("turn.md").replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "").replace(/\n{3,}/g, "\n\n");
+}
+
+function describeDrift(files: string[], boxes: string[]): string {
+  if (!files.length && !boxes.length) return "";
+  const out = ["# Code that changed outside a turn"];
+  if (boxes.length) out.push(`The code under these boxes changed since they last said what it does, and you didn't change it. Read it, and bring each box's lines back to what the code does now:\n\n${boxes.map((b) => `- ${b}`).join("\n")}`);
+  if (files.length) out.push(`These files changed since your last turn, and you didn't change them:\n\n${files.map((f) => `- ${f}`).join("\n")}`);
+  return out.join("\n\n");
+}
+
+// The map grows past what one prompt can hold, so a big one shows the boxes this turn is
+// about in full, and only the names of the rest.
+const REGION_MAX = 150;
+
+function describeMap(boxes: Box[], edges: BoxEdge[], seeds: string[], drifted: Set<string>): string {
+  if (!boxes.length) return "None yet.";
+  let shown = boxes;
+  let rest = "";
+  if (boxes.length > REGION_MAX) {
+    const map = mapOf("map", boxes, edges);
+    const region = regionIds(map, [...seeds, ...drifted]);
+    const order = [...seeds.filter((id) => region.has(id)), ...region];
+    const keep = new Set(order.slice(0, REGION_MAX));
+    shown = boxes.filter((b) => keep.has(b.id));
+    const others = landmarks(map).filter((n) => !keep.has(n.id));
+    if (others.length) rest = `\n\nOther boxes on the map, by id and name. Their bodies aren't shown; leave them out of your reply unless you change them:\n\n${others.map((n) => `- ${n.id}${n.name !== n.id ? ` (${n.name})` : ""}`).join("\n")}`;
+  }
+  const calls = (id: string) => edges.filter((e) => e.from === id && e.kind === "call").map((e) => e.to);
+  return jsonLines(shown.map((b) => ({
+    id: b.id,
+    ...(b.name !== b.id && { name: b.name }),
+    parent: b.parent,
+    lines: b.lines.map((l) => l.text),
+    status: b.status,
+    uses: calls(b.id),
+    code: b.code ?? [],
+    ...(drifted.has(b.id) && { codeChanged: true }),
+  }))) + rest;
 }
 
 function jsonLines(items: unknown[]): string {
@@ -83,12 +123,14 @@ function describeHumanDiff(d: HumanDiff, turn: number): string {
   const fmt = (c: LineChange, pad: string) =>
     c.op === "mod" ? `${pad}- ${c.old}\n${pad}+ ${c.text}` : `${pad}${c.op === "add" ? "+" : "-"} ${c.text}`;
   const out = d.lines.map((c) => fmt(c, ""));
-  for (const b of d.boxes) out.push(`In box ${b.name}:`, ...b.lines.map((c) => fmt(c, "  ")));
+  for (const b of d.boxes) out.push(`In box ${b.id}:`, ...b.lines.map((c) => fmt(c, "  ")));
   if (!out.length) return "Nothing. They handed over without editing, which means: go on.";
   return "```diff\n" + out.join("\n") + "\n```";
 }
 
 const KINDS = new Set<unknown>(["proposal", "example"]);
+// A box's id is a path into the code (`src/links.js#shorten`) or a bare name.
+const boxId = (x: string) => x.trim().replace(/[^\w./#@-]/g, "");
 const STATUSES = new Set<unknown>(["built", "stale", "blocked"]);
 
 // Sent back with the turn's prompt when a reply didn't end the turn.
@@ -138,13 +180,22 @@ function normalize(o: any): Reply {
       };
     }),
     boxes: arr(o.boxes)
-      .filter((b) => b && str(b.name).trim())
+      .map((b) => b && { ...b, id: boxId(str(b.id) || str(b.name)) })
+      .filter((b) => b?.id)
       .map((b) => ({
-        name: str(b.name).trim().replace(/[^\w.-]/g, ""),
+        id: b.id,
+        name: str(b.name).trim() || b.id,
+        ...(b.parent === null || typeof b.parent === "string" ? { parent: b.parent && boxId(b.parent) } : {}),
         lines: arr(b.lines).map((l) => (typeof l === "string" ? l : str(l?.text))),
         status: STATUSES.has(b.status) ? b.status : "stale",
-        uses: arr(b.uses).filter((u) => typeof u === "string"),
+        ...(Array.isArray(b.uses) && { uses: arr(b.uses).filter((u) => typeof u === "string").map(boxId) }),
+        ...(Array.isArray(b.code) && {
+          code: arr(b.code)
+            .filter((c) => c && str(c.file))
+            .map((c) => ({ file: str(c.file), ...(Number.isInteger(c.line) && { line: c.line }), ...(str(c.symbol) && { symbol: str(c.symbol) }) })),
+        }),
       })),
+    removed: arr(o.removed).filter((r) => typeof r === "string").map(boxId),
     choices: arr(o.choices)
       .filter((c) => c && Number.isInteger(c.line) && Array.isArray(c.options))
       .map((c) => ({

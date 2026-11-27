@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Where each agent turn is recorded, so it can be undone and so changes made outside a
@@ -17,6 +17,8 @@ export interface TurnLog {
   revert(commit: string): void;
   // Code that changed since the last record without the editor or the agent.
   drift(): string[];
+  // Each file's git blob hash now, by its path from `cwd`; null for a file that is gone.
+  hashes(files: string[]): Map<string, string | null>;
   // What to keep across restarts, handed back as `saved` next time.
   saved(): LogState;
 }
@@ -35,8 +37,8 @@ export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ow
   // git names the root by its real path; `cwd` may run through a symlink (macOS /tmp
   // is /private/tmp), so own files are placed against the real path of `cwd`.
   const here = relative(root, realpathSync(cwd));
-  const log = gitLog(root, ownFiles.map((f) => join(here, relative(cwd, f))), saved);
-  return commit ? log : { ...noLog, revert: log.revert };
+  const log = { ...gitLog(root, ownFiles.map((f) => join(here, relative(cwd, f))), saved), hashes: (files: string[]) => hashFiles(root, here, files) };
+  return commit ? log : { ...noLog, revert: log.revert, hashes: log.hashes };
 }
 
 const noLog: TurnLog = {
@@ -45,10 +47,11 @@ const noLog: TurnLog = {
   record: () => null,
   revert() {},
   drift: () => [],
+  hashes: (files) => new Map(files.map((f) => [f, null])),
   saved: () => ({}),
 };
 
-function gitLog(root: string, own: string[], saved: LogState): TurnLog {
+function gitLog(root: string, own: string[], saved: LogState): Omit<TurnLog, "hashes"> {
   const isOwn = (p: string) => own.some((o) => p === o || p.startsWith(`${o}/`));
   let baseCommit = saved.baseCommit ?? head(root);
   // Work already in progress when we start isn't drift; only what changes after.
@@ -122,6 +125,13 @@ function status(root: string, paths?: string[]): Entry[] {
     out.push(e);
   }
   return out;
+}
+
+function hashFiles(root: string, here: string, files: string[]): Map<string, string | null> {
+  const present = [...new Set(files)].filter((f) => existsSync(join(root, here, f)) && statSync(join(root, here, f)).isFile());
+  const out = present.length ? run(root, ["hash-object", "--stdin-paths"], present.map((f) => join(here, f)).join("\n")).out.trim().split("\n") : [];
+  const hashOf = new Map(present.map((f, i) => [f, out[i] || null]));
+  return new Map(files.map((f) => [f, hashOf.get(f) ?? null]));
 }
 
 // Uncommitted paths mapped to a content hash, so a file that was already dirty but

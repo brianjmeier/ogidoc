@@ -51,10 +51,10 @@
         { "text": "  maybe a dismiss button that hides the card until next sunday", "kind": "proposal", "status": null }
       ],
       "boxes": [
-        { "name": "weekWindow", "lines": ["every sunday", "in the browser's timezone", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
-        { "name": "loadWeek", "lines": ["look at my week", "entries = journal_entries from the last 7 days", "prev = the 7 days before"], "status": "built", "uses": ["weekWindow"] },
-        { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 3", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
-        { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
+        { "id": "weekWindow", "name": "weekWindow", "lines": ["every sunday", "in the browser's timezone", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [], "code": [{ "file": "src/week.js", "line": 1, "symbol": "weekWindow" }] },
+        { "id": "loadWeek", "name": "loadWeek", "lines": ["look at my week", "entries = journal_entries from the last 7 days", "prev = the 7 days before"], "status": "built", "uses": ["weekWindow"], "code": [{ "file": "src/week.js" }] },
+        { "id": "summarizeWeek", "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 3", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"], "code": [{ "file": "src/summarize.js", "line": 1, "symbol": "topFamilies" }] },
+        { "id": "WeeklyCard", "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"], "code": [{ "file": "src/card.js" }] }
       ],
       "symbols": [
         { "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }
@@ -88,10 +88,7 @@
         { "text": "  WeeklyCard(summarizeWeek(loadWeek(weekWindow(now, browser tz))))", "kind": null, "status": "built" }
       ],
       "boxes": [
-        { "name": "weekWindow", "lines": ["every sunday", "in the browser's timezone", "last sunday 00:00 in tz, back 7 days, and 7 more for prev"], "status": "built", "uses": [] },
-        { "name": "loadWeek", "lines": ["look at my week", "entries = journal_entries from the last 7 days", "prev = the 7 days before"], "status": "built", "uses": ["weekWindow"] },
-        { "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 2", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"] },
-        { "name": "WeeklyCard", "lines": ["shows summarizeWeek", "on the journal page"], "status": "built", "uses": ["summarizeWeek"] }
+        { "id": "summarizeWeek", "name": "summarizeWeek", "lines": ["tell me what i felt most", "top = count entries per family, keep 2", "ansiedad, ansiedad, alegría → tristeza, alegría", "maybe also a 7-day strip of colored dots"], "status": "built", "uses": ["loadWeek"], "code": [{ "file": "src/summarize.js", "line": 1, "symbol": "topFamilies" }] }
       ],
       "symbols": [
         { "name": "journal_entries", "where": "supabase/migrations/001_journal.sql:1" }
