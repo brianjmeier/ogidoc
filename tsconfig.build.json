@@ -6,6 +6,6 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["src", "bin", "labs/ogimap"],
-  "exclude": ["labs/ogimap/**/*.test.ts", "labs/ogimap/demo", "labs/ogimap/web"]
+  "include": ["src", "bin"],
+  "exclude": ["**/*.test.ts"]
 }

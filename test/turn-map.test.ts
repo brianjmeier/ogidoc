@@ -21,6 +21,14 @@ test("a reply names only the boxes it changed; every other box stays as it was",
   assert.deepEqual(after.edges, before.edges, "a box that doesn't say what it uses keeps its arrows");
 });
 
+test("a reply that leaves out a box's name keeps the name the map has", () => {
+  const before = plan([box("src/links.js", ["shorten, follow"], { name: "links" })]);
+  const { plan: after } = fromReply(before, reply({ boxes: [{ id: "src/links.js", lines: ["shorten, follow, expire"], status: "built" }] }), 2, [box("src/store.js", [], { name: "store.js" })]);
+  assert.equal(after.boxes[0].name, "links");
+  const { plan: scanned } = fromReply(before, reply({ boxes: [{ id: "src/store.js", lines: ["keeps links"], status: "built" }] }), 2, [box("src/store.js", [], { name: "store.js" })]);
+  assert.equal(scanned.boxes.find((b) => b.id === "src/store.js")!.name, "store.js", "a scanned box keeps the scan's name");
+});
+
 test("a reply can add a box inside another, rewire it, and take one off the map", () => {
   const before = plan([box("cart", ["holds items"]), box("pay", ["charges"]), box("old", ["gone soon"], { parent: "cart" })], [{ from: "pay", to: "old", kind: "call" }]);
   const { plan: after, boxChanges } = fromReply(before, reply({

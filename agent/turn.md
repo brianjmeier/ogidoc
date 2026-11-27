@@ -68,7 +68,8 @@ with an empty `text`. `status` is `null` for blank lines and proposals.
 
 `boxes` holds only the boxes you made or changed this turn, each whole: every line it
 has after your turn. A box you leave out stays as it is, so never resend the map. A new
-box's `id` is its name, or `file#name` for one function in a file. Every box says in
+box's `id` is its name, or `file#name` for one function in a file; leave `name` out to
+keep the one the box has. Every box says in
 `code` where it lives. `removed` lists the boxes you took off the map.
 
 `choices` is every choice still open after your turn. `line` counts from 0 in the

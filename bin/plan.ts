@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -27,7 +27,7 @@ Usage
   ogidoc install-skill [claude|pi|both]
   ogidoc skill                 print the chat skill, for any other agent (e.g. ogidoc skill >> AGENTS.md)
   ogidoc --demo                try it with a scripted agent, in a throwaway folder, no API key
-  ogidoc map [dir]             change an existing codebase by editing a flow map of it (Ogimap)
+  ogidoc --demo shortener      the same, opened on an existing app: the map of its code is where you start
 
 Options
   --detach                   run in the background and give the terminal back
@@ -67,7 +67,17 @@ if (values.help) {
 
 // The demo runs in a folder of its own, on a plan that is already written, with a
 // scripted agent, so it needs no project and no API key.
-if (values.demo) {
+if (values.demo && positionals[0] === "shortener") {
+  // A copy of a small app in a git checkout of its own, so the scan has code to map.
+  // The folder is the map's title.
+  const dir = join(mkdtempSync(join(tmpdir(), "ogidoc-demo-")), "shortener");
+  cpSync(join(DEMO_DIR, "shortener"), dir, { recursive: true });
+  writeFileSync(join(dir, "shortener.plan"), JSON.parse(readFileSync(join(DEMO_DIR, "shortener.json"), "utf8")).plan.join("\n") + "\n");
+  for (const args of [["init", "-q"], ["add", "-A"], ["-c", "user.name=ogidoc", "-c", "user.email=ogidoc@localhost", "commit", "-qm", "the shortener"]]) spawnSync("git", args, { cwd: dir });
+  process.chdir(dir);
+  Object.assign(values, { agent: "mock", "agent-cmd": undefined, script: join(DEMO_DIR, "shortener.json"), open: !values.detach || values.open });
+  console.log("This is a demo: a small app, already mapped by the scan. Open a box to hear what it does, then hand over with ⌘↵ (Ctrl+↵) to build the plan.");
+} else if (values.demo) {
   const dir = mkdtempSync(join(tmpdir(), "ogidoc-demo-"));
   writeFileSync(join(dir, "tic-tac-toe.plan"), JSON.parse(readFileSync(join(DEMO_DIR, "tic-tac-toe.json"), "utf8")).plan.join("\n") + "\n");
   process.chdir(dir);

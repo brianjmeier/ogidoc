@@ -164,8 +164,8 @@ export interface LastTurn {
 export interface Reply {
   plan: { text: string; kind: Kind | null; status: Status | null }[];
   // Only the boxes the agent made or changed this turn. What it leaves out of a box it
-  // names (`parent`, `uses`, `code`) stays as the map has it.
-  boxes: { id: string; name: string; parent?: string | null; lines: string[]; status: Status; uses?: string[]; code?: CodeRef[] }[];
+  // names (`name`, `parent`, `uses`, `code`) stays as the map has it.
+  boxes: { id: string; name?: string; parent?: string | null; lines: string[]; status: Status; uses?: string[]; code?: CodeRef[] }[];
   // Boxes the agent took off the map.
   removed: string[];
   choices: { id?: string; line: number; options: string[][] }[];

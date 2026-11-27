@@ -254,7 +254,7 @@ export function fromReply(plan: Plan, reply: Reply, turn: number, frame: Box[] =
     if (!old) boxChanges[rb.id] = "new";
     else if (changed) boxChanges[rb.id] = "changed";
     const code = rb.code ?? old?.code;
-    touched.set(rb.id, { ...old, id: rb.id, name: rb.name, parent: rb.parent === undefined ? (old?.parent ?? null) : rb.parent, lines, status: rb.status, ...(code && { code }) });
+    touched.set(rb.id, { ...old, id: rb.id, name: rb.name ?? old?.name ?? rb.id, parent: rb.parent === undefined ? (old?.parent ?? null) : rb.parent, lines, status: rb.status, ...(code && { code }) });
   }
   const kept = have.filter((b) => !removed.has(b.id)).map((b) => touched.get(b.id) ?? b);
   const boxes = [...kept, ...[...touched.values()].filter((b) => !oldBoxes.has(b.id))];

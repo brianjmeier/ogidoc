@@ -195,7 +195,7 @@ function normalize(o: any): Reply {
       .filter((b) => b?.id)
       .map((b) => ({
         id: b.id,
-        name: str(b.name).trim() || b.id,
+        ...(str(b.name).trim() && { name: str(b.name).trim() }),
         ...(b.parent === null || typeof b.parent === "string" ? { parent: b.parent && boxId(b.parent) } : {}),
         lines: arr(b.lines).map((l) => (typeof l === "string" ? l : str(l?.text))),
         status: STATUSES.has(b.status) ? b.status : "stale",

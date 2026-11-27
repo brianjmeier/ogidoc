@@ -1,0 +1,225 @@
+{
+  "plan": [
+    "links expire after 30 days"
+  ],
+  "describe": {
+    "": {
+      "summary": "a URL shortener: an HTTP server hands each request to the router, which calls the link handlers, which keep links in memory",
+      "boxes": [
+        {
+          "id": "src/server.js",
+          "name": "server",
+          "pseudo": [
+            "one HTTP server on :3000",
+            "every request -> route(method, url, json body)"
+          ]
+        },
+        {
+          "id": "src/routes.js",
+          "name": "routes",
+          "pseudo": [
+            "POST /links -> shorten",
+            "GET /:code -> follow",
+            "GET /:code/stats -> stats",
+            "anything else -> 404"
+          ]
+        },
+        {
+          "id": "src/links.js",
+          "name": "links",
+          "pseudo": [
+            "shorten(url) -> a new code, or 400 if it isn't a url",
+            "follow(code) -> redirect, counting the visit",
+            "stats(code) -> url and visits"
+          ]
+        },
+        {
+          "id": "src/store.js",
+          "name": "store",
+          "pseudo": [
+            "code -> { url, visits }, in memory"
+          ],
+          "pins": [
+            {
+              "kind": "special case",
+              "text": "links are lost when the server restarts",
+              "file": "src/store.js",
+              "line": 2
+            }
+          ]
+        },
+        {
+          "id": "src/codes.js",
+          "name": "codes",
+          "pseudo": [
+            "six random letters and digits, no look-alikes"
+          ]
+        },
+        {
+          "id": "src/validate.js",
+          "name": "validate",
+          "pseudo": [
+            "only http and https urls"
+          ]
+        }
+      ],
+      "add": [],
+      "edges": []
+    },
+    "src/links.js": {
+      "summary": "the three things a short link can do",
+      "boxes": [
+        {
+          "id": "src/links.js",
+          "name": "links",
+          "pseudo": [
+            "shorten(url) -> a new code, or 400 if it isn't a url",
+            "follow(code) -> redirect, counting the visit",
+            "stats(code) -> url and visits"
+          ]
+        }
+      ],
+      "add": [
+        {
+          "id": "src/links.js#shorten",
+          "parent": "src/links.js",
+          "name": "shorten",
+          "pseudo": [
+            "400 unless isUrl(url)",
+            "code = makeCode()",
+            "store.save(code, url)",
+            "201 { code, short: /code }"
+          ],
+          "code": [
+            {
+              "file": "src/links.js",
+              "line": 5,
+              "symbol": "shorten"
+            }
+          ]
+        },
+        {
+          "id": "src/links.js#follow",
+          "parent": "src/links.js",
+          "name": "follow",
+          "pseudo": [
+            "404 unless store has code",
+            "store.countVisit(code)",
+            "302 to the url"
+          ],
+          "code": [
+            {
+              "file": "src/links.js",
+              "line": 12,
+              "symbol": "follow"
+            }
+          ]
+        },
+        {
+          "id": "src/links.js#stats",
+          "parent": "src/links.js",
+          "name": "stats",
+          "pseudo": [
+            "404 unless store has code",
+            "200 { url, visits }"
+          ],
+          "code": [
+            {
+              "file": "src/links.js",
+              "line": 19,
+              "symbol": "stats"
+            }
+          ]
+        }
+      ],
+      "edges": []
+    }
+  },
+  "turns": [
+    {
+      "delay": 1200,
+      "activity": [
+        "reading the map",
+        "editing test/expiry.test.js",
+        "running node --test",
+        "editing src/store.js",
+        "editing src/links.js",
+        "running node --test"
+      ],
+      "copy": {
+        "src/store.js": "shortener-turn/store.js",
+        "src/links.js": "shortener-turn/links.js",
+        "test/expiry.test.js": "shortener-turn/expiry.test.js"
+      },
+      "reply": {
+        "plan": [
+          {
+            "text": "links expire after 30 days",
+            "kind": null,
+            "status": "built"
+          },
+          {
+            "text": "  follow(code) on a link older than that -> 410 gone",
+            "kind": null,
+            "status": "built"
+          },
+          {
+            "text": "  made 0, followed at 30 days -> 302; a moment later -> 410",
+            "kind": "example",
+            "status": "built"
+          }
+        ],
+        "boxes": [
+          {
+            "id": "src/store.js",
+            "lines": [
+              "code -> { url, visits, made }, in memory"
+            ],
+            "status": "built",
+            "code": [
+              {
+                "file": "src/store.js"
+              }
+            ]
+          },
+          {
+            "id": "src/links.js",
+            "lines": [
+              "shorten(url) -> a new code, or 400 if it isn't a url",
+              "follow(code) -> redirect, counting the visit; 410 once it is 30 days old",
+              "stats(code) -> url and visits"
+            ],
+            "status": "built",
+            "code": [
+              {
+                "file": "src/links.js"
+              }
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "kind": "red-green",
+            "what": "a link older than 30 days is gone, from your example"
+          },
+          {
+            "kind": "refactor",
+            "what": "the lifetime is one named constant"
+          }
+        ],
+        "files": [
+          "src/store.js",
+          "src/links.js",
+          "test/expiry.test.js"
+        ],
+        "checks": [
+          {
+            "name": "node --test",
+            "ok": true
+          }
+        ],
+        "summary": "Links remember when they were made, and follow answers 410 once one is older than 30 days."
+      }
+    }
+  ]
+}
