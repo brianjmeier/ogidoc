@@ -72,6 +72,12 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
         session.pass(b).catch((e: Error) => console.error(`Ogidoc: the turn could not finish: ${e.message}`));
         return json(res, { ok: true }, 202);
       }
+      if (req.method === "POST" && url.pathname === "/api/describe") {
+        const b = await body(req);
+        if (session.working) return json(res, { error: "The agent is busy." }, 409);
+        session.describe(b).catch((e: Error) => console.error(`Ogidoc: describing could not finish: ${e.message}`));
+        return json(res, { ok: true }, 202);
+      }
       const action = req.method === "POST" ? actions[url.pathname] : undefined;
       if (action) {
         action(await body(req));

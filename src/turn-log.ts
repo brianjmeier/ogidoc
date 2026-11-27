@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Where each agent turn is recorded, so it can be undone and so changes made outside a
@@ -17,6 +17,9 @@ export interface TurnLog {
   revert(commit: string): void;
   // Code that changed since the last record without the editor or the agent.
   drift(): string[];
+  // Take back what changed in the code since \`mark\`, for work that may only read. A file
+  // the person had already changed is left as it is; those come back, by their paths.
+  discard(mark: Mark): string[];
   // Each file's git blob hash now, by its path from `cwd`; null for a file that is gone.
   hashes(files: string[]): Map<string, string | null>;
   // What to keep across restarts, handed back as `saved` next time.
@@ -38,7 +41,7 @@ export function turnLog({ cwd, ownFiles, commit, saved = {} }: { cwd: string; ow
   // is /private/tmp), so own files are placed against the real path of `cwd`.
   const here = relative(root, realpathSync(cwd));
   const log = { ...gitLog(root, ownFiles.map((f) => join(here, relative(cwd, f))), saved), hashes: (files: string[]) => hashFiles(root, here, files) };
-  return commit ? log : { ...noLog, revert: log.revert, hashes: log.hashes };
+  return commit ? log : { ...noLog, revert: log.revert, discard: log.discard, hashes: log.hashes };
 }
 
 const noLog: TurnLog = {
@@ -46,6 +49,7 @@ const noLog: TurnLog = {
   begin: () => new Map(),
   record: () => null,
   revert() {},
+  discard: () => [],
   drift: () => [],
   hashes: (files) => new Map(files.map((f) => [f, null])),
   saved: () => ({}),
@@ -72,6 +76,15 @@ function gitLog(root: string, own: string[], saved: LogState): Omit<TurnLog, "ha
     },
     revert(commit) {
       revertExcept(root, commit, own);
+    },
+    discard(before) {
+      const left: string[] = [];
+      for (const [p, hash] of dirtyFiles(root)) {
+        if (isOwn(p) || before.get(p) === hash) continue;
+        if (before.has(p)) left.push(p);
+        else if (!git(root, ["checkout", "-q", "HEAD", "--", p]).ok && !git(root, ["rm", "-qf", "--", p]).ok) rmSync(join(root, p), { force: true });
+      }
+      return left;
     },
     drift() {
       const committed = filesInCommits(root, baseCommit);

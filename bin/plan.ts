@@ -164,7 +164,10 @@ async function open() {
   const installed = (cli: string) => spawnSync(process.platform === "win32" ? "where" : "which", [cli]).status === 0;
   const agentName = values["agent-cmd"] ? "command" : values.agent || AGENTS.find(installed) || "claude";
   const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), command: values["agent-cmd"], sleep: systemClock.sleep });
-  const session = openSession({ cwd, name, agent, clock: systemClock, commit: !values["no-commit"] });
+  // Describing a box only reads the code. Claude Code can be held to that; for other CLIs
+  // the prompt says so, and the editor puts back whatever they change.
+  const reader = agentName === "claude" ? makeAgent("claude", { env: process.env, args: [...(values["agent-arg"] || []), "--disallowedTools", "Edit,Write,NotebookEdit,Bash"] }) : agent;
+  const session = openSession({ cwd, name, agent, reader, clock: systemClock, commit: !values["no-commit"] });
   session.save();
   const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
   try {

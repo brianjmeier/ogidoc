@@ -1,7 +1,9 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, Edit, HumanDiff, LastTurn, Line, MapChange, MapOnDisk, Reply, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, Edit, HumanDiff, LastTurn, Line, MapChange, MapOnDisk, MapView, Reply, Thread } from "./types.ts";
+import { mapOf, withDescription } from "./map.ts";
+import type { Described } from "./describe.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
 // the comment threads pinned to its lines, and the choices offered on them. Every change
@@ -69,6 +71,20 @@ export const baseOf = (plan: Plan): Base => ({
 });
 
 const edgeKey = (e: { from: string; to: string }) => `${e.from} → ${e.to}`;
+
+// The base with what the agent said outside a turn (a describe) taken as seen, so it
+// doesn't read as the person's change; what the person changed meanwhile still does.
+export function withSaid(base: Base, before: Plan, after: Plan, ids: string[]): Base {
+  const now = baseOf(after);
+  const fresh = after.boxes.filter((b) => ids.includes(b.id) || !before.boxes.some((x) => x.id === b.id)).map((b) => b.id);
+  const had = new Set(before.edges.map(edgeKey));
+  const added = after.edges.filter((e) => e.kind === "call" && !had.has(edgeKey(e))).map(edgeKey);
+  return {
+    ...base,
+    boxes: { ...base.boxes, ...Object.fromEntries(fresh.map((id) => [id, now.boxes[id]])) },
+    ...(base.map && { map: { boxes: { ...base.map.boxes, ...Object.fromEntries(fresh.map((id) => [id, now.map!.boxes[id]])) }, edges: [...base.map.edges, ...added] } }),
+  };
+}
 
 // The person's edits to the map, as the browser reports them. A box added in the same
 // batch is named by its \`key\` in later edits. An edit that names a box the map doesn't
@@ -231,15 +247,9 @@ export function fromReply(plan: Plan, reply: Reply, turn: number, frame: Box[] =
   for (const rb of reply.boxes) {
     if (removed.has(rb.id)) continue;
     const old = oldBoxes.get(rb.id);
-    const oldL = old ? old.lines : [];
-    const bops = diffLines(oldL.map((l) => l.text), rb.lines);
-    const lines: Line[] = new Array(rb.lines.length);
-    for (const o of bops) {
-      if (o.op === "eq") lines[o.b] = { ...oldL[o.a], chg: false };
-      else if (o.op !== "del") lines[o.b] = { text: rb.lines[o.b], by: "a", chg: true };
-    }
+    const { lines, changed } = agentLines(old?.lines ?? [], rb.lines);
     if (!old) boxChanges[rb.id] = "new";
-    else if (bops.some((o) => o.op !== "eq")) boxChanges[rb.id] = "changed";
+    else if (changed) boxChanges[rb.id] = "changed";
     const code = rb.code ?? old?.code;
     touched.set(rb.id, { ...old, id: rb.id, name: rb.name, parent: rb.parent === undefined ? (old?.parent ?? null) : rb.parent, lines, status: rb.status, ...(code && { code }) });
   }
@@ -276,6 +286,36 @@ export function fromReply(plan: Plan, reply: Reply, turn: number, frame: Box[] =
     }
   }
   return { plan: { lines, boxes, edges, threads: ts, choices: choices.fromAgent(plan.choices, reply.choices, lines) }, animation, boxChanges };
+}
+
+// A box's lines as the agent wrote them: the ones it kept keep what the editor knew.
+function agentLines(old: Line[], texts: string[]): { lines: Line[]; changed: boolean } {
+  const ops = diffLines(old.map((l) => l.text), texts);
+  const lines: Line[] = new Array(texts.length);
+  for (const o of ops) {
+    if (o.op === "eq") lines[o.b] = { ...old[o.a], chg: false };
+    else if (o.op !== "del") lines[o.b] = { text: texts[o.b], by: "a", chg: true };
+  }
+  return { lines, changed: ops.some((o) => o.op !== "eq") };
+}
+
+// What a describe said about a box and the boxes inside it, as boxes of the plan. It only
+// says what code does, so what it describes is built.
+export function fromDescription(plan: Plan, view: MapView, id: string | null, d: Described): { plan: Plan; ids: string[] } {
+  const { map, ids } = withDescription({ ...mapOf(view.title, view.boxes, view.edges), smells: view.smells }, id, d);
+  const scanned = new Map(view.boxes.map((b) => [b.id, b]));
+  const said = new Map(map.nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, n]));
+  let boxes = plan.boxes;
+  for (const n of said.values()) boxes = materialize(boxes, scanned, n.parent ?? "");
+  for (const n of said.values()) {
+    const old = boxes.find((b) => b.id === n.id) ?? scanned.get(n.id);
+    const { scan: _, pins: _pins, ...was } = old ?? { id: n.id, name: n.name, parent: n.parent ?? null, lines: [], status: "built" as const };
+    const box: Box = { ...was, name: n.name, lines: agentLines(was.lines, n.pseudo).lines, status: "built", ...(n.code?.length && { code: n.code }), ...(n.pins?.length && { pins: n.pins }) };
+    boxes = boxes.some((b) => b.id === n.id) ? boxes.map((b) => (b.id === n.id ? box : b)) : [...boxes, box];
+  }
+  const have = new Set(plan.edges.map((e) => `${e.from}→${e.to}`));
+  const edges = [...plan.edges, ...map.edges.filter((e) => e.kind === "call" && !have.has(`${e.from}→${e.to}`) && (said.has(e.from) || said.has(e.to))).map((e): BoxEdge => ({ from: e.from, to: e.to, kind: "call", ...(e.label && { label: e.label }) }))];
+  return { plan: { ...plan, boxes, edges }, ids };
 }
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");

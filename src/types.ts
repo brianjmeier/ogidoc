@@ -240,6 +240,10 @@ export interface Snapshot {
   drifted: string[];
   // Goes up when the map changes: fetch \`GET /api/map\` again.
   mapRev: number;
+  // The box being described while one is (\`id\` null for the top of the map), and how the
+  // last describe went.
+  describing: { id: string | null } | null;
+  described: { id: string | null; summary?: string; error?: string } | null;
 }
 
 /** What a person did to the map. A box added in the same hand-over is named by its

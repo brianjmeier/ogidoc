@@ -257,7 +257,15 @@ function mockAgent({ script, sleep }: { script: string; sleep: Clock["sleep"] })
     name: "mock",
     settingOptions: { models, efforts: read.efforts ?? [] },
     acceptsModel: (m) => models.includes(m),
-    async run({ cwd, onActivity }) {
+    async run({ prompt, cwd, onActivity }) {
+      // A describe plays from the script's \`describe\`, by the box it opens ("" for the top),
+      // and takes no turn.
+      const describing = /^# Say what (?:`([^`]+)`|the top)/m.exec(prompt);
+      if (describing && read.describe) {
+        const d = read.describe[describing[1] ?? ""] ?? { summary: "nothing to say here", boxes: [], add: [], edges: [] };
+        await sleep(read.describeDelay ?? 600);
+        return `\`\`\`json\n${JSON.stringify(d, null, 2)}\n\`\`\``;
+      }
       const t = turns[Math.min(i++, turns.length - 1)];
       for (const a of t.activity || []) {
         onActivity(a);

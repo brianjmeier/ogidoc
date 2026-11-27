@@ -11,7 +11,8 @@ import type { Agent } from "./agents.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, MapView, Reply, Settings, Snapshot, Thread } from "./types.ts";
-import { driftOf, mapView, stamped } from "./map.ts";
+import { describeBrief, driftOf, mapOf, mapView, stamped } from "./map.ts";
+import { describePrompt, parseDescribed } from "./describe.ts";
 import { MAP_FILE } from "./map-store.ts";
 import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
 import type { Skeleton } from "./scan.ts";
@@ -27,14 +28,14 @@ interface EditInput {
 const TURN_ATTEMPTS = 3;
 
 // Put a session together from where its plan lives, the agent, and the clock.
-export function openSession({ cwd, name, agent, clock, commit = true }: { cwd: string; name: string; agent: Agent; clock: Clock; commit?: boolean }): Session {
+export function openSession({ cwd, name, agent, reader, clock, commit = true }: { cwd: string; name: string; agent: Agent; reader?: Agent; clock: Clock; commit?: boolean }): Session {
   const store = planStore(cwd, name);
   const saved = store.load();
   const log = turnLog({ cwd: store.cwd, ownFiles: store.ownFiles, commit, saved: saved.log });
   const io = repoIO(store.cwd);
   if (log.commits) versionTheMap(store.cwd, io);
   const scanner: Scanner = { scan: () => scanRepo(basename(store.cwd), io), head: () => headOf(io) };
-  return new Session({ store, saved, log, agent, clock, scanner });
+  return new Session({ store, saved, log, agent, reader, clock, scanner });
 }
 
 // Reads the code into the skeleton of the map, and says which commit it read.
@@ -70,6 +71,11 @@ export class Session extends EventEmitter {
   activity: string[] = [];
   private s: SessionState;
   private scanner: Scanner;
+  // Reads the code to say what a box does; it may not change anything.
+  private reader: Agent;
+  // The box being described while one is, and how the last describe went.
+  private describing: { id: string | null } | null = null;
+  private described: { id: string | null; summary?: string; error?: string } | null = null;
   // The code as the last scan read it, and the commit it read.
   private skeleton: Skeleton | null = null;
   private scannedAt = "";
@@ -79,8 +85,9 @@ export class Session extends EventEmitter {
   // Boxes whose code changed since they last said what it does, as of the last look.
   private drifted: string[] = [];
 
-  constructor({ store, saved, log, agent, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; clock: Clock; scanner?: Scanner }) {
+  constructor({ store, saved, log, agent, reader, clock, scanner }: { store: PlanStore; saved: Loaded; log: TurnLog; agent: Agent; reader?: Agent; clock: Clock; scanner?: Scanner }) {
     super();
+    this.reader = reader ?? agent;
     this.scanner = scanner ?? { scan: () => null, head: () => "" };
     this.rescan(true);
     this.store = store;
@@ -119,6 +126,8 @@ export class Session extends EventEmitter {
       canUndo: history.length > 0 && !this.working,
       drifted: this.drifted,
       mapRev: this.mapRev,
+      describing: this.describing,
+      described: this.described,
     };
   }
 
@@ -246,6 +255,52 @@ export class Session extends EventEmitter {
     if (!Array.isArray(edits)) throw new Error("Send the map edits as a list.");
     this.setPlan(plan.editMap(this.plan, edits, this.frame()));
     this.changed();
+  }
+
+  // Say what a box does, and what the boxes inside it do: the person opened it, or the top
+  // of the map (\`id\` null). It reads the code and changes only the map, in a commit of its
+  // own that undo takes back. Refused while the agent has the pen.
+  describe({ id = null }: { id?: string | null } = {}): Promise<void> {
+    this.guard("The agent is busy.");
+    const view = this.map();
+    const brief = describeBrief({ ...mapOf(view.title, view.boxes, view.edges), smells: view.smells }, id);
+    if (!brief.children.length && !brief.box) throw new Error("There is nothing on the map to describe yet.");
+    return this.runDescribe(id, view, describePrompt(brief));
+  }
+
+  private async runDescribe(id: string | null, view: MapView, prompt: string) {
+    const mark = this.log.begin();
+    const { history: _history, settings: _settings, ...prev }: SessionState = this.s;
+    this.working = true;
+    this.describing = { id };
+    this.turnAbort = new AbortController();
+    this.activity = [];
+    this.emit("change", {});
+    const onActivity = (a: string) => {
+      this.activity.push(a);
+      this.emit("change", {});
+    };
+    const what = id ?? "the map";
+    try {
+      const text = await this.reader.run({ prompt, cwd: this.store.cwd, ...this.s.settings, onActivity, signal: this.turnAbort.signal });
+      const left = this.log.discard(mark);
+      if (left.length) onActivity(`it changed ${left.join(", ")}, which only a turn may change`);
+      const d = parseDescribed(text);
+      const next = plan.fromDescription(this.plan, view, id, d);
+      const said = next.plan.boxes.filter((b) => next.ids.includes(b.id));
+      this.setPlan({ ...next.plan, boxes: stamped(next.plan.boxes, next.ids, this.hashOf(said)) });
+      this.s = { ...this.s, base: plan.withSaid(this.s.base, prev, this.plan, next.ids) };
+      this.save();
+      const commit = this.log.record(mark, `ogidoc: describe ${what}`, { ownFiles: true });
+      this.s.history = [...this.s.history, { ...prev, commit }].slice(-20);
+      this.described = { id, summary: d.summary || `described ${what}` };
+    } catch (e) {
+      this.described = { id, error: this.turnAbort.signal.aborted ? "Describing was stopped." : (e as Error).message };
+    }
+    this.working = false;
+    this.describing = null;
+    this.save();
+    this.emit("change", {});
   }
 
   // A done plan has served its purpose: remove it and its files in one commit. The code
