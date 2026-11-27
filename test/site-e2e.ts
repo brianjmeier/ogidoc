@@ -6,13 +6,16 @@
 //   npm run build:site && node test/site-e2e.ts
 
 import { spawn } from "node:child_process";
+import { stripVTControlCharacters } from "node:util";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const server = spawn("npx", ["vite", "preview", "-c", "vite.site.config.ts", "--port", "4791"], { cwd: ROOT });
+// vite itself, not through npx, so killing it stops the server.
+const server = spawn(process.execPath, [new URL("../node_modules/vite/bin/vite.js", import.meta.url).pathname, "preview", "-c", "vite.site.config.ts", "--port", "4791"], { cwd: ROOT });
 const url = await new Promise<string>((resolve, reject) => {
-  server.stdout.on("data", (d) => { const m = String(d).match(/http:\/\/localhost:\d+/); if (m) resolve(m[0]); });
+  // CI turns colour on, and vite colours the port.
+  server.stdout.on("data", (d) => { const m = stripVTControlCharacters(String(d)).match(/http:\/\/localhost:\d+/); if (m) resolve(m[0]); });
   server.on("exit", (c) => reject(new Error(`vite preview exited ${c}`)));
 });
 
