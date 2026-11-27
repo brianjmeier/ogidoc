@@ -8,7 +8,7 @@
 // %O is the map both sides started from, %A ours (the result goes here), %B theirs.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { checkMap, mergeMaps, type FlowMap } from "./map.ts";
+import { checkMap, mergeMaps, type FlowMap } from "../../src/map.ts";
 
 const EMPTY: FlowMap = { title: "", nodes: [], edges: [], flows: [] };
 

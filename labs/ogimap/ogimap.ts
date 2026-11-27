@@ -28,9 +28,10 @@ import { trusted, TYPES } from "../../src/server.ts";
 import { turnLog } from "../../src/turn-log.ts";
 import { MAP_DIR } from "../../src/paths.ts";
 import { OGIMAP_API } from "./contract.ts";
-import { checkMap, describeBrief, draftFromEdits, driftOf, focusOf, forAgent, indexOf, intentOf, mergeRegion, overlay, persisted, regionIds, regionOf, stamped, viewOf, withDescription, type FlowMap, type MapNode } from "./map.ts";
+import { viewOf } from "./view.ts";
+import { checkMap, describeBrief, draftFromEdits, driftOf, focusOf, forAgent, indexOf, intentOf, mergeRegion, overlay, persisted, regionIds, regionOf, stamped, withDescription, type FlowMap, type MapNode } from "../../src/map.ts";
 import { MAP_FILE, REGION_FILE, describePrompt, framePrompt, parseDescribed, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
-import { isCode, scan, type Skeleton } from "./scan.ts";
+import { isCode, scan, type Skeleton } from "../../src/scan.ts";
 
 // Run from source or from the package's compiled dist/: the merge driver sits beside this
 // file, in the same form; the editor and the demo ship as files in the package.

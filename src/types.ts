@@ -140,3 +140,13 @@ export interface Snapshot {
   finished: boolean;
   canUndo: boolean;
 }
+
+/** What a person did to the map. A box added in the same hand-over is named by its
+ *  `key` in later edits; the editor gives it its id. */
+export type Edit =
+  | { op: "pseudo"; id: string; lines: string[] }
+  | { op: "rename"; id: string; name: string }
+  | { op: "remove"; id: string }
+  | { op: "add"; key: string; name: string; parent: string | null; lines: string[] }
+  | { op: "connect"; from: string; to: string; label?: string }
+  | { op: "disconnect"; from: string; to: string };

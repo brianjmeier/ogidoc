@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { importsOf, OUTSIDE, scan } from "./scan.ts";
+import { importsOf, OUTSIDE, scan } from "../src/scan.ts";
 
 const f = (path: string, text = "") => ({ path, text });
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { checkMap, intentOf, type FlowMap } from "./map.ts";
+import { checkMap, intentOf, type FlowMap } from "../../src/map.ts";
 import { parseReply, parseScope } from "./prompt.ts";
 
 // The task map the agent drew in the recorded demo session: the plan is on it.
@@ -69,7 +69,7 @@ test("the reply is the last json block", () => {
 
 // ---------- the map grows task by task ----------
 
-import { driftOf, focusOf, indexOf, mergeMaps, mergeRegion, regionIds, regionOf, stamped } from "./map.ts";
+import { driftOf, focusOf, indexOf, mergeMaps, mergeRegion, regionIds, regionOf, stamped } from "../../src/map.ts";
 
 const tiny = (): FlowMap =>
   checkMap({
@@ -219,7 +219,8 @@ test("git rebases a branch's map onto main's through the driver, with no conflic
 
 // ---------- what a client is told, and what it can do ----------
 
-import { draftFromEdits, viewOf } from "./map.ts";
+import { draftFromEdits } from "../../src/map.ts";
+import { viewOf } from "./view.ts";
 
 test("the view says each box's state and the plan's lines; a task marks its boxes", () => {
   const map = tiny();
@@ -270,8 +271,8 @@ test("a client's edits become the person's draft, and read as a turn's diff", ()
 // ---------- the scan under the map ----------
 
 import { readdirSync } from "node:fs";
-import { describeBrief, overlay, persisted, withDescription } from "./map.ts";
-import { scan } from "./scan.ts";
+import { describeBrief, overlay, persisted, withDescription } from "../../src/map.ts";
+import { scan } from "../../src/scan.ts";
 
 const demoScan = () => {
   const root = new URL("./demo/shortener/", import.meta.url);

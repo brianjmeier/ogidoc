@@ -44,12 +44,8 @@ export interface BoxView {
   pins: { kind: string; text: string; file?: string; line?: number }[];
 }
 
-/** A tangle the scan sees. A pair is two boxes side by side, so it shows on the level
- *  that holds both. */
-export type SmellView =
-  | { kind: "volatile import" | "change together"; a: string; b: string; count: number }
-  | { kind: "cycle"; ids: string[] }
-  | { kind: "unused" | "pass-through"; a: string };
+import type { Smell as SmellView } from "../../src/scan.ts";
+export type { SmellView };
 
 export interface MapView {
   title: string;
@@ -62,15 +58,8 @@ export interface MapView {
   smells: SmellView[];
 }
 
-/** What a person did to the map, as a client reports it. A box added in the same hand
- *  over is named by its `key` in later edits; Ogimap gives it its id. */
-export type Edit =
-  | { op: "pseudo"; id: string; lines: string[] }
-  | { op: "rename"; id: string; name: string }
-  | { op: "remove"; id: string }
-  | { op: "add"; key: string; name: string; parent: string | null; lines: string[] }
-  | { op: "connect"; from: string; to: string; label?: string }
-  | { op: "disconnect"; from: string; to: string };
+import type { Edit } from "../../src/types.ts";
+export type { Edit };
 
 /** `GET /api/state`, the part a client relies on. */
 export interface State {
