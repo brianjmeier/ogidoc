@@ -4,16 +4,17 @@ import { joinLines } from "./shared/diff.ts";
 import { AGENT_DIR } from "./paths.ts";
 import type { LogState } from "./turn-log.ts";
 import type { Base } from "./plan.ts";
-import type { Box, Choice, LastTurn, Line, Settings, Symbol, Thread } from "./types.ts";
+import type { Box, BoxEdge, Choice, LastTurn, Line, MapOnDisk, Settings, Symbol, Thread } from "./types.ts";
+import { mapStore } from "./map-store.ts";
 
 // Where a plan lives on disk and how it is saved. Everything stays plain text beside the
-// code: the plan file itself, one file per box, comment threads in comments.json, and
-// the editor's local bookkeeping (what it knows about each line, undo history), which
-// git ignores.
+// code: the plan file itself, the repo's map of boxes every session shares, comment
+// threads in comments.json, and the editor's local bookkeeping (what it knows about each
+// line, undo history), which git ignores.
 //
 //   weekly.plan
 //   .ogidoc/rules.md               the house rules the agent reads every turn
-//   .ogidoc/weekly/boxes/*.plan
+//   .ogidoc/map.json               the boxes, shared by every session
 //   .ogidoc/weekly/comments.json
 //   .ogidoc/weekly/state.json      local
 //   .ogidoc/weekly/history.json    local
@@ -23,6 +24,7 @@ export interface SessionState {
   turn: number;
   lines: Line[];
   boxes: Box[];
+  edges: BoxEdge[];
   threads: Thread[];
   choices: Choice[];
   symbols: Symbol[];
@@ -45,7 +47,7 @@ export interface Loaded {
   state: SessionState;
   log: LogState;
   planText: string;
-  boxTexts: Record<string, string>;
+  map: MapOnDisk;
 }
 
 // The editor's own bookkeeping, which stays on this machine.
@@ -66,7 +68,9 @@ export function planStore(cwd: string, name: string) {
   const planPath = join(root, `${name}.plan`);
   const shared = join(root, ".ogidoc");
   const dir = join(shared, name);
+  // Sessions saved before the repo had one map kept their boxes here.
   const boxDir = join(dir, "boxes");
+  const map = mapStore(root);
   const rulesPath = join(shared, "rules.md");
   const at = (f: string) => join(dir, f);
   const readJson = (f: string) => (existsSync(at(f)) ? JSON.parse(readFileSync(at(f), "utf8")) : undefined);
@@ -82,7 +86,7 @@ export function planStore(cwd: string, name: string) {
     displayPath: relative(root, planPath),
 
     load(): Loaded {
-      mkdirSync(boxDir, { recursive: true });
+      mkdirSync(dir, { recursive: true });
       // The plan and boxes are shared in git; the editor's bookkeeping stays local.
       const ignore = at(".gitignore");
       const ignored = existsSync(ignore) ? readFileSync(ignore, "utf8") : "";
@@ -91,12 +95,14 @@ export function planStore(cwd: string, name: string) {
       if (missing.length) writeFileSync(ignore, `${ignored}${ignored && !ignored.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
       if (!existsSync(rulesPath)) copyFileSync(join(AGENT_DIR, "rules.md"), rulesPath);
       const s = readJson("state.json") ?? {};
-      const boxTexts: Record<string, string> = {};
-      for (const f of readdirSync(boxDir)) if (f.endsWith(".plan")) boxTexts[f.slice(0, -5)] = readText(join(boxDir, f));
+      const onDisk = map.load();
+      const saved: Box[] = (s.boxes || []).map(({ uses, ...b }: Box & { uses?: string[] }) => ({ ...b, id: b.id ?? b.name, parent: b.parent ?? null }));
+      if (existsSync(boxDir)) migrate(onDisk, boxDir, saved, s.boxes || [], readText);
       const state: SessionState = {
         turn: s.turn || 1,
         lines: s.lines || [],
-        boxes: s.boxes || [],
+        boxes: saved,
+        edges: onDisk.edges,
         threads: readJson("comments.json") ?? [],
         choices: s.choices || [],
         symbols: s.symbols || [],
@@ -113,16 +119,15 @@ export function planStore(cwd: string, name: string) {
         // Older sessions kept the turn log's state at the top level.
         log: s.log ?? { baseCommit: s.baseCommit, dirtyBase: s.dirtyBase },
         planText: readText(planPath),
-        boxTexts,
+        map: onDisk,
       };
     },
 
-    save({ history, threads, ...s }: SessionState, log: LogState) {
-      mkdirSync(boxDir, { recursive: true });
+    save({ history, threads, edges, ...s }: SessionState, log: LogState) {
+      mkdirSync(dir, { recursive: true });
       writeFileSync(planPath, joinLines(s.lines) + "\n");
-      const keep = new Set(s.boxes.map((b) => `${b.name}.plan`));
-      for (const f of readdirSync(boxDir)) if (!keep.has(f)) rmSync(join(boxDir, f));
-      for (const b of s.boxes) writeFileSync(join(boxDir, `${b.name}.plan`), joinLines(b.lines) + "\n");
+      map.save(s.boxes, edges);
+      rmSync(boxDir, { recursive: true, force: true });
       writeFileSync(at("state.json"), JSON.stringify({ ...s, log }, null, 1));
       writeFileSync(at("comments.json"), JSON.stringify(threads, null, 1) + "\n");
       // History only changes with an agent turn or an undo, and it is the biggest file.
@@ -140,4 +145,17 @@ export function planStore(cwd: string, name: string) {
       rmSync(dir, { recursive: true, force: true });
     },
   };
+}
+
+// Boxes from a session's own box files join the repo's map, as the agent made them: at
+// the top, named by their name, calling the boxes they used.
+function migrate(map: MapOnDisk, boxDir: string, saved: Box[], old: { name: string; uses?: string[] }[], readText: (p: string) => string) {
+  const have = new Set(map.boxes.map((b) => b.id));
+  for (const f of readdirSync(boxDir)) {
+    const id = f.slice(0, -".plan".length);
+    if (!f.endsWith(".plan") || have.has(id)) continue;
+    map.boxes.push({ id, name: id, parent: null, text: readText(join(boxDir, f)), status: saved.find((b) => b.id === id)?.status ?? "stale" });
+    have.add(id);
+  }
+  for (const b of old) for (const to of b.uses ?? []) if (have.has(b.name) && have.has(to)) map.edges.push({ from: b.name, to, kind: "call" });
 }

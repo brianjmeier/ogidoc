@@ -4,7 +4,7 @@ import { diffLines } from "../../src/shared/diff.ts";
 import type { FlowMap, MapNode, Status } from "../../src/map.ts";
 import type { BoxLine, BoxState, MapView } from "./contract.ts";
 
-const STATE: Record<Status, BoxState> = { built: "built", stale: "to build", proposal: "proposed" };
+const STATE: Record<Status, BoxState> = { built: "built", stale: "to build", proposal: "proposed", blocked: "to build" };
 
 /** A box's pseudocode with the task's plan on it: the lines it adds, and the ones it takes
  *  away (from `was`, what the code does today). A proposed box is all new. */

@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { joinLines } from "../src/shared/diff.ts";
-import type { Box, BoxChanges, Snapshot } from "../src/types.ts";
+import type { Box, BoxChanges, BoxEdge, Snapshot } from "../src/types.ts";
 import { STATUS_LABEL, decorate, keys, symbolPattern } from "./text.ts";
 
 // The boxes canvas. Boxes are laid out in columns by what they use: a box sits to the
@@ -11,7 +11,7 @@ const GAP_X = 56;
 const GAP_Y = 22;
 
 // While an agent turn plays: when the boxes it added or changed animate in, and which
-// boxes receive moved lines (name → delay in ms).
+// boxes receive moved lines (id → delay in ms).
 export interface BoxAnimation {
   delay: number;
   pulse: Record<string, number>;
@@ -26,10 +26,11 @@ export interface BoxesApi {
 interface Props {
   ref: (api: BoxesApi) => void;
   boxes: Box[];
+  edges: BoxEdge[];
   symbols: Snapshot["symbols"];
   editable: boolean;
   animate: BoxAnimation | null;
-  onEdit: (name: string, text: string) => void;
+  onEdit: (id: string, text: string) => void;
   onPass: () => void;
 }
 
@@ -61,23 +62,24 @@ export function Boxes(props: Props) {
 
   function layout() {
     const list = props.boxes;
-    const byName = new Map(list.map((b) => [b.name, b]));
+    const byId = new Map(list.map((b) => [b.id, b]));
+    const usesOf = (id: string) => props.edges.filter((e) => e.kind === "call" && e.from === id && byId.has(e.to) && e.to !== id).map((e) => e.to);
     const depth = new Map<string, number>();
     const visit = (name: string, seen = new Set<string>()): number => {
       if (depth.has(name)) return depth.get(name)!;
       if (seen.has(name)) return 0;
       seen.add(name);
-      const uses = (byName.get(name)?.uses || []).filter((u) => byName.has(u) && u !== name);
+      const uses = usesOf(name);
       const d = uses.length ? 1 + Math.max(...uses.map((u) => visit(u, seen))) : 0;
       depth.set(name, d);
       return d;
     };
-    for (const b of list) visit(b.name);
+    for (const b of list) visit(b.id);
     const cols = new Map<number, string[]>();
     for (const b of list) {
-      const d = depth.get(b.name)!;
+      const d = depth.get(b.id)!;
       if (!cols.has(d)) cols.set(d, []);
-      cols.get(d)!.push(b.name);
+      cols.get(d)!.push(b.id);
     }
     const els = new Map([...canvas.querySelectorAll<HTMLElement>(".box")].map((el) => [el.dataset.name!, el]));
     const levels = [...cols.keys()].sort((a, b) => a - b);
@@ -107,10 +109,10 @@ export function Boxes(props: Props) {
     }
     const out: string[] = [];
     for (const b of list) {
-      for (const u of b.uses || []) {
+      for (const u of usesOf(b.id)) {
         const A = rect.get(u);
-        const B = rect.get(b.name);
-        if (!A || !B || u === b.name) continue;
+        const B = rect.get(b.id);
+        if (!A || !B) continue;
         if (across) {
           const x1 = A.x + A.w, y1 = A.y + Math.min(A.h / 2, 30);
           const x2 = B.x, y2 = B.y + Math.min(B.h / 2, 30);
@@ -130,7 +132,7 @@ export function Boxes(props: Props) {
 
   // Lay out after Solid has put the boxes in the DOM, so their heights are real.
   // Updates arrive in place, so watch what sizes and connects the boxes.
-  const shape = () => props.boxes.map((b) => `${b.name}|${b.status}|${b.uses.join(",")}|${joinLines(b.lines)}`).join("\n");
+  const shape = () => [...props.boxes.map((b) => `${b.id}|${b.name}|${b.status}|${joinLines(b.lines)}`), ...props.edges.map((e) => `${e.from}>${e.to}`)].join("\n");
   createEffect(on([shape, editing], () => queueMicrotask(layout)));
   onMount(() => {
     const ro = new ResizeObserver(() => layout());
@@ -141,15 +143,15 @@ export function Boxes(props: Props) {
   const boxClass = (b: Box) => {
     const a = props.animate;
     if (!a) return "";
-    if (b.name in a.pulse) return "pulse";
-    const c = a.changes[b.name];
+    if (b.id in a.pulse) return "pulse";
+    const c = a.changes[b.id];
     return c === "new" ? "pop-in" : c === "changed" ? "pulse" : "";
   };
   const boxDelay = (b: Box, i: number) => {
     const a = props.animate;
     if (!a) return "0ms";
-    if (b.name in a.pulse) return `${a.pulse[b.name]}ms`;
-    return `${a.changes[b.name] === "new" ? a.delay + i * 90 : a.delay}ms`;
+    if (b.id in a.pulse) return `${a.pulse[b.id]}ms`;
+    return `${a.changes[b.id] === "new" ? a.delay + i * 90 : a.delay}ms`;
   };
 
   return (
@@ -164,13 +166,13 @@ export function Boxes(props: Props) {
       </svg>
       <For each={props.boxes}>
         {(b, i) => (
-          <div class={`box ${b.status} ${boxClass(b)}`} style={{ "--d": boxDelay(b, i()) }} data-name={b.name}>
+          <div class={`box ${b.status} ${boxClass(b)}`} style={{ "--d": boxDelay(b, i()) }} data-name={b.id}>
             <div class="bt">
               <span>{b.name}</span>
               <span class="st">{STATUS_LABEL[b.status]}</span>
             </div>
             <Show
-              when={editing() === b.name}
+              when={editing() === b.id}
               fallback={
                 <div
                   class="bb"
@@ -178,11 +180,11 @@ export function Boxes(props: Props) {
                   tabIndex={props.editable ? 0 : -1}
                   aria-label={props.editable ? `Edit ${b.name}` : undefined}
                   title={props.editable ? "Click or press Enter to edit" : ""}
-                  onClick={() => props.editable && !editing() && setEditing(b.name)}
+                  onClick={() => props.editable && !editing() && setEditing(b.id)}
                   onKeyDown={(e) => {
                     if ((e.key === "Enter" && !keys.pass.is(e)) || e.key === " ") {
                       e.preventDefault();
-                      if (props.editable && !editing()) setEditing(b.name);
+                      if (props.editable && !editing()) setEditing(b.id);
                     }
                   }}
                 >
@@ -199,14 +201,14 @@ export function Boxes(props: Props) {
                 ref={(el) => { editor = el; queueMicrotask(() => el.focus()); }}
                 // Read once: an update from the server must not replace the text being typed.
                 value={untrack(() => joinLines(b.lines))}
-                onBlur={() => finish(b.name)}
+                onBlur={() => finish(b.id)}
                 onKeyDown={(e) => {
                   if (keys.pass.is(e)) { e.preventDefault(); props.onPass(); }
                   // Esc leaves the box like clicking away does, keeping what was typed, and
                   // the keyboard stays on the box.
                   if (e.key === "Escape") {
-                    finish(b.name);
-                    body(b.name)?.focus();
+                    finish(b.id);
+                    body(b.id)?.focus();
                   }
                 }}
               />

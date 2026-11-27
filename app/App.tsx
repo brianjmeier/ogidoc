@@ -147,10 +147,11 @@ export function App() {
                 <Boxes
                   ref={(api) => (boxes = api)}
                   boxes={s().boxes}
+                  edges={s().edges}
                   symbols={s().symbols}
                   editable={editable()}
                   animate={boxAnim()}
-                  onEdit={(name, text) => post("/api/edit", { boxes: { [name]: text } })}
+                  onEdit={(id, text) => post("/api/edit", { boxes: { [id]: text } })}
                   onPass={pass}
                 />
               </section>

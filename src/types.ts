@@ -12,11 +12,61 @@ export interface Line {
   chg?: boolean;
 }
 
-export interface Box {
+// Where a box lives in the code, so the person can open it and the editor can tell when
+// the code under it changed.
+export interface CodeRef {
+  file: string;
+  line?: number;
+  symbol?: string;
+}
+
+/** A box as the map file keeps it: its lines as text. */
+export interface BoxOnDisk {
+  id: string;
   name: string;
+  parent: string | null;
+  text: string;
+  status: Status;
+  code?: CodeRef[];
+  seen?: Record<string, string>;
+  pins?: Pin[];
+}
+
+// The repo's map as the map file keeps it.
+export interface MapOnDisk {
+  boxes: BoxOnDisk[];
+  edges: BoxEdge[];
+}
+
+// A tangle an agent found reading a box's code, with where.
+export interface Pin {
+  kind: string;
+  text: string;
+  file?: string;
+  line?: number;
+}
+
+// An abstraction on the repo's map. Boxes nest: a box's children are what you see when
+// you open it.
+export interface Box {
+  id: string;
+  name: string;
+  parent: string | null;
   lines: Line[];
   status: Status;
-  uses: string[];
+  code?: CodeRef[];
+  // The git blob hash of each file in `code` when the box last said what it does.
+  seen?: Record<string, string>;
+  pins?: Pin[];
+}
+
+// One box calling another, or importing from it.
+export interface BoxEdge {
+  from: string;
+  to: string;
+  label?: string;
+  kind: "call" | "import";
+  symbols?: string[];
 }
 
 export interface Message {
@@ -95,7 +145,7 @@ export type LineChange = { op: "add" | "del"; text: string } | { op: "mod"; old:
 
 export interface HumanDiff {
   lines: LineChange[];
-  boxes: { name: string; lines: LineChange[] }[];
+  boxes: { id: string; name: string; lines: LineChange[] }[];
 }
 
 // How the browser replays an agent turn, in display order.
@@ -130,6 +180,7 @@ export interface Snapshot {
   activity: string[];
   lines: Line[];
   boxes: Box[];
+  edges: BoxEdge[];
   threads: Thread[];
   choices: Choice[];
   symbols: Symbol[];

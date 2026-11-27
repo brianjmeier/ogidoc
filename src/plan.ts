@@ -1,7 +1,7 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import type { AnimationOp, Box, BoxChanges, Choice, HumanDiff, LastTurn, Line, Reply, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, HumanDiff, LastTurn, Line, MapOnDisk, Reply, Thread } from "./types.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
 // the comment threads pinned to its lines, and the choices offered on them. Every change
@@ -9,6 +9,7 @@ import type { AnimationOp, Box, BoxChanges, Choice, HumanDiff, LastTurn, Line, R
 export interface Plan {
   lines: Line[];
   boxes: Box[];
+  edges: BoxEdge[];
   threads: Thread[];
   choices: Choice[];
 }
@@ -19,7 +20,8 @@ export interface Base {
   boxes: Record<string, string[]>;
 }
 
-// The person's edits: new plan text, proposals they accepted, box bodies they changed.
+// The person's edits: new plan text, proposals they accepted, box bodies they changed,
+// by box id.
 export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; accepted?: number[]; boxes?: Record<string, string> }): Plan {
   let { lines, threads: ts } = plan;
   let ops: DiffOp[] = lines.map((_, i) => ({ op: "eq", a: i, b: i }));
@@ -32,29 +34,34 @@ export function edit(plan: Plan, { text, accepted, boxes }: { text?: string; acc
   const take = new Set((accepted ?? []).filter((i) => lines[i]?.kind === "proposal"));
   const built = anyBuilt(lines, plan.boxes);
   if (take.size) lines = lines.map((l, i) => (take.has(i) ? acceptProposal(l, built) : l));
-  return { lines, threads: ts, choices: choices.follow(plan.choices, ops, lines), boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
+  return { ...plan, lines, threads: ts, choices: choices.follow(plan.choices, ops, lines), boxes: boxes ? editBoxes(plan.boxes, boxes) : plan.boxes };
 }
 
-// Box files are plain text, edited in the box pane or anywhere else.
+// A box's body is plain text, edited on the map or in the map file.
 function editBoxes(boxes: Box[], bodies: Record<string, string>): Box[] {
   return boxes.map((b) => {
-    if (!(b.name in bodies) || joinLines(b.lines) === bodies[b.name]) return b;
-    const lines = carryMeta(b.lines, splitLines(bodies[b.name]), { anyBuilt: true }).map((l) => ({ ...l, kind: null }));
+    if (!(b.id in bodies) || joinLines(b.lines) === bodies[b.id]) return b;
+    const lines = carryMeta(b.lines, splitLines(bodies[b.id]), { anyBuilt: true }).map((l) => ({ ...l, kind: null }));
     return { ...b, lines, status: "stale" };
   });
 }
 
-// The plan as the files on disk have it; the text there wins over what was saved.
-export function fromFiles(saved: Plan, planText: string, boxTexts: Record<string, string>): Plan {
+// The plan as the files on disk have it; the text there wins over what was saved. A box
+// this session hasn't seen yet (another session's, or the person's) comes as the map has
+// it; one it knows keeps what the editor knew about its lines.
+export function fromFiles(saved: Plan, planText: string, map: MapOnDisk): Plan {
   const p = edit(saved, { text: planText });
-  const boxes = p.boxes.filter((b) => b.name in boxTexts);
-  for (const name of Object.keys(boxTexts)) if (!boxes.some((b) => b.name === name)) boxes.push({ name, lines: [], status: "stale", uses: [] });
-  return { ...p, boxes: editBoxes(boxes, boxTexts) };
+  const had = new Map(p.boxes.map((b) => [b.id, b]));
+  const boxes = map.boxes.map(({ text, ...disk }): Box => {
+    const old = had.get(disk.id);
+    return old ? { ...disk, lines: old.lines, status: old.status } : { ...disk, lines: text ? splitLines(text).map((t) => ({ text: t })) : [] };
+  });
+  return { ...p, boxes: editBoxes(boxes, Object.fromEntries(map.boxes.map((b) => [b.id, b.text]))), edges: map.edges };
 }
 
 export const baseOf = (plan: Plan): Base => ({
   lines: plan.lines.map((l) => l.text),
-  boxes: Object.fromEntries(plan.boxes.map((b) => [b.name, b.lines.map((l) => l.text)])),
+  boxes: Object.fromEntries(plan.boxes.map((b) => [b.id, b.lines.map((l) => l.text)])),
 });
 
 // What the person changed since the agent last saw the plan.
@@ -64,7 +71,7 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
       .filter((o) => o.op !== "eq")
       .map((o) => (o.op === "del" ? { op: "del", text: oldT[o.a] } : o.op === "ins" ? { op: "add", text: newT[o.b] } : { op: "mod", old: oldT[o.a], text: newT[o.b] }));
   const boxes = plan.boxes
-    .map((b) => ({ name: b.name, lines: changes(base.boxes[b.name] || [], b.lines.map((l) => l.text)) }))
+    .map((b) => ({ id: b.id, name: b.name, lines: changes(base.boxes[b.id] || [], b.lines.map((l) => l.text)) }))
     .filter((b) => b.lines.length);
   return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes };
 }
@@ -123,7 +130,9 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
   const ops = diffLines(oldLines.map((l) => l.text), newTexts);
   const ts = threads.fromAgent(threads.move(plan.threads, ops, oldLines.length), reply, turn);
 
-  const oldBoxes = new Map(plan.boxes.map((b) => [b.name, b]));
+  // An agent's box is named by its id. What the reply doesn't say about it (where it sits,
+  // its code) stays as the map has it.
+  const oldBoxes = new Map(plan.boxes.map((b) => [b.id, b]));
   const boxChanges: BoxChanges = {};
   const boxes = reply.boxes.map((rb): Box => {
     const old = oldBoxes.get(rb.name);
@@ -136,12 +145,17 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
     }
     if (!old) boxChanges[rb.name] = "new";
     else if (bops.some((o) => o.op !== "eq")) boxChanges[rb.name] = "changed";
-    return { name: rb.name, lines, status: rb.status, uses: rb.uses };
+    return { ...old, id: rb.name, name: old?.name ?? rb.name, parent: old?.parent ?? null, lines, status: rb.status };
   });
+  const ids = new Set(boxes.map((b) => b.id));
+  const edges: BoxEdge[] = [
+    ...plan.edges.filter((e) => e.kind !== "call" && ids.has(e.from) && ids.has(e.to)),
+    ...reply.boxes.flatMap((rb) => rb.uses.filter((u) => ids.has(u) && u !== rb.name).map((to): BoxEdge => ({ from: rb.name, to, kind: "call" }))),
+  ];
 
   // A line that left the plan and shows up in a box was moved there.
   const boxOf = new Map<string, string>();
-  for (const b of boxes) if (b.name in boxChanges) for (const l of b.lines) boxOf.set(norm(l.text), b.name);
+  for (const b of boxes) if (b.id in boxChanges) for (const l of b.lines) boxOf.set(norm(l.text), b.id);
 
   const lines: Line[] = new Array(newTexts.length);
   const animation: AnimationOp[] = [];
@@ -160,7 +174,7 @@ export function fromReply(plan: Plan, reply: Reply, turn: number): { plan: Plan;
       animation.push(o.op === "mod" ? { op: "mod", b: o.b, old: oldLines[o.a].text } : { op: "add", b: o.b });
     }
   }
-  return { plan: { lines, boxes, threads: ts, choices: choices.fromAgent(plan.choices, reply.choices, lines) }, animation, boxChanges };
+  return { plan: { lines, boxes, edges, threads: ts, choices: choices.fromAgent(plan.choices, reply.choices, lines) }, animation, boxChanges };
 }
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");

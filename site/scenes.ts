@@ -91,7 +91,7 @@ const click = "  click(cell) -> put turn's mark there, swap turn";
 
 // if (coding is slow but fun): you can prompt with code.
 export const promptWithCode = {
-  start: { lines: game.map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+  start: { lines: game.map(built), boxes: [], edges: [], threads: [], choices: [] } satisfies Plan,
   beats: [
     { person: [...game, click].join("\n") },
     {
@@ -115,7 +115,7 @@ const winnerRules = ["three in a row -> that mark", "three in a column -> that m
 // When code gets complicated: three settled lines fold into a named box and leave a
 // one-line reference behind.
 export const abstractions = {
-  start: { lines: [...played, "  winner(board):", ...winnerRules.map((r) => `    ${r}`)].map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+  start: { lines: [...played, "  winner(board):", ...winnerRules.map((r) => `    ${r}`)].map(built), boxes: [], edges: [], threads: [], choices: [] } satisfies Plan,
   beats: [
     { person: [...played, "  winner(board):", ...winnerRules.map((r) => `    ${r}`), "  game over when winner(board) or board is full"].join("\n") },
     {
@@ -140,7 +140,7 @@ export const abstractions = {
 // When agents have questions: the agent builds its pick, shows the other way in place,
 // and the person switches to it and hands over.
 export const choices = {
-  start: { lines: played.map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+  start: { lines: played.map(built), boxes: [], edges: [], threads: [], choices: [] } satisfies Plan,
   beats: [
     { person: [...played, "  restart()"].join("\n") },
     {
@@ -172,7 +172,7 @@ export const choices = {
 // the agent's line reads like the person wrote it.
 function inStyle(start: string[], typed: string[], done: string[]) {
   return {
-    start: { lines: start.map(built), boxes: [], threads: [], choices: [] } satisfies Plan,
+    start: { lines: start.map(built), boxes: [], edges: [], threads: [], choices: [] } satisfies Plan,
     beats: [
       { person: typed.join("\n") },
       {
@@ -213,7 +213,7 @@ const demoTurn = ({ reply }: (typeof demoScript.turns)[number]): Beat => ({
   agent: reply as Partial<Reply> & Pick<Reply, "plan">,
   last: { summary: reply.summary, steps: reply.steps as LastTurn["steps"], files: reply.files as LastTurn["files"], checks: reply.checks },
 });
-const empty: Plan = { lines: [], boxes: [], threads: [], choices: [] };
+const empty: Plan = { lines: [], boxes: [], edges: [], threads: [], choices: [] };
 export const demo = {
   start: empty,
   model: "default",

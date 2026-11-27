@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./paths.ts";
 import { hasContent } from "./shared/diff.ts";
-import type { Box, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
+import type { Box, BoxEdge, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
 
 export function readAgentFile(name: string): string {
   return readFileSync(join(AGENT_DIR, name), "utf8");
@@ -17,6 +17,7 @@ interface PromptInput {
   cwd: string;
   lines: Line[];
   boxes: Box[];
+  edges: BoxEdge[];
   threads: Thread[];
   choices: Choice[];
   humanDiff: HumanDiff;
@@ -24,7 +25,7 @@ interface PromptInput {
   last: LastTurn | null;
 }
 
-export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines, boxes, threads, choices, humanDiff, drift, last }: PromptInput): string {
+export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines, boxes, edges, threads, choices, humanDiff, drift, last }: PromptInput): string {
   const vars: Record<string, string> = {
     skill: skill.replace(/^---[\s\S]*?---\n/, "").trim(),
     rules: rules.trim(),
@@ -34,7 +35,7 @@ export function buildPrompt({ skill, rules, session, turn, planPath, cwd, lines,
     cwd,
     plan: jsonLines(lines.map(({ text, kind, status, by }) => ({ text, kind: kind ?? null, status: status ?? null, by }))),
     boxes: boxes.length
-      ? jsonLines(boxes.map(({ name, lines: body, status, uses }) => ({ name, lines: body.map((l) => l.text), status, uses })))
+      ? jsonLines(boxes.map(({ id, lines: body, status }) => ({ name: id, lines: body.map((l) => l.text), status, uses: edges.filter((e) => e.from === id && e.kind === "call").map((e) => e.to) })))
       : "None yet.",
     comments: describeThreads(threads, lines),
     choices: describeChoices(choices),

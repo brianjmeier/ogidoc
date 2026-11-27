@@ -3,7 +3,7 @@ import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
 import { keys } from "../app/text.ts";
-import type { Box, LastTurn } from "../src/types.ts";
+import type { Box, BoxEdge, LastTurn } from "../src/types.ts";
 import type { Plan } from "../src/plan.ts";
 import type { Frame } from "./scenes.ts";
 
@@ -26,6 +26,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
   const [passing, setPassing] = createSignal(false);
   const [last, setLast] = createSignal<LastTurn | null>(null);
   const [boxes, setBoxes] = createSignal<Box[]>([]);
+  const [edges, setEdges] = createSignal<BoxEdge[]>([]);
   const [boxAnim, setBoxAnim] = createSignal<BoxAnimation | null>(null);
   const [model, setModel] = createSignal(props.model);
   const [picking, setPicking] = createSignal(false);
@@ -50,6 +51,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
     while (!stopped) {
       editor.adopt(props.start);
       setBoxes(props.start.boxes);
+      setEdges(props.start.edges);
       setLast(null);
       setWhose("h");
       setModel(props.model);
@@ -77,6 +79,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           f.animation.forEach((o, k) => { if (o.op === "move") pulse[o.to] ??= 500 + k * 40; });
           setBoxAnim({ delay: 250, pulse, changes: f.boxChanges });
           setBoxes(f.plan.boxes);
+          setEdges(f.plan.edges);
           await editor.animate(f.animation, old, f.plan);
           setBoxAnim(null);
           setLast(f.last);
@@ -123,7 +126,7 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
           </div>
           <Show when={boxes().length}>
             <div class="box-pane">
-              <Boxes ref={() => {}} boxes={boxes()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
+              <Boxes ref={() => {}} boxes={boxes()} edges={edges()} symbols={[]} editable={false} animate={boxAnim()} onEdit={() => {}} onPass={() => {}} />
             </div>
           </Show>
         </div>

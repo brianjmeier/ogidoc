@@ -51,7 +51,7 @@ export class Session extends EventEmitter {
     this.clock = clock;
     this.s = saved.state;
     // Someone may have edited the files in another editor; carry what we know across.
-    this.setPlan(plan.fromFiles(this.plan, saved.planText, saved.boxTexts));
+    this.setPlan(plan.fromFiles(this.plan, saved.planText, saved.map));
   }
 
   get name() {
@@ -102,7 +102,7 @@ export class Session extends EventEmitter {
   }
 
   private get plan(): Plan {
-    return { lines: this.s.lines, boxes: this.s.boxes, threads: this.s.threads, choices: this.s.choices };
+    return { lines: this.s.lines, boxes: this.s.boxes, edges: this.s.edges, threads: this.s.threads, choices: this.s.choices };
   }
 
   private setPlan(p: Plan) {
@@ -230,6 +230,7 @@ export class Session extends EventEmitter {
       cwd: this.store.cwd,
       lines: s.lines,
       boxes: s.boxes,
+      edges: s.edges,
       threads: s.threads,
       choices: s.choices,
       humanDiff: plan.humanDiff(s.base, this.plan),

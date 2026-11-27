@@ -312,7 +312,7 @@ try {
   const log = g("log", "--format=%s").trim().split("\n");
   assert.deepEqual(log.slice(0, 3), ["ogidoc: turn 3 on weekly", "ogidoc: turn 2 on weekly", "ogidoc: turn 1 on weekly"]);
   const files = g("show", "--name-only", "--format=", "HEAD~1").trim().split("\n");
-  assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".ogidoc/weekly/boxes/weekWindow.plan"), files.join(", "));
+  assert.ok(files.includes("src/card.js") && files.includes("weekly.plan") && files.includes(".ogidoc/map.json"), files.join(", "));
   assert.ok(files.includes(".ogidoc/weekly/comments.json"), "the thread is committed with the turn");
 
   step("undo the last agent turn from the keyboard, pressing the key twice");

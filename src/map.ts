@@ -6,18 +6,14 @@
 // named path through the map, like "follow a link", that the editor can play.
 
 import { diffLines } from "./shared/diff.ts";
-import type { Edit } from "./types.ts";
+import type { CodeRef, Edit, Pin } from "./types.ts";
+export type { CodeRef, Pin };
 import type { SeamName, Skeleton, Smell } from "./scan.ts";
 import type { DescribeBrief, Described } from "./describe.ts";
 
 export type Kind = "entry" | "module" | "step" | "store" | "external";
-export type Status = "built" | "stale" | "proposal";
+export type Status = "built" | "stale" | "blocked" | "proposal";
 
-export interface CodeRef {
-  file: string;
-  line?: number;
-  symbol?: string;
-}
 
 export interface MapNode {
   id: string;
@@ -52,12 +48,6 @@ export interface MapNode {
   pins?: Pin[];
 }
 
-export interface Pin {
-  kind: string;
-  text: string;
-  file?: string;
-  line?: number;
-}
 
 export interface MapEdge {
   from: string;

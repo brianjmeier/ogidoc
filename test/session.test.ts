@@ -43,11 +43,12 @@ test("a full session: build with a choice, comment, move into boxes, disagree in
   const moved = events.at(-1)!.animation!.filter((o) => o.op === "move");
   assert.ok(moved.length >= 6, `expected moved lines, got ${moved.length}`);
   assert.ok(moved.some((m) => m.to === "weekWindow"));
-  assert.ok(existsSync(join(dir, ".ogidoc/weekly/boxes/summarizeWeek.plan")));
+  const onMap = () => JSON.parse(readFileSync(join(dir, ".ogidoc/map.json"), "utf8")).nodes.find((n: { id: string }) => n.id === "summarizeWeek");
+  assert.ok(onMap(), "the box is on the repo's map");
   assert.equal(view().lines.length, 3);
 
   // Disagree inside a box, reject the dismiss proposal.
-  s.edit({ boxes: { summarizeWeek: readFileSync(join(dir, ".ogidoc/weekly/boxes/summarizeWeek.plan"), "utf8").replace("keep 3", "keep 2").trimEnd() } });
+  s.edit({ boxes: { summarizeWeek: onMap().pseudo.join("\n").replace("keep 3", "keep 2") } });
   assert.equal(view().boxes.find((b) => b.name === "summarizeWeek")!.status, "stale");
   await s.pass({ text: texts(view().lines.filter((l) => l.kind !== "proposal")).join("\n") });
   assert.match(prompts[2], /In box summarizeWeek:\n {2}- .*keep 3\n {2}\+ .*keep 2/, "the agent sees the person's change in the box");
