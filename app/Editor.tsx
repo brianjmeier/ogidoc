@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSelector, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, flush, onSettled } from "solid-js";
 import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines } from "../src/shared/diff.ts";
 import { choose, follow, span } from "../src/choices.ts";
 import { anyStop, isOpenProposal, nextStop, stops, waitingOnYou } from "../src/shared/stops.ts";
@@ -77,7 +77,7 @@ export function Editor(props: Props) {
   const built = () => !!state() && anyBuilt(state()!.lines, state()!.boxes);
   const [caret, setCaret] = createSignal({ line: 0, col: 0, collapsed: true }, { equals: (a, b) => a.line === b.line && a.col === b.col && a.collapsed === b.collapsed });
   const caretLine = createMemo(() => caret().line);
-  const onCaretLine = createSelector<number, number | null>(caretLine);
+  const onCaretLine = (n: number | null) => caretLine() === n;
   const [ghostOff, setGhostOff] = createSignal(false);
   const [anim, setAnim] = createSignal<Row[] | null>(null);
   const accepted = new Set<number>();
@@ -121,48 +121,56 @@ export function Editor(props: Props) {
     return { way: !!c, "way-top": !!c && n === c.line, "way-end": !!c && n === c.line + c.options[c.current].length - 1, "way-here": !!c && inChoice(c) };
   };
   const caretChoice = createMemo(() => choiceAt().get(caretLine()));
-  const isCaretChoice = createSelector<Choice | undefined, Choice>(caretChoice);
+  const isCaretChoice = (c: Choice) => caretChoice() === c;
   // Where each choice's lines sit, so its control stays beside them on the right, still
   // while the text changes. Measured after the rows render, and again when they rewrap.
   let rowsEl!: HTMLDivElement;
   const [wrapped, setWrapped] = createSignal(0);
   const [rail, setRail] = createSignal<{ choice: Choice; top: number; height: number }[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const ro = new ResizeObserver(() => setWrapped((k) => k + 1));
     ro.observe(rowsEl);
-    onCleanup(() => ro.disconnect());
+    return () => ro.disconnect();
   });
-  createEffect(() => {
-    wrapped();
-    rows();
-    const els = rowsEl.children as HTMLCollectionOf<HTMLElement>;
-    setRail(choices().flatMap((choice) => {
-      const first = els[choice.line];
-      const last = els[choice.line + choice.options[choice.current].length - 1];
-      return first && last ? [{ choice, top: first.offsetTop, height: last.offsetTop + last.offsetHeight - first.offsetTop }] : [];
-    }));
-  });
+  createEffect(
+    () => (wrapped(), rows(), choices()),
+    (cs) => {
+      const els = rowsEl.children as HTMLCollectionOf<HTMLElement>;
+      setRail(cs.flatMap((choice) => {
+        const first = els[choice.line];
+        const last = els[choice.line + choice.options[choice.current].length - 1];
+        return first && last ? [{ choice, top: first.offsetTop, height: last.offsetTop + last.offsetHeight - first.offsetTop }] : [];
+      }));
+    },
+  );
   // When a comment card closes, typing goes back to the plan, where the caret was.
-  createEffect(on(openId, (id, prev) => {
-    if (prev && !id) setTimeout(focusIfIdle);
-  }, { defer: true }));
+  // The card leaves the page a frame after it closes, so wait for the keyboard to leave it.
+  createEffect(openId, (id, prev) => {
+    if (!prev || id) return;
+    const at = document.activeElement;
+    if (!at || at === document.body || at === ta) return void setTimeout(focusIfIdle);
+    at.addEventListener("focusout", () => setTimeout(() => !at.isConnected && focusIfIdle()), { once: true });
+  }, { defer: true });
   const openOn = createMemo(() => {
     const by = new Map<number, Thread[]>();
     for (const t of props.threads) if (!t.resolved) by.set(t.line, [...(by.get(t.line) ?? []), t]);
     return by;
   });
 
+  // Reads the textarea, not the signals: a write shows in them only after the update
+  // lands, and the caret is often read in the same handler that just typed.
   function readCaret() {
     const pos = ta.selectionStart;
     const before = ta.value.slice(0, pos);
     const line = before.split("\n").length - 1;
-    setCaret({ line, col: pos - before.lastIndexOf("\n") - 1, collapsed: ta.selectionStart === ta.selectionEnd });
-    const { line: l, col } = caret();
-    const text = lines()[l]?.text || "";
+    const at = { line, col: pos - before.lastIndexOf("\n") - 1, collapsed: ta.selectionStart === ta.selectionEnd };
+    setCaret(at);
+    const text = splitLines(ta.value)[line] || "";
     const re = symRe();
-    const hit = re && [...text.matchAll(re)].find((m) => col >= m.index && col <= m.index + m[0].length);
+    const hit = re && [...text.matchAll(re)].find((m) => at.col >= m.index && at.col <= m.index + m[0].length);
     const sym = hit && symbols().find((s) => s.name === hit[0]);
     props.onHint(sym ? `${sym.name} · ${sym.where}` : "");
+    return at;
   }
 
   function onInput() {
@@ -215,12 +223,11 @@ export function Editor(props: Props) {
       return;
     }
     // The caret may have moved without a click or a key, from a script or a drop.
-    readCaret();
-    const n = caret().line;
+    const n = readCaret().line;
     const by = keys.jump.by(e);
     if (by) {
       e.preventDefault();
-      jump(by);
+      jump(by, n);
       return;
     }
     if (keys.comment.is(e)) {
@@ -257,7 +264,7 @@ export function Editor(props: Props) {
     } else if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
       // Keep the indentation of the line above.
       e.preventDefault();
-      insert("\n" + indentOf(lines()[caret().line]?.text ?? ""));
+      insert("\n" + indentOf(lines()[n]?.text ?? ""));
     }
   }
 
@@ -270,13 +277,14 @@ export function Editor(props: Props) {
     ta.setSelectionRange(at, at);
     readCaret();
   }
-  const placeAtIndent = (n: number) => place(n, indentOf(lines()[n].text).length);
+  // The textarea has the text as it is now, also right after an edit in the same handler.
+  const placeAtIndent = (n: number) => place(n, indentOf(splitLines(ta.value)[n] ?? "").length);
 
   // The caret goes to the next line that waits on the person; a comment the agent
   // answered there opens.
   const hasStops = createMemo(() => anyStop(lines(), choices(), props.threads));
-  function jump(by: 1 | -1) {
-    const n = nextStop(stops(lines(), choices(), props.threads), caret().line, by);
+  function jump(by: 1 | -1, from = caret().line) {
+    const n = nextStop(stops(lines(), choices(), props.threads), from, by);
     if (n === null) return;
     ta.focus({ preventScroll: true });
     placeAtIndent(n);
@@ -367,7 +375,11 @@ export function Editor(props: Props) {
     if (ta.value === text) return;
     const focused = document.activeElement === ta;
     const { line, col } = caret();
-    if (typed) setCopy((k) => k + 1);
+    if (typed) {
+      setCopy((k) => k + 1);
+      // The new textarea has to be in place before the text goes into it.
+      flush();
+    }
     ta.value = text;
     place(line, col);
     if (focused) ta.focus({ preventScroll: true });
@@ -403,9 +415,9 @@ export function Editor(props: Props) {
 
   return (
     <div class="scroller">
-      <div class="code" classList={{ working: props.working, "has-ways": choices().length > 0 }}>
+      <div class={["code", { working: props.working, "has-ways": choices().length > 0 }]}>
         <div class="rows" ref={rowsEl}>
-          <Index each={rows()}>
+          <For each={rows()} keyed={false}>
             {(r) => {
               const l = () => r().line;
               const n = () => r().n;
@@ -415,18 +427,17 @@ export function Editor(props: Props) {
               const deciding = () => isOpenProposal(l()) && props.editable && !anim() && n() !== null;
               return (
                 <div
-                  class={`row ${l().by || "h"} ${r().cls ?? ""}`}
-                  classList={{ chg: !!l().chg, ...wayEdges(n()) }}
+                  class={[`row ${l().by || "h"} ${r().cls ?? ""}`, { chg: !!l().chg, ...wayEdges(n()) }]}
                   style={{ "--d": `${r().delay ?? 0}ms` }}
                 >
                   <div class="g">
                     <span class="bar" />
                     <Show when={n() !== null} fallback={<span />}>
-                      <button type="button" class="no" tabIndex={-1} title={`Comment on this line · ${keys.comment.label}`} disabled={!props.editable} onClick={() => startThread(n()!)}>
+                      <button type="button" class="no" tabindex={-1} title={`Comment on this line · ${keys.comment.label}`} disabled={!props.editable} onClick={() => startThread(n()!)}>
                         {n()! + 1}
                       </button>
                     </Show>
-                    <span class="mk" classList={{ pop: !!r().pop }}>
+                    <span class={["mk", { pop: !!r().pop }]}>
                       <Show when={st()}>{(s) => <i class={`m m-${s()}`} title={STATUS_LABEL[s()]} aria-label={STATUS_LABEL[s()]}>{STATUS_MARK[s()]}</i>}</Show>
                     </span>
                   </div>
@@ -443,10 +454,10 @@ export function Editor(props: Props) {
                       </Show>
                       <Show when={deciding()}>
                         <span class="decide">
-                          <button type="button" tabIndex={-1} title="Keep it as a plain line of the plan" onMouseDown={keepFocus} onClick={() => accept(n()!)}>
+                          <button type="button" tabindex={-1} title="Keep it as a plain line of the plan" onMouseDown={keepFocus} onClick={() => accept(n()!)}>
                             Accept<Show when={keysOn(n())}> <kbd>{keys.keep.label}</kbd></Show>
                           </button>
-                          <button type="button" tabIndex={-1} title="Delete it" onMouseDown={keepFocus} onClick={() => reject(n()!)}>
+                          <button type="button" tabindex={-1} title="Delete it" onMouseDown={keepFocus} onClick={() => reject(n()!)}>
                             Reject<Show when={keysOn(n())}> <kbd>{keys.reject.label}</kbd></Show>
                           </button>
                         </span>
@@ -466,17 +477,17 @@ export function Editor(props: Props) {
                 </div>
               );
             }}
-          </Index>
+          </For>
         </div>
         <div class="rail">
-          <Index each={anim() ? [] : rail()}>
+          <For each={anim() ? [] : rail()} keyed={false}>
             {(w) => (
               <div class="ways" style={{ top: `${w().top}px`, height: `${w().height}px` }}>
                 <div class="ways-row">
-                  <button type="button" tabIndex={-1} aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, -1)}>‹</button>
+                  <button type="button" tabindex={-1} aria-label="Previous way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, -1)}>‹</button>
                   <span>{w().choice.current + 1} of {w().choice.options.length}</span>
-                  <button type="button" tabIndex={-1} aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, 1)}>›</button>
-                  <button type="button" tabIndex={-1} class="use" title="Keep this way and drop the others" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => settle(w().choice)}>
+                  <button type="button" tabindex={-1} aria-label="Next way" title="Other ways to do this" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => cycle(w().choice, 1)}>›</button>
+                  <button type="button" tabindex={-1} class="use" title="Keep this way and drop the others" disabled={!props.editable} onMouseDown={keepFocus} onClick={() => settle(w().choice)}>
                     Use this<Show when={inChoice(w().choice)}> <kbd>{keys.keep.label}</kbd></Show>
                   </button>
                 </div>
@@ -485,14 +496,14 @@ export function Editor(props: Props) {
                 </Show>
               </div>
             )}
-          </Index>
+          </For>
         </div>
         <div id={describeId} class="sr-only" role="status">{described()}</div>
         <Show when={copy()} keyed>
           {(_copy) => (
             <textarea
               ref={ta}
-              spellcheck={false}
+              spellcheck="false"
               autocapitalize="off"
               autocomplete="off"
               aria-label="Plan text"
@@ -500,7 +511,7 @@ export function Editor(props: Props) {
               data-gramm="false"
               data-gramm_editor="false"
               data-enable-grammarly="false"
-              readOnly={!props.editable}
+              readonly={!props.editable}
               style={{ visibility: anim() ? "hidden" : "visible" }}
               onInput={onInput}
               onKeyDown={onKeyDown}

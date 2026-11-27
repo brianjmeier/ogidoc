@@ -27,7 +27,7 @@ export function Underneath(props: { last: LastTurn | null; open?: boolean }) {
           </Show>
           <Show when={props.last!.checks?.length}>
             <div class="tags">
-              <For each={props.last!.checks}>{(c) => <span class="tag" classList={{ bad: !c.ok }}>{c.ok ? "✓" : "✕"} {c.name}</span>}</For>
+              <For each={props.last!.checks}>{(c) => <span class={["tag", { bad: !c.ok }]}>{c.ok ? "✓" : "✕"} {c.name}</span>}</For>
             </div>
           </Show>
         </div>

@@ -49,12 +49,13 @@
     "pair-programming"
   ],
   "devDependencies": {
-    "@kobalte/core": "0.13.14",
+    "@kobalte/core": "2.0.0-alpha.5",
+    "@solidjs/vite-plugin": "3.0.1",
+    "@solidjs/web": "2.0.4",
     "@types/node": "22.20.5",
     "playwright": "1.63.0",
-    "solid-js": "1.9.17",
+    "solid-js": "2.0.4",
     "typescript": "7.0.2",
-    "vite": "8.3.4",
-    "vite-plugin-solid": "2.11.14"
+    "vite": "8.3.4"
   }
 }

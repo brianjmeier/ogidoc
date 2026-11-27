@@ -222,7 +222,8 @@ try {
   await page.keyboard.press("Control+Enter");
   await waitTurn(/agent's turn/);
   await page.waitForSelector(".rows .a-move", { timeout: 15000 });
-  assert.ok(await page.$(".canvas .box.pop-in"), "boxes the agent added pop in");
+  // The new boxes come with the map, fetched when the turn lands, so they can trail the rows by a moment.
+  assert.ok(await page.waitForSelector(".canvas .box.pop-in", { timeout: 1000 }), "boxes the agent added pop in");
   await page.waitForTimeout(350);
   await shot("08-moving-into-boxes");
   await waitTurn(/your turn/);

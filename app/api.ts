@@ -1,5 +1,4 @@
-import { createSignal } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createSignal, createStore, flush, reconcile } from "solid-js";
 import type { AnimationOp, BoxChanges, Snapshot } from "../src/types.ts";
 
 // The session as the server last sent it, plus the one message the editor shows when
@@ -31,7 +30,14 @@ export function listen(onEvent: (next: Snapshot, prev: Prev | null, turn?: TurnC
   events.onmessage = (e) => {
     const { state: next, animation, boxChanges } = JSON.parse(e.data);
     const prev = store.s && { turn: store.s.turn, working: store.s.working };
-    setStore("s", reconcile(structuredClone(next), { key: "id" }));
+    const copy = structuredClone(next);
+    setStore((d) => {
+      if (d.s) reconcile(copy, "id")(d.s);
+      else d.s = copy;
+    });
+    // What runs next reads the update right away (whether the agent is still working, which
+    // comment waits), so it lands now instead of at the end of the tick.
+    flush();
     onEvent(next, prev, animation && { animation, boxChanges: boxChanges ?? {} });
   };
   events.onerror = () => setNotice("Lost the connection to the Ogidoc server. Is it still running?");

@@ -43,7 +43,8 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
           <For each={pending(key(), props.thread)}>{(m) => <Msg by="h" text={m.text} sending />}</For>
           <Show when={props.editable}>
             <TextField class="reply" value={draft(key())} onChange={(v) => setDraft(key(), v)}>
-              <TextField.TextArea autoResize rows={1} data-gramm="false" data-enable-grammarly="false" placeholder={props.thread ? "Reply" : "Ask or note something about this line"} onKeyDown={onKeyDown} />
+              {/* Kobalte moves focus into a popover only when it is modal; this card is not. */}
+              <TextField.TextArea ref={(el: HTMLTextAreaElement) => queueMicrotask(() => el.focus({ preventScroll: true }))} autoResize rows={1}data-gramm="false" data-enable-grammarly="false" placeholder={props.thread ? "Reply" : "Ask or note something about this line"} onKeyDown={onKeyDown} />
             </TextField>
             <div class="card-acts">
               <Show when={props.thread}>
@@ -66,7 +67,7 @@ export function ThreadPin(props: { thread?: Thread; editable: boolean; onPass: (
 
 function Msg(props: { by: Who; text: string; sending?: boolean }) {
   return (
-    <div class="msg" classList={{ sending: props.sending }}>
+    <div class={["msg", { sending: props.sending }]}>
       <i class={`pin ${props.by}`}>{INITIAL[props.by]}</i>
       <div>
         <div class="who">{NAME[props.by]}{props.sending ? " · sending…" : ""}</div>

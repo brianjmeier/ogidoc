@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createSignal, onSettled } from "solid-js";
 import { Boxes, type BoxAnimation } from "../app/Boxes.tsx";
 import { Editor, type EditorApi } from "../app/Editor.tsx";
 import { Underneath } from "../app/Underneath.tsx";
@@ -93,14 +93,14 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
     }
   }
 
-  onMount(() => {
+  onSettled(() => {
     const io = new IntersectionObserver(([e]) => {
       setVisible(e.isIntersecting);
       if (e.isIntersecting && wake) { wake(); wake = null; }
     }, { threshold: 0.4 });
     io.observe(el);
     shown().then(play);
-    onCleanup(() => { stopped = true; io.disconnect(); });
+    return () => { stopped = true; io.disconnect(); };
   });
 
   return (
@@ -112,16 +112,16 @@ export function Scene(props: { start: Plan; frames: Frame[]; label: string; file
         <Show when={model()}>
           <span class="pick" aria-hidden="true">
             <span class="pick-name">model</span>
-            <span class="select" classList={{ pressed: picking() }}>{model()!.charAt(0).toUpperCase() + model()!.slice(1)}<span class="caret">▾</span></span>
+            <span class={["select", { pressed: picking() }]}>{model()!.charAt(0).toUpperCase() + model()!.slice(1)}<span class="caret">▾</span></span>
           </span>
         </Show>
-        <span class={`turn ${whose()}`} classList={{ passing: passing() }}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
-        <span class="btn primary" classList={{ pressed: passing() }} data-disabled={whose() === "a" ? "" : undefined} aria-hidden="true">
+        <span class={[`turn ${whose()}`, { passing: passing() }]}><i class="dot" />{whose() === "a" ? "agent's turn · writing" : "your turn"}</span>
+        <span class={["btn primary", { pressed: passing() }]} data-disabled={whose() === "a" ? "" : undefined} aria-hidden="true">
           Hand over <kbd>{keys.pass.label}</kbd>
         </span>
       </div>
       <div class="scene-main">
-        <div class="scene-body" classList={{ split: boxes().length > 0 }}>
+        <div class={["scene-body", { split: boxes().length > 0 }]}>
           <div class="editor" style={{ "min-height": planHeight }}>
             <Editor ref={(api) => (editor = api)} editable={false} working={false} threads={[]} onEdit={() => {}} onChoose={() => {}} onSettle={() => {}} onPass={() => {}} onHint={() => {}} />
           </div>

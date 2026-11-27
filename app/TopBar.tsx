@@ -49,7 +49,7 @@ export function TopBar(props: Props) {
           Next to decide <kbd>{keys.jump.label}</kbd>
         </Button>
       </Show>
-      <span class={`turn ${props.turn.cls}`} classList={{ passing: props.passing }}>
+      <span class={[`turn ${props.turn.cls}`, { passing: props.passing }]}>
         <i class="dot" />
         <span>{props.turn.label}{props.turn.seconds === undefined ? "" : ` ${props.turn.seconds}s`}</span>
       </span>

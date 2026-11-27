@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { render } from "solid-js/web";
+import { render } from "@solidjs/web";
 import { Scene } from "./Scene.tsx";
 import { Game, type GameApi } from "./Game.tsx";
 import { abstractions, choices, demo, existingRepo, frames, promptWithCode, styles } from "./scenes.ts";

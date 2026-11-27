@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onSettled } from "solid-js";
 import { Button } from "@kobalte/core/button";
 import type { Edit, MapView, Snapshot } from "../src/types.ts";
 import { listen, notice, post, state, type TurnChanges } from "./api.ts";
@@ -12,8 +12,9 @@ import { keys } from "./text.ts";
 import { waitingOnYou } from "../src/shared/stops.ts";
 
 export function App() {
-  // The top bar renders before the editor exists.
-  const [editor, setEditor] = createSignal<EditorApi>();
+  // The top bar renders before the editor exists. The editor hands its api over while it
+  // renders, hence the write from inside a component.
+  const [editor, setEditor] = createSignal<EditorApi | undefined>(undefined, { ownedWrite: true });
   let boxes: BoxesApi | undefined;
   let editTimer: ReturnType<typeof setTimeout> | undefined;
   const [writing, setWriting] = createSignal(false);
@@ -26,13 +27,13 @@ export function App() {
   // The whole map, fetched when the server says it changed.
   const [map, setMap] = createSignal<MapView | null>(null);
   let mapAsked = 0;
-  createEffect(on(() => state()?.mapRev, (rev) => {
+  createEffect(() => state()?.mapRev, (rev) => {
     if (rev === undefined) return;
     const ask = ++mapAsked;
     fetch("/api/map").then((r) => r.json()).then((m: MapView) => {
       if (ask === mapAsked) setMap(m);
     }, () => {});
-  }));
+  });
   const names = createMemo(() => new Map((map()?.boxes ?? []).map((b) => [b.id, b.name])));
   const editMap = (edits: Edit[]) => post("/api/map", { edits });
   const editBox = (id: string, text: string) => post("/api/edit", { boxes: { [id]: text } });
@@ -99,7 +100,7 @@ export function App() {
     editor()!.focusIfIdle();
   }
 
-  onCleanup(listen(onEvent));
+  onSettled(() => listen(onEvent));
 
   document.addEventListener("keydown", (e) => {
     if (keys.pass.is(e) && !(e.target as HTMLElement).closest("textarea")) {
@@ -109,11 +110,12 @@ export function App() {
   });
 
   // The clock for "working 12s".
-  createEffect(() => {
-    if (!state()?.working) { setWorkStart(0); return; }
-    if (!workStart()) setWorkStart(Date.now());
+  const working = createMemo(() => !!state()?.working);
+  createEffect(working, (on) => {
+    setWorkStart(on ? Date.now() : 0);
+    if (!on) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
-    onCleanup(() => clearInterval(t));
+    return () => clearInterval(t);
   });
 
   const whoseTurn = () => {
@@ -133,7 +135,7 @@ export function App() {
           {/* Turn changes, said once to a screen reader; the seconds counting up are left out. */}
           <div class="sr-only" role="status">{whoseTurn().label}</div>
           <TopBar state={s()} turn={whoseTurn()} passing={passing()} onPass={pass} undo={undo} undoKey={live() && editor()!.fresh()} onNext={live() && editor()!.hasStops() ? () => editor()!.jump(1) : undefined} />
-          <main class="panes" classList={{ solo: !map()?.boxes.length }}>
+          <main class={["panes", { solo: !map()?.boxes.length }]}>
             <section class="pane text-pane" aria-label="Plan">
               <div class="editor">
                 <Editor
@@ -209,8 +211,8 @@ function StatusCard(props: { state: Snapshot }) {
   const items = () => (props.state.activity.length ? props.state.activity : ["reading the plan"]).slice(-4);
   return (
     <Show when={failed() || props.state.working}>
-      <div class="activity" classList={{ failed: !!failed() }}>
-        <Show when={failed()} fallback={<For each={items()}>{(a, i) => <div classList={{ now: i() === items().length - 1 }}>{a}</div>}</For>}>
+      <div class={["activity", { failed: !!failed() }]}>
+        <Show when={failed()} fallback={<For each={items()}>{(a, i) => <div class={{ now: i() === items().length - 1 }}>{a}</div>}</For>}>
           {failed()}
           <Show when={props.state.canUndo && !notice()}>
             <Button class="btn" onClick={() => post("/api/undo")}>Undo agent turn</Button>

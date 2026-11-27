@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onSettled, untrack } from "solid-js";
 import { joinLines, splitLines } from "../src/shared/diff.ts";
 import type { Box, BoxChanges, BoxEdge, Edit, Pin, Smell, Snapshot } from "../src/types.ts";
 import { STATUS_LABEL, decorate, keys, symbolPattern } from "./text.ts";
@@ -81,7 +81,7 @@ export function Boxes(props: Props) {
   const byId = () => v().byId as Map<string, Box>;
   const nameOf = (id: string) => byId().get(id)?.name ?? id;
   const rank = createMemo(() => ranked(v().shown.map((b) => b.id), v().ghosts, v().wires));
-  const keysInOrder = createMemo(() => order(rank(), v().wires), undefined, { equals: (a, b) => a.join("\n") === b.join("\n") });
+  const keysInOrder = createMemo(() => order(rank(), v().wires), { equals: (a, b) => a.join("\n") === b.join("\n") });
   const kids = createMemo(() => {
     const n = new Map<string, number>();
     for (const b of props.boxes) if (b.parent) n.set(b.parent, (n.get(b.parent) ?? 0) + 1);
@@ -104,10 +104,10 @@ export function Boxes(props: Props) {
   });
 
   // The level's box went away (an undo, a rescan): back to the top.
-  createEffect(() => {
-    const l = level();
-    if (l && !props.boxes.some((b) => b.id === l)) setLevel(null);
-  });
+  createEffect(
+    () => { const l = level(); return !!l && !props.boxes.some((b) => b.id === l); },
+    (gone) => { if (gone) setLevel(null); },
+  );
 
   // ---------- where everything goes ----------
 
@@ -147,9 +147,14 @@ export function Boxes(props: Props) {
     if (next) setSizes(next);
   }
   const boxRo = new ResizeObserver((entries) => measure(entries.map((e) => e.target)));
-  const observe = (el: HTMLElement) => {
-    boxRo.observe(el);
-    onCleanup(() => boxRo.unobserve(el));
+  // A ref directive: set up with the card, so the card going away stops the watching.
+  const observe = () => {
+    let el: HTMLElement | undefined;
+    onCleanup(() => el && boxRo.unobserve(el));
+    return (e: HTMLElement) => {
+      el = e;
+      boxRo.observe(e);
+    };
   };
 
   function fit() {
@@ -163,27 +168,30 @@ export function Boxes(props: Props) {
   // Fit when the level, what it shows, its size, or the room changes; not while the
   // person types in a box, or after they panned or zoomed.
   let fittedFor = "";
-  createEffect(() => {
-    if (!placed() || editing()) return;
-    const size = untrack(fitted) ? `${Math.round(bounds().width)}x${Math.round(bounds().height)}` : "";
-    const key = `${level()}|${keysInOrder().join(",")}|${size}|${room().w}x${room().h}`;
-    if (key !== untrack(() => fittedFor)) {
+  createEffect(
+    () => {
+      if (!placed() || editing()) return null;
+      const size = untrack(fitted) ? `${Math.round(bounds().width)}x${Math.round(bounds().height)}` : "";
+      return `${level()}|${keysInOrder().join(",")}|${size}|${room().w}x${room().h}`;
+    },
+    (key) => {
+      if (key === null || key === fittedFor) return;
       fittedFor = key;
-      untrack(fit);
-    }
-  });
+      fit();
+    },
+  );
 
-  onMount(() => {
+  onSettled(() => {
     const ro = new ResizeObserver(() => setRoom({ w: viewport.clientWidth, h: Math.max(viewport.clientHeight, 480) }));
     ro.observe(viewport);
     viewport.addEventListener("wheel", onWheel, { passive: false });
     document.addEventListener("keydown", onKey);
-    onCleanup(() => {
+    return () => {
       ro.disconnect();
       boxRo.disconnect();
       viewport.removeEventListener("wheel", onWheel);
       document.removeEventListener("keydown", onKey);
-    });
+    };
   });
 
   // ---------- the arrows ----------
@@ -463,7 +471,7 @@ export function Boxes(props: Props) {
         style={{ ...styleAt(b().id), "--d": `${anim()?.delay ?? 0}ms` }}
         data-name={b().id}
         data-key={b().id}
-        ref={observe}
+        ref={observe()}
         onMouseDown={(e) => {
           if ((e.target as HTMLElement).closest("button, input, textarea, .port")) return;
           e.stopPropagation();
@@ -483,8 +491,8 @@ export function Boxes(props: Props) {
             <input
               class="rename"
               aria-label={`Rename ${b().name}`}
-              value={untrack(() => b().name)}
-              ref={(el) => { cancelRename = false; queueMicrotask(() => { el.focus(); el.select(); }); }}
+              // The name goes in once, so the box changing while it is renamed keeps what is typed.
+              ref={(el) => { cancelRename = false; el.value = untrack(() => b().name); queueMicrotask(() => { el.focus(); el.select(); }); }}
               onBlur={(e) => !cancelRename && rename(b().id, e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") e.currentTarget.blur();
@@ -527,7 +535,7 @@ export function Boxes(props: Props) {
               <div
                 class="bb"
                 role={props.editable ? "button" : undefined}
-                tabIndex={props.editable ? 0 : -1}
+                tabindex={props.editable ? 0 : -1}
                 aria-label={props.editable ? `Edit ${b().name}` : undefined}
                 title={props.editable ? "Click or press Enter to edit" : ""}
                 onClick={() => props.editable && !editing() && setEditing(b().id)}
@@ -547,19 +555,20 @@ export function Boxes(props: Props) {
         >
           <textarea
             class="box-edit"
-            spellcheck={false}
+            spellcheck="false"
             rows={Math.max(3, b().lines.length + 1)}
-            ref={(el) => { editor = el; queueMicrotask(() => el.focus()); }}
             // Read once: an update from the server must not replace the text being typed.
-            value={untrack(() => joinLines(b().lines))}
+            ref={(el) => { editor = el; el.value = untrack(() => joinLines(b().lines)); queueMicrotask(() => el.focus()); }}
             onBlur={() => finish(b().id)}
             onKeyDown={(e) => {
               if (keys.pass.is(e)) { e.preventDefault(); props.onPass(); }
               // Esc leaves the box like clicking away does, keeping what was typed, and
               // the keyboard stays on the box.
               if (e.key === "Escape") {
-                finish(b().id);
-                body(b().id)?.focus();
+                const id = b().id;
+                finish(id);
+                // The box body is back once the update lands.
+                onSettled(() => body(id)?.focus());
               }
             }}
           />
@@ -569,7 +578,7 @@ export function Boxes(props: Props) {
           <button
             type="button"
             class="pinsum"
-            aria-expanded={pinsShown()}
+            aria-expanded={pinsShown() ? "true" : "false"}
             onClick={() => setPinsOpen((s) => { const n = new Set(s); n.has(b().id) ? n.delete(b().id) : n.add(b().id); return n; })}
           >
             {pinsShown() ? "▾" : "▸"} {pinCounts()}
@@ -603,7 +612,7 @@ export function Boxes(props: Props) {
     const side = () => v().ghosts.get(id);
     const label = () => (g()?.scan ? id : `${g()?.parent ? `${nameOf(g()!.parent!)}.` : ""}${g()?.name ?? id}`);
     return (
-      <button type="button" class="ghost-box" data-key={p.key} ref={observe} style={styleAt(p.key)} onClick={() => goTo(g()?.parent ?? null, id)}>
+      <button type="button" class="ghost-box" data-key={p.key} ref={observe()} style={styleAt(p.key)} onClick={() => goTo(g()?.parent ?? null, id)}>
         {side() === "in" ? "from " : side() === "out" ? "to " : ""}{label()}
       </button>
     );
@@ -648,23 +657,23 @@ export function Boxes(props: Props) {
                 <path d="M0,0 L10,5 L0,10 z" style={{ fill: "var(--muted)", stroke: "none" }} />
               </marker>
             </defs>
-            <Index each={wires()}>
+            <For each={wires()} keyed={false}>
               {(w) => (
                 <>
                   <path class="hit" d={w().d} onMouseDown={(e) => { e.stopPropagation(); select(null); setSel({ wire: w().key }); }} />
-                  <path class="wire" classList={w().cls} d={w().d} marker-end="url(#arr)" style={{ "stroke-width": w().width }} />
-                  <Show when={w().label}><text x={w().mid.x} y={w().mid.y - 5} text-anchor="middle" classList={{ dim: w().cls.dim }}>{w().label}</text></Show>
+                  <path class={["wire", w().cls]} d={w().d} marker-end="url(#arr)" style={{ "stroke-width": w().width }} />
+                  <Show when={w().label}><text x={w().mid.x} y={w().mid.y - 5} text-anchor="middle" class={{ dim: w().cls.dim }}>{w().label}</text></Show>
                 </>
               )}
-            </Index>
-            <Index each={together()}>
+            </For>
+            <For each={together()} keyed={false}>
               {(t) => (
                 <>
-                  <path class="together" classList={{ dim: t().dim }} d={t().d} />
+                  <path class={["together", { dim: t().dim }]} d={t().d} />
                   <text class="together-label" x={t().x} y={t().y} text-anchor="middle">{t().label}</text>
                 </>
               )}
-            </Index>
+            </For>
             <Show when={temp()}><path class="temp" d={temp()!} /></Show>
           </svg>
           <For each={keysInOrder()}>
@@ -684,7 +693,7 @@ export function Boxes(props: Props) {
                 }}
               >
                 <input class="rename" placeholder="name" aria-label="Name of the new box" ref={(el) => queueMicrotask(() => el.focus())} />
-                <textarea class="box-edit" spellcheck={false} rows={3} placeholder="what it does, a line each" aria-label="What the new box does" />
+                <textarea class="box-edit" spellcheck="false" rows={3} placeholder="what it does, a line each" aria-label="What the new box does" />
               </div>
             )}
           </Show>

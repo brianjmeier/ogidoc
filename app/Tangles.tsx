@@ -35,7 +35,7 @@ export function Tangles(props: {
               const on = () => sameTangle(props.picked, s);
               return (
                 <li>
-                  <button type="button" class="tangle" classList={{ on: on() }} aria-expanded={on()} onClick={() => props.onPick(on() ? null : s)}>
+                  <button type="button" class={["tangle", { on: on() }]} aria-expanded={on() ? "true" : "false"} onClick={() => props.onPick(on() ? null : s)}>
                     <span class="tk">{s.kind}</span>
                     <span class="tw">{words()[0]}</span>
                     <small>{words()[1]}</small>
