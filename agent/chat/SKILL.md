@@ -45,6 +45,31 @@ It exits with an error when the turn failed.
 To see what a turn did, read its commit: `git show <commit>`. Turns are commits titled
 `ogidoc: turn N on <name>`, or `ogidoc: failed turn N on <name>`.
 
+## Reading the map, and checking it
+
+Ogidoc keeps a map of the repository's code: folders and files as boxes, imports as
+arrows, and the tangles worth a look (cycles, files that always change together, imports
+of code that changes a lot, exports nobody uses). Read it with no session running, for a
+first look at an unfamiliar codebase, or to check the map is right:
+
+```bash
+ogidoc map                    # the top of the map: each box, what it exports, its arrows and tangles
+ogidoc map <id>               # inside one box; the ids are the paths it prints
+ogidoc map --json             # all of it, for a script
+ogidoc map describe [id]      # an agent reads the code and says what the box does, in pseudocode
+```
+
+Reading never writes anything. `describe` changes no code: it saves what was said in
+`.ogidoc/map.json` and commits only that, so do it on a branch or worktree the person
+can keep or drop. It refuses while a session is open on the checkout; there the person
+opens the box in the editor instead. A box marked "its code changed since it was
+described" is out of date until it is described again.
+
+When asked to check the map, report with evidence: where the boxes don't match how the
+code is really organised, arrows that are wrong or missing (check the import lines),
+which tangles are real and which are noise, and where a description says something the
+code doesn't do.
+
 ## Changing code from the chat
 
 Code you change is code the plan agent finds next turn, and it treats it as the
@@ -71,4 +96,5 @@ or pi, whichever is installed (`--agent claude` or `--agent pi` to choose); for 
 agent CLI, pass its command: `ogidoc --detach --agent-cmd "codex exec -s workspace-write"`.
 
 If `ogidoc` is not on the path, it isn't installed; the person installs it with
-`npm install -g ogidoc` (Node 22.18 or newer).
+`npm install -g ogidoc` (Node 22.18 or newer). If `ogidoc map` prints the help instead of
+a map, the installed version is older than the map.

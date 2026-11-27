@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { cpSync, readFileSync } from "node:fs";
 import { emptyDir, repo } from "./support/index.ts";
 
 const BIN = new URL("../bin/ogidoc.ts", import.meta.url).pathname;
@@ -90,5 +90,57 @@ test("the demo needs no project and no API key: a scripted agent plays on a writ
     assert.equal(JSON.parse(out).turn, 2);
   } finally {
     ogidoc("stop", "tic-tac-toe");
+  }
+});
+
+// A copy of the shortener demo in a git checkout of its own.
+function shortener() {
+  const { dir, git } = repo();
+  cpSync(new URL("../demo/shortener", import.meta.url).pathname, dir, { recursive: true });
+  git("add", "-A");
+  git("commit", "-qm", "the shortener");
+  return { dir, git };
+}
+
+test("ogidoc map gives an agent the map with no editor: one level as text, or all of it as JSON", () => {
+  const { dir } = shortener();
+  const env = { ...process.env, OGIDOC_HOME: emptyDir() };
+  const ogidoc = (...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { cwd: dir, env, encoding: "utf8" });
+  const top = ogidoc("map");
+  assert.equal(top.status, 0, top.stderr);
+  assert.match(top.stdout, /^links\.js {2}src\/links\.js {2}· {2}file · 20 lines/m);
+  assert.match(top.stdout, /^ {2}unused: server\.js, exports names nothing in the code imports$/m);
+  const all = JSON.parse(ogidoc("map", "--json").stdout);
+  assert.ok(all.boxes.some((b: { id: string }) => b.id === "src/links.js"));
+  assert.ok(all.smells.length);
+  assert.equal(spawnSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).stdout, "", "reading the map writes nothing");
+  const nowhere = spawnSync(process.execPath, [BIN, "map"], { cwd: emptyDir(), env, encoding: "utf8" });
+  assert.equal(nowhere.status, 1);
+  assert.match(nowhere.stderr, /There is no map here/);
+});
+
+test("ogidoc map describe says what a box does, in a commit that touches only the map", () => {
+  const { dir, git } = shortener();
+  const env = { ...process.env, OGIDOC_HOME: emptyDir() };
+  const r = spawnSync(process.execPath, [BIN, "map", "describe", "src/links.js", "--agent", "mock", "--script", new URL("../demo/shortener.json", import.meta.url).pathname], { cwd: dir, env, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^\| follow\(code\) -> redirect, counting the visit$/m, "it prints the box as now described");
+  assert.match(r.stdout, /^follow {2}src\/links\.js#follow {2}· {2}in src\/links\.js$/m);
+  assert.equal(git("log", "-1", "--format=%s").trim(), "ogidoc: describe src/links.js");
+  assert.deepEqual(git("show", "--name-only", "--format=", "HEAD").trim().split("\n").sort(), [".gitattributes", ".ogidoc/map.json"]);
+  assert.match(spawnSync(process.execPath, [BIN, "map", "src/links.js"], { cwd: dir, env, encoding: "utf8" }).stdout, /^\| shorten\(url\)/m, "the next read has it");
+});
+
+test("ogidoc map describe leaves the map to a session open on the same checkout", () => {
+  const { dir } = shortener();
+  const env = { ...process.env, OGIDOC_HOME: emptyDir() };
+  const ogidoc = (...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { cwd: dir, env, encoding: "utf8" });
+  assert.equal(ogidoc("p", "--detach", "--agent", "mock", "--script", SCRIPT, "--port", "0").status, 0);
+  try {
+    const r = ogidoc("map", "describe", "src/links.js", "--agent", "mock");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /The session p is open on this checkout .* ogidoc stop p/);
+  } finally {
+    ogidoc("stop", "p");
   }
 });

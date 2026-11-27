@@ -3,7 +3,7 @@ import * as plan from "./plan.ts";
 import type { Plan } from "./plan.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import { buildPrompt, notATurn, parseDescribed, parseReply, readAgentFile } from "./prompt.ts";
+import { buildPrompt, notATurn, parseReply, readAgentFile } from "./prompt.ts";
 import { planStore, type Loaded, type PlanStore, type SessionState } from "./plan-store.ts";
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
@@ -11,8 +11,8 @@ import type { Agent } from "./agents.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, MapView, Reply, Settings, Snapshot, Thread } from "./types.ts";
-import { describeBrief, driftOf, mapView, stamped } from "./map.ts";
-import { describePrompt } from "./describe.ts";
+import { driftOf, mapView, stamped } from "./map.ts";
+import { describeAsk, describeBox } from "./describe-box.ts";
 import { MAP_FILE } from "./map-store.ts";
 import { headOf, repoIO, scanRepo, type RepoIO } from "./scan-repo.ts";
 import { isCode, type Skeleton } from "./scan.ts";
@@ -50,7 +50,7 @@ export interface Scanner {
 
 // A checkout the editor commits to versions its map like code: git merges the map box by
 // box, through \`ogidoc merge-map\`.
-function versionTheMap(root: string, io: RepoIO) {
+export function versionTheMap(root: string, io: RepoIO) {
   io.git(["config", "merge.ogidoc.name", "Ogidoc map, merged box by box"]);
   io.git(["config", "merge.ogidoc.driver", `'${process.execPath}' '${CLI}' merge-map %O %A %B`]);
   const rule = `${MAP_FILE} merge=ogidoc`;
@@ -266,12 +266,11 @@ export class Session extends EventEmitter {
   describe({ id = null }: { id?: string | null } = {}): Promise<void> {
     this.guard("The agent is busy.");
     const view = this.map();
-    const brief = describeBrief(view, id);
-    if (!brief.children.length && !brief.box) throw new Error("There is nothing on the map to describe yet.");
-    return this.runDescribe(id, view, describePrompt(brief));
+    describeAsk(view, id);
+    return this.runDescribe(id, view);
   }
 
-  private async runDescribe(id: string | null, view: MapView, prompt: string) {
+  private async runDescribe(id: string | null, view: MapView) {
     const mark = this.log.begin();
     const { history: _history, settings: _settings, ...prev }: SessionState = this.s;
     this.working = true;
@@ -285,18 +284,14 @@ export class Session extends EventEmitter {
     };
     const what = id ?? "the map";
     try {
-      const text = await this.reader.run({ prompt, cwd: this.store.cwd, ...this.s.settings, onActivity, signal: this.turnAbort.signal });
-      const left = this.log.discard(mark);
-      if (left.length) onActivity(`it changed ${left.join(", ")}, which only a turn may change`);
-      const d = parseDescribed(text);
-      const next = plan.fromDescription(this.plan, view, id, d);
-      const said = next.plan.boxes.filter((b) => next.ids.includes(b.id));
-      this.setPlan({ ...next.plan, boxes: stamped(next.plan.boxes, next.ids, this.hashOf(said)) });
-      this.s = { ...this.s, base: plan.withSaid(this.s.base, prev, this.plan, next.ids) };
+      const said = await describeBox({ reader: this.reader, cwd: this.store.cwd, log: this.log, mark, plan: this.plan, view, id, settings: this.s.settings, onActivity, signal: this.turnAbort.signal });
+      if (said.left.length) onActivity(`it changed ${said.left.join(", ")}, which only a turn may change`);
+      this.setPlan(said.plan);
+      this.s = { ...this.s, base: plan.withSaid(this.s.base, prev, this.plan, said.ids) };
       this.save();
       const commit = this.log.record(mark, `ogidoc: describe ${what}`, { ownFiles: true });
       this.s.history = [...this.s.history, { ...prev, commit }].slice(-20);
-      this.described = { id, summary: d.summary || `described ${what}` };
+      this.described = { id, summary: said.summary };
     } catch (e) {
       this.described = { id, error: this.turnAbort.signal.aborted ? "Describing was stopped." : (e as Error).message };
     }

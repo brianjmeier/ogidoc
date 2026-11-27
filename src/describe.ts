@@ -78,3 +78,4 @@ export interface Described {
   add: { id: string; parent: string; name: string; pseudo: string[]; code?: CodeRef[] }[];
   edges: { from: string; to: string; label?: string }[];
 }
+

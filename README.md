@@ -86,6 +86,8 @@ ogidoc list            # the sessions running on this machine
 ogidoc status          # whose turn it is, and how the last turn went (--json for scripts)
 ogidoc wait            # returns when the agent's current or next turn ends, with its summary and commit
 ogidoc stop            # stops it, once no turn is running
+ogidoc map             # the map of the code, one level at a time, with no editor
+ogidoc map describe X  # an agent says what box X does; saved in .ogidoc/map.json
 ```
 
 Each command takes a session name; without one it uses the session started in this
@@ -195,6 +197,9 @@ src/scan.ts           reads the code into a starting map: folders, files, seams,
 src/scan-repo.ts      hands the scan what git tracks
 src/map.ts            the scan and the boxes said about it, as one map
 src/describe.ts       the prompt that asks a reader to say what a box does
+src/describe-box.ts   describing a box, for the editor and `ogidoc map describe`
+src/repo-map.ts       the repo's map read without a session, for `ogidoc map`
+src/map-text.ts       one level of the map as text
 src/merge-map.ts      git's merge driver for map.json
 src/turn-log.ts       one commit per turn, drift, revert (git, or nothing)
 src/agents.ts         Claude Code, pi, any command, and the scripted mock

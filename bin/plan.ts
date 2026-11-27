@@ -9,7 +9,13 @@ import { parseArgs } from "node:util";
 import { AGENTS, makeAgent } from "../src/agents.ts";
 import { AGENT_DIR, DEMO_DIR } from "../src/paths.ts";
 import { systemClock } from "../src/clock.ts";
-import { openSession } from "../src/session.ts";
+import { openSession, versionTheMap } from "../src/session.ts";
+import { repoIO } from "../src/scan-repo.ts";
+import { turnLog } from "../src/turn-log.ts";
+import { MAP_FILE, mapStore } from "../src/map-store.ts";
+import { repoMap, type RepoMap } from "../src/repo-map.ts";
+import { levelText } from "../src/map-text.ts";
+import { describeAsk, describeBox } from "../src/describe-box.ts";
 import { startServer } from "../src/server.ts";
 import { sessionsIn } from "../src/plan-store.ts";
 import { sessionToOpen, type Ask } from "../src/sessions.ts";
@@ -24,6 +30,8 @@ Usage
   ogidoc status [name]         whose turn it is, and how the last turn went
   ogidoc wait [name]           wait until the agent's turn ends, then say how it went
   ogidoc stop [name]           stop a session
+  ogidoc map [box]             the map of this repo's code, one level at a time, with no editor (--json: all of it)
+  ogidoc map describe [box]    an agent reads the code and says what the box does; saved in .ogidoc/map.json
   ogidoc install-skill [claude|pi|both]
   ogidoc skill                 print the chat skill, for any other agent (e.g. ogidoc skill >> AGENTS.md)
   ogidoc --demo                try it with a scripted agent, in a throwaway folder, no API key
@@ -40,7 +48,7 @@ Options
   --script <file.json>       turns for the mock agent
   --port <n>                 port to listen on (default 4747)
   --no-commit                don't commit each agent turn
-  --json                     status, wait and list print JSON
+  --json                     status, wait, list and map print JSON
 `;
 
 const { values, positionals } = parseArgs({
@@ -116,6 +124,32 @@ const commands: Record<string, () => Promise<void> | void> = {
   skill() {
     process.stdout.write(readFileSync(join(AGENT_DIR, "chat", "SKILL.md"), "utf8"));
   },
+  // The repo's map, one level at a time, with no editor; `map describe` says what a box does.
+  async map() {
+    const io = repoIO(cwd);
+    const log = turnLog({ cwd, ownFiles: [join(cwd, MAP_FILE), join(cwd, ".gitattributes")], commit: true });
+    const read = () => repoMap(cwd, { io, hashes: log.hashes });
+    const show = (m: RepoMap, level: string | null) => print(values.json ? m.view : levelText(m.view, level, m.drifted));
+    const m = read();
+    if (!m) throw new Error("There is no map here: ogidoc maps a git checkout with JavaScript or TypeScript in it.");
+    if (positionals[1] !== "describe") return show(m, positionals[1] ?? null);
+
+    const id = positionals[2] ?? null;
+    const open = sessions.list().find((s) => s.cwd === cwd);
+    if (open) throw new Error(`The session ${open.name} is open on this checkout (${open.url}). Open the box there, or stop the session first: ogidoc stop ${open.name}`);
+    describeAsk(m.view, id);
+    const { reader } = agents();
+    const store = mapStore(cwd);
+    const mark = log.begin();
+    console.error(`Asking ${reader.name} what ${id ?? "the map"} does. It only reads the code.`);
+    const said = await describeBox({ reader, cwd, log, mark, plan: m.plan, view: m.view, id, onActivity: (a) => console.error(`  ${a}`) });
+    if (said.left.length) console.error(`It changed ${said.left.join(", ")}, which you had changed already; left as it is.`);
+    store.save(said.plan.boxes, said.plan.edges);
+    if (log.commits) versionTheMap(cwd, io);
+    const commit = log.record(mark, `ogidoc: describe ${id ?? "the map"}`, { ownFiles: true });
+    show(read()!, id);
+    console.error(`${said.summary}${commit ? ` (commit ${commit.slice(0, 7)})` : ""}`);
+  },
   list() {
     const all = sessions.list();
     if (values.json) return print(all);
@@ -164,19 +198,25 @@ const ask: Ask | undefined =
       }
     : undefined;
 
+// The agent that takes turns, and the reader that says what a box does.
+function agents() {
+  // The first agent CLI on the path, else claude so the error names it.
+  const installed = (cli: string) => spawnSync(process.platform === "win32" ? "where" : "which", [cli]).status === 0;
+  const agentName = values["agent-cmd"] ? "command" : values.agent || AGENTS.find(installed) || "claude";
+  const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), command: values["agent-cmd"], sleep: systemClock.sleep });
+  // Describing a box only reads the code. Claude Code can be held to that; for other CLIs
+  // the prompt says so, and whatever they change is put back.
+  const reader = agentName === "claude" ? makeAgent("claude", { env: process.env, args: [...(values["agent-arg"] || []), "--disallowedTools", "Edit,Write,NotebookEdit,Bash"] }) : agent;
+  return { agent, reader };
+}
+
 async function open() {
   const name = await sessionToOpen({ given: positionals[0], here: sessionsIn(cwd), folder: basename(cwd), ask });
   sessions.check(name, cwd);
   const log = join(home, "sessions", `${name}.log`);
   if (values.detach) return detach(name, log);
 
-  // The first agent CLI on the path, else claude so the error names it.
-  const installed = (cli: string) => spawnSync(process.platform === "win32" ? "where" : "which", [cli]).status === 0;
-  const agentName = values["agent-cmd"] ? "command" : values.agent || AGENTS.find(installed) || "claude";
-  const agent = makeAgent(agentName, { env: process.env, args: values["agent-arg"] || [], script: values.script && resolve(values.script), command: values["agent-cmd"], sleep: systemClock.sleep });
-  // Describing a box only reads the code. Claude Code can be held to that; for other CLIs
-  // the prompt says so, and the editor puts back whatever they change.
-  const reader = agentName === "claude" ? makeAgent("claude", { env: process.env, args: [...(values["agent-arg"] || []), "--disallowedTools", "Edit,Write,NotebookEdit,Bash"] }) : agent;
+  const { agent, reader } = agents();
   const session = openSession({ cwd, name, agent, reader, clock: systemClock, commit: !values["no-commit"] });
   session.save();
   const { url } = await startServer(session, { port: values.port ? Number(values.port) : 4747 });
