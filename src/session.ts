@@ -8,7 +8,7 @@ import { planStore, type Loaded, type PlanStore, type SessionState } from "./pla
 import { turnLog, type TurnLog } from "./turn-log.ts";
 import type { Clock } from "./clock.ts";
 import type { Agent } from "./agents.ts";
-import type { AnimationOp, Box, BoxChanges, HumanDiff, Reply, Settings, Snapshot, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, Edit, HumanDiff, Reply, Settings, Snapshot, Thread } from "./types.ts";
 import { driftOf, stamped } from "./map.ts";
 
 interface EditInput {
@@ -176,6 +176,15 @@ export class Session extends EventEmitter {
   edit(input: EditInput) {
     this.guard();
     this.setPlan(plan.edit(this.plan, input));
+    this.changed();
+  }
+
+  // The person's edits to the map: boxes added, renamed, removed, connected. They reach the
+  // agent with the next turn, in the diff of what the person changed.
+  editMap({ edits }: { edits: Edit[] }) {
+    this.guard();
+    if (!Array.isArray(edits)) throw new Error("Send the map edits as a list.");
+    this.setPlan(plan.editMap(this.plan, edits));
     this.changed();
   }
 

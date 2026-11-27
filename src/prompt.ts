@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { AGENT_DIR } from "./paths.ts";
 import { hasContent } from "./shared/diff.ts";
 import { landmarks, mapOf, regionIds } from "./map.ts";
-import type { Box, BoxEdge, Choice, HumanDiff, LastTurn, Line, LineChange, Reply, Thread, Who } from "./types.ts";
+import type { Box, BoxEdge, Choice, HumanDiff, LastTurn, Line, LineChange, MapChange, Reply, Thread, Who } from "./types.ts";
 
 export function readAgentFile(name: string): string {
   return readFileSync(join(AGENT_DIR, name), "utf8");
@@ -123,9 +123,20 @@ function describeHumanDiff(d: HumanDiff, turn: number): string {
   const fmt = (c: LineChange, pad: string) =>
     c.op === "mod" ? `${pad}- ${c.old}\n${pad}+ ${c.text}` : `${pad}${c.op === "add" ? "+" : "-"} ${c.text}`;
   const out = d.lines.map((c) => fmt(c, ""));
+  for (const c of d.map) out.push(mapLine(c));
   for (const b of d.boxes) out.push(`In box ${b.id}:`, ...b.lines.map((c) => fmt(c, "  ")));
   if (!out.length) return "Nothing. They handed over without editing, which means: go on.";
   return "```diff\n" + out.join("\n") + "\n```";
+}
+
+// The person's map edits, in the words of a diff: they drew it, so build it.
+function mapLine(c: MapChange): string {
+  const where = (p: string | null) => (p ? `inside ${p}` : "at the top");
+  if (c.op === "add") return `+ box ${c.id} "${c.name}" ${where(c.parent)}`;
+  if (c.op === "del") return `- box ${c.id} "${c.name}"`;
+  if (c.op === "rename") return `~ box ${c.id} renamed "${c.old}" to "${c.name}"`;
+  if (c.op === "move") return `~ box ${c.id} moved ${where(c.parent)}`;
+  return `${c.op === "connect" ? "+" : "-"} arrow ${c.from} → ${c.to}${c.op === "connect" && c.label ? `: ${c.label}` : ""}`;
 }
 
 const KINDS = new Set<unknown>(["proposal", "example"]);

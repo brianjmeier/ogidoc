@@ -1,7 +1,7 @@
 import { acceptProposal, anyBuilt, carryMeta, diffLines, hasContent, joinLines, splitLines, type DiffOp } from "./shared/diff.ts";
 import * as threads from "./threads.ts";
 import * as choices from "./choices.ts";
-import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, HumanDiff, LastTurn, Line, MapOnDisk, Reply, Thread } from "./types.ts";
+import type { AnimationOp, Box, BoxChanges, BoxEdge, Choice, Edit, HumanDiff, LastTurn, Line, MapChange, MapOnDisk, Reply, Thread } from "./types.ts";
 
 // The plan as both sides edit it: its lines, the boxes settled pieces moved into, and
 // the comment threads pinned to its lines, and the choices offered on them. Every change
@@ -18,6 +18,9 @@ export interface Plan {
 export interface Base {
   lines: string[];
   boxes: Record<string, string[]>;
+  // Where each box sat and what it was called, and the arrows between boxes. Sessions saved
+  // before the person could edit the map have none.
+  map?: { boxes: Record<string, { name: string; parent: string | null }>; edges: string[] };
 }
 
 // The person's edits: new plan text, proposals they accepted, box bodies they changed,
@@ -62,7 +65,73 @@ export function fromFiles(saved: Plan, planText: string, map: MapOnDisk): Plan {
 export const baseOf = (plan: Plan): Base => ({
   lines: plan.lines.map((l) => l.text),
   boxes: Object.fromEntries(plan.boxes.map((b) => [b.id, b.lines.map((l) => l.text)])),
+  map: { boxes: Object.fromEntries(plan.boxes.map((b) => [b.id, { name: b.name, parent: b.parent }])), edges: plan.edges.filter((e) => e.kind === "call").map(edgeKey) },
 });
+
+const edgeKey = (e: { from: string; to: string }) => `${e.from} → ${e.to}`;
+
+// The person's edits to the map, as the browser reports them. A box added in the same
+// batch is named by its \`key\` in later edits. An edit that names a box the map doesn't
+// have is refused, naming it.
+export function editMap(plan: Plan, edits: Edit[]): Plan {
+  let boxes = plan.boxes;
+  let edges = plan.edges;
+  const keys = new Map<string, string>();
+  const idOf = (ref: string) => {
+    const id = keys.get(ref) ?? ref;
+    if (!boxes.some((b) => b.id === id)) throw new Error(`There is no box ${ref} on the map.`);
+    return id;
+  };
+  const change = (id: string, f: (b: Box) => Box) => (boxes = boxes.map((b) => (b.id === id ? f(b) : b)));
+  for (const e of edits) {
+    if (e.op === "pseudo") boxes = editBoxes(boxes, { [idOf(e.id)]: e.lines.join("\n") });
+    else if (e.op === "rename") change(idOf(e.id), (b) => ({ ...b, name: e.name.trim() || b.name }));
+    else if (e.op === "remove") {
+      const id = idOf(e.id);
+      const gone = boxes.find((b) => b.id === id)!;
+      boxes = boxes.filter((b) => b.id !== id).map((b) => (b.parent === id ? { ...b, parent: gone.parent } : b));
+      edges = edges.filter((x) => x.from !== id && x.to !== id);
+    } else if (e.op === "add") {
+      const parent = e.parent === null ? null : idOf(e.parent);
+      const slug = e.name.trim().replace(/[^\w.-]+/g, "_").replace(/^_|_$/g, "") || "box";
+      let id = slug;
+      for (let n = 2; boxes.some((b) => b.id === id); n++) id = `${slug}_${n}`;
+      keys.set(e.key, id);
+      boxes = [...boxes, { id, name: e.name.trim() || id, parent, lines: e.lines.map((text) => ({ text, by: "h" })), status: "stale" }];
+    } else if (e.op === "connect") {
+      const [from, to] = [idOf(e.from), idOf(e.to)];
+      if (from !== to && !edges.some((x) => x.from === from && x.to === to && x.kind === "call")) edges = [...edges, { from, to, kind: "call", ...(e.label && { label: e.label }) }];
+    } else if (e.op === "disconnect") {
+      const [from, to] = [idOf(e.from), idOf(e.to)];
+      edges = edges.filter((x) => !(x.from === from && x.to === to));
+    }
+  }
+  return { ...plan, boxes, edges };
+}
+
+function mapChanges(base: Base["map"], plan: Plan): MapChange[] {
+  if (!base) return [];
+  const out: MapChange[] = [];
+  const now = new Map(plan.boxes.map((b) => [b.id, b]));
+  for (const b of plan.boxes) {
+    const was = base.boxes[b.id];
+    if (!was) out.push({ op: "add", id: b.id, name: b.name, parent: b.parent });
+    else {
+      if (was.name !== b.name) out.push({ op: "rename", id: b.id, old: was.name, name: b.name });
+      if (was.parent !== b.parent) out.push({ op: "move", id: b.id, parent: b.parent });
+    }
+  }
+  for (const [id, was] of Object.entries(base.boxes)) if (!now.has(id)) out.push({ op: "del", id, name: was.name });
+  const calls = plan.edges.filter((e) => e.kind === "call");
+  const had = new Set(base.edges);
+  const has = new Set(calls.map(edgeKey));
+  for (const e of calls) if (!had.has(edgeKey(e))) out.push({ op: "connect", from: e.from, to: e.to, ...(e.label && { label: e.label }) });
+  for (const k of base.edges) if (!has.has(k)) {
+    const [from, to] = k.split(" → ");
+    out.push({ op: "disconnect", from, to });
+  }
+  return out;
+}
 
 // What the person changed since the agent last saw the plan.
 export function humanDiff(base: Base, plan: Plan): HumanDiff {
@@ -73,7 +142,7 @@ export function humanDiff(base: Base, plan: Plan): HumanDiff {
   const boxes = plan.boxes
     .map((b) => ({ id: b.id, name: b.name, lines: changes(base.boxes[b.id] || [], b.lines.map((l) => l.text)) }))
     .filter((b) => b.lines.length);
-  return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes };
+  return { lines: changes(base.lines, plan.lines.map((l) => l.text)), boxes, map: mapChanges(base.map, plan) };
 }
 
 // Every line with something to build is built, and every box. Proposals aren't code yet.

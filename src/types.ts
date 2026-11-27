@@ -147,9 +147,18 @@ export interface Reply {
 
 export type LineChange = { op: "add" | "del"; text: string } | { op: "mod"; old: string; text: string };
 
+// What the person did to the map itself: boxes and arrows, apart from what boxes say.
+export type MapChange =
+  | { op: "add"; id: string; name: string; parent: string | null }
+  | { op: "del"; id: string; name: string }
+  | { op: "rename"; id: string; old: string; name: string }
+  | { op: "move"; id: string; parent: string | null }
+  | { op: "connect" | "disconnect"; from: string; to: string; label?: string };
+
 export interface HumanDiff {
   lines: LineChange[];
   boxes: { id: string; name: string; lines: LineChange[] }[];
+  map: MapChange[];
 }
 
 // How the browser replays an agent turn, in display order.

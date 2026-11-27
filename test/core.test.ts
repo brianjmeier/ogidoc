@@ -66,7 +66,7 @@ test("buildPrompt includes the skill, the rules and the plan as JSON", () => {
     drifted: [],
     threads: [{ id: "t1", line: 0, by: "a", resolved: false, messages: [{ by: "a", text: "whose timezone?", turn: 1 }, { by: "h", text: "mine", turn: 1 }] }],
     choices: [{ id: "c1", line: 0, current: 1, options: [[{ text: "weekly reflection" }], [{ text: "daily reflection" }]] }],
-    humanDiff: { lines: [{ op: "add", text: "weekly reflection" }], boxes: [] },
+    humanDiff: { lines: [{ op: "add", text: "weekly reflection" }], boxes: [], map: [] },
     drift: ["src/other.js"],
     last: { summary: "Asked about the timezone." },
   });

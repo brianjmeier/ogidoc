@@ -36,6 +36,7 @@ export function startServer(session: Session, { port = 4747, host = "127.0.0.1" 
   // Each of the person's actions is one session call; the session validates the body.
   const actions: Record<string, (b: any) => unknown> = {
     "/api/edit": (b) => session.edit(b),
+    "/api/map": (b) => session.editMap(b),
     "/api/comment": (b) => session.comment(b),
     "/api/reply": (b) => session.reply(b),
     "/api/resolve": (b) => session.resolve(b),

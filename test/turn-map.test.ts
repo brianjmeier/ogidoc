@@ -48,7 +48,7 @@ test("a map too big for one prompt shows the boxes the turn is about, and names 
   const p = buildPrompt({
     skill: readAgentFile("SKILL.md"), rules: "", session: "s", turn: 2, planPath: "s.plan", cwd: "/x",
     lines: [], boxes, edges: [{ from: "b7", to: "b8", kind: "call" }], seeds: ["b7"], drifted: ["b9"],
-    threads: [], choices: [], humanDiff: { lines: [], boxes: [] }, drift: [], last: null,
+    threads: [], choices: [], humanDiff: { lines: [], boxes: [], map: [] }, drift: [], last: null,
   });
   assert.match(p, /"id":"b7".*"uses":\["b8"\]/, "a seed shows in full");
   assert.match(p, /"id":"b8"/, "and what it calls");
@@ -79,4 +79,47 @@ test("code changed under a box outside a turn marks the box, until a turn says w
 
   await s.pass();
   assert.deepEqual(view().drifted, [], "the turn that brings the box back clears it");
+});
+
+// ---------- the person edits the map ----------
+
+import { baseOf, editMap, humanDiff } from "../src/plan.ts";
+
+test("the person's map edits read as a diff the next turn builds", () => {
+  const before = plan([box("routes", ["get /:code"]), box("links", ["shorten, follow"]), box("stats", ["count clicks"], { parent: "links" })], [{ from: "routes", to: "stats", kind: "call" }]);
+  const after = editMap(before, [
+    { op: "add", key: "k1", name: "rate limit", parent: "routes", lines: ["10 a minute per ip"] },
+    { op: "connect", from: "routes", to: "k1", label: "before every request" },
+    { op: "rename", id: "links", name: "short links" },
+    { op: "remove", id: "stats" },
+    { op: "pseudo", id: "routes", lines: ["get /:code", "post /"] },
+  ]);
+  const added = after.boxes.find((b) => b.name === "rate limit")!;
+  assert.deepEqual([added.id, added.parent, added.status, added.lines[0].by], ["rate_limit", "routes", "stale", "h"]);
+  assert.equal(after.boxes.find((b) => b.id === "routes")!.status, "stale", "a changed body needs a build");
+  assert.ok(!after.edges.some((e) => e.to === "stats"), "a removed box takes its arrows with it");
+
+  const d = humanDiff(baseOf(before), after);
+  const p = buildPrompt({
+    skill: "", rules: "", session: "s", turn: 2, planPath: "s.plan", cwd: "/x", lines: after.lines, boxes: after.boxes, edges: after.edges,
+    seeds: [], drifted: [], threads: [], choices: [], humanDiff: d, drift: [], last: null,
+  });
+  assert.match(p, /\+ box rate_limit "rate limit" inside routes/);
+  assert.match(p, /\+ arrow routes → rate_limit: before every request/);
+  assert.match(p, /~ box links renamed "links" to "short links"/);
+  assert.match(p, /- box stats "stats"/);
+  assert.match(p, /- arrow routes → stats/);
+  assert.match(p, /In box routes:\n {2}\+ post \//);
+});
+
+test("an edit naming a box the map doesn't have is refused, naming it", () => {
+  assert.throws(() => editMap(plan([box("a", [])]), [{ op: "connect", from: "a", to: "nope" }]), /no box nope/);
+});
+
+test("a session takes map edits between turns and refuses them during one", async () => {
+  const { dir } = repo();
+  const { session: s, view } = open(dir, { commit: false });
+  s.editMap({ edits: [{ op: "add", key: "k", name: "cart", parent: null, lines: ["holds items"] }] });
+  assert.deepEqual(view().boxes.map((b) => b.id), ["cart"]);
+  assert.throws(() => s.editMap({ edits: [{ op: "remove", id: "nope" }] }), /no box nope/);
 });
