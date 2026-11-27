@@ -22,7 +22,7 @@ Node 22.18 or newer.
 ```bash
 npm install -g ogidoc
 ogidoc --demo               # try it: a scripted agent, a throwaway folder, no API key
-ogidoc map --demo           # Ogimap: change an existing codebase by editing a flow map of it (labs/ogimap)
+ogidoc map --demo           # Ogimap: map an existing codebase, zoom in, and change it by editing the map (labs/ogimap)
 ogidoc install-skill        # optional: teach your Claude Code or pi chat to work beside a session
 ```
 

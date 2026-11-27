@@ -15,15 +15,36 @@ const S = {
   ways: {},            // node id → which way is showing (0 = the one built)
   view: { x: 0, y: 0, z: 1 },
   fresh: new Set(),    // nodes the agent just changed
+  pinsOpen: new Set(), // boxes showing every pin, not just the counts
   scope: "task",       // with a task: its part of the map, or the whole map
   fitted: undefined,
+  asking: false,       // the person asked to start a task from where they are
+  described: new Set(),// levels already sent to be described, so opening twice asks once
 };
 
 let newId = 0;
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const byId = () => new Map(S.draft.nodes.map((n) => [n.id, n]));
-const orig = (id) => S.snap.map?.nodes.find((n) => n.id === id);
+// Lookups into the map as the server last sent it, indexed once per snapshot.
+let snapIndex = { map: null, nodes: new Map(), fileSmells: new Map() };
+function indexed() {
+  const map = S.snap?.map ?? null;
+  if (snapIndex.map !== map) {
+    const fileSmells = new Map();
+    for (const x of map?.smells ?? []) if (!x.b && !x.ids) fileSmells.set(x.a, [...(fileSmells.get(x.a) ?? []), x]);
+    snapIndex = { map, nodes: new Map((map?.nodes ?? []).map((n) => [n.id, n])), fileSmells };
+  }
+  return snapIndex;
+}
+const orig = (id) => indexed().nodes.get(id);
 const busy = () => !!S.snap?.busy;
+// A box the scan found: a folder or a file of the code (it has a size), not a function or a plan.
+const scanned = (n) => n.size != null;
+const isFile = (n) => n.code?.length === 1 && n.code[0].file === n.id;
+const kindLabel = (n) => (n.kind === "external" && scanned(n) ? "outside" : scanned(n) ? (isFile(n) ? "file" : "folder") : n.kind);
+const smells = () => S.snap?.map?.smells ?? [];
+const smellIds = (s) => s.ids ?? (s.b ? [s.a, s.b] : [s.a]);
+const count = (k) => (k >= 1000 ? `${(k / 1000).toFixed(k >= 10000 ? 0 : 1)}k` : String(k));
 
 // ---------- the server ----------
 
@@ -221,8 +242,9 @@ function visible() {
     if (!inA) { ghosts.set(a, "in"); a = `ghost:${a}`; }
     if (!inB) { ghosts.set(b, ghosts.get(b) === "in" ? "both" : "out"); b = `ghost:${b}`; }
     const key = `${a}→${b}`;
-    const w = wires.get(key) ?? { key, from: a, to: b, labels: new Set(), members: [], human: false, removed: true, ghost: !inA || !inB };
+    const w = wires.get(key) ?? { key, from: a, to: b, labels: new Set(), symbols: new Set(), members: [], human: false, removed: true, ghost: !inA || !inB };
     if (e.label) w.labels.add(e.label);
+    for (const sym of e.symbols ?? []) w.symbols.add(sym);
     w.members.push(e);
     w.human ||= e.by === "human";
     w.removed &&= !!e.removed;
@@ -256,6 +278,7 @@ function autoRank(ids, wires) {
 const boxesEl = $("boxes"), wiresEl = $("wires"), world = $("world"), viewport = $("viewport");
 
 function render() {
+  names = null;
   renderTop();
   renderTask();
   renderFlows();
@@ -264,12 +287,13 @@ function render() {
     boxesEl.innerHTML = "";
     wiresEl.querySelectorAll("path,text,circle").forEach((e) => e.remove());
     empty.hidden = false;
-    empty.innerHTML = S.snap?.busy === "mapping" ? "<div>The agent is reading the code and drawing the map…</div>" : "<div>No map yet.</div>";
+    empty.innerHTML = "<div>No map yet: this folder has no code Ogimap can read, so a task draws the first part.</div>";
     return;
   }
   empty.hidden = true;
   const { nodes, shown, ghosts, wires } = visible();
   lastWires = wires;
+  edited = editedAncestors();
   const flow = flowAt(nodes);
 
   boxesEl.innerHTML = "";
@@ -281,7 +305,7 @@ function render() {
     el.className = "box ghost-node";
     el.dataset.id = `ghost:${id}`;
     el.innerHTML = `<div class="bh"><span class="name"></span></div>`;
-    el.querySelector(".name").textContent = (dir === "in" ? "from " : dir === "out" ? "to " : "") + (n.parent ? `${nodes.get(n.parent)?.name}.` : "") + n.name;
+    el.querySelector(".name").textContent = (dir === "in" ? "from " : dir === "out" ? "to " : "") + (scanned(n) ? n.id : (n.parent ? `${nodes.get(n.parent)?.name}.` : "") + n.name);
     el.title = "Go there";
     el.onclick = () => goTo(n.parent ?? null, id);
     els.set(`ghost:${id}`, el);
@@ -301,16 +325,31 @@ function render() {
     if (!cols.has(r)) cols.set(r, []);
     cols.get(r).push(id);
   }
+  // A rank taller than the screen wraps into another column, so "fit" never has to shrink the text
+  // to show a long list of boxes that don't import each other.
   const pos = new Map();
-  for (const [r, col] of cols) {
-    let y = PAD;
+  const tall = Math.max(700, viewport.clientHeight - 2 * PAD);
+  let x = PAD;
+  // The column nearest the next rank fills first, with the boxes that send it the most arrows,
+  // so those arrows don't cross the other boxes.
+  const ahead = new Map();
+  for (const w of wires.values()) {
+    if (w.to.startsWith("ghost:") || !(rank.get(w.to) > rank.get(w.from))) continue;
+    ahead.set(w.from, (ahead.get(w.from) ?? 0) + 1);
+  }
+  for (const r of [...cols.keys()].sort((a, b) => a - b)) {
+    const col = cols.get(r).sort((a, b) => (ahead.get(b) ?? 0) - (ahead.get(a) ?? 0));
+    const placed = [];
+    let y = PAD, k = 0;
     for (const id of col) {
       const el = els.get(id);
-      const saved = layout[id];
-      const p = saved ? { x: saved.x, y: saved.y } : { x: PAD + r * (W + GAP_X) + (id.startsWith("ghost:") ? 60 : 0), y };
-      if (!saved) y += el.offsetHeight + GAP_Y;
-      pos.set(id, p);
+      if (layout[id]) { pos.set(id, { x: layout[id].x, y: layout[id].y }); continue; }
+      if (y > PAD && y + el.offsetHeight > tall) { y = PAD; k++; }
+      placed.push({ id, k, y });
+      y += el.offsetHeight + GAP_Y;
     }
+    for (const p of placed) pos.set(p.id, { x: x + (k - p.k) * (W + GAP_X) + (p.id.startsWith("ghost:") ? 60 : 0), y: p.y });
+    x += (k + 1) * (W + GAP_X);
   }
   for (const [id, p] of pos) {
     const el = els.get(id);
@@ -327,24 +366,51 @@ function render() {
   const flowPairs = new Set();
   if (flow) for (let i = 1; i < flow.steps.length; i++) flowPairs.add(`${flow.steps[i - 1]}→${flow.steps[i]}`);
   const paths = new Map();
+  // Tangles on this level: an import toward what changes far more, and boxes in a loop.
+  const volatile = new Set(smells().filter((x) => x.kind === "volatile import").map((x) => `${x.a}→${x.b}`));
+  const loopOf = new Map();
+  for (const x of smells()) if (x.kind === "cycle") for (const id of x.ids) loopOf.set(id, x.ids.join("|"));
+  const picked = S.tangle ? new Set(smellIds(S.tangle)) : null;
+  const impact = impactOf(wires);
   for (const w of wires.values()) {
     const a = rect(w.from), b = rect(w.to);
     if (!a || !b) continue;
-    const d = wirePath(a, b);
+    const imports = w.members.every((e) => e.kind === "import");
+    // An import lands on the first seam name it carries, so the line goes into the interface.
+    const port = imports ? [...els.get(w.to).querySelectorAll(".seam span[data-name]")].find((x) => w.symbols.has(x.dataset.name)) : null;
+    const d = wirePath(a, port ? { ...b, port: port.offsetTop + port.offsetHeight / 2 } : b);
     const onFlow = flowPairs.has(w.key);
-    const cls = ["wire", w.human && "human", w.removed && "removed", S.edge === w.key && "sel", onFlow && "flow", flow && !onFlow && "dim", w.ghost && "ghostwire"].filter(Boolean).join(" ");
+    const looped = loopOf.get(w.from) && loopOf.get(w.from) === loopOf.get(w.to);
+    const lit = picked ? picked.has(w.from) && picked.has(w.to) : impact.size && impact.has(w.from) && (impact.has(w.to) || S.selected.has(w.to));
+    const cls = ["wire", imports && "import", volatile.has(w.key) && "volatile", looped && "looped", w.human && "human", w.removed && "removed", S.edge === w.key && "sel",
+      onFlow && "flow", (flow && !onFlow) || (picked && !lit) ? "dim" : "", lit && "lit", w.ghost && "ghostwire"].filter(Boolean).join(" ");
     const hit = svg("path", { d, class: "hit" });
     const path = svg("path", { d, class: cls });
-    for (const p of [hit, path]) p.addEventListener("mousedown", (ev) => { ev.stopPropagation(); S.edge = w.key; S.selected.clear(); render(); });
+    // The more imports an arrow stands for, the heavier it is.
+    if (imports) path.style.strokeWidth = String(Math.min(6, 1.2 + Math.log2(w.members.length)));
+    for (const p of [hit, path]) p.addEventListener("mousedown", (ev) => { ev.stopPropagation(); S.edge = w.key; S.selected.clear(); S.tangle = null; render(); });
     wiresEl.append(hit, path);
     paths.set(w.key, path);
-    if (w.labels.size) {
+    const label = imports ? namesOf(w.symbols) : w.members.length > 1 ? `${w.members.length} ${w.members.every((e) => e.kind === "data") ? "flows" : "calls"}` : [...w.labels][0];
+    if (label && (S.edge === w.key || lit || !imports || wires.size <= 12)) {
       const mid = path.getPointAtLength(path.getTotalLength() / 2);
-      const t = svg("text", { x: mid.x, y: mid.y - 5, "text-anchor": "middle", class: flow && !onFlow ? "dim" : "" });
-      t.textContent = w.members.length > 1 ? `${w.members.length} ${w.members.every((e) => e.kind === "data") ? "flows" : "calls"}` : [...w.labels][0];
+      const t = svg("text", { x: mid.x, y: mid.y - 5, "text-anchor": "middle", class: (flow && !onFlow) || (picked && !lit) ? "dim" : "" });
+      t.textContent = label;
       wiresEl.append(t);
     }
   }
+  // Boxes git changes together with no import between them: a dashed line, no arrowhead.
+  for (const x of smells()) {
+    if (x.kind !== "change together") continue;
+    const a = rect(x.a), b = rect(x.b);
+    if (!a || !b) continue;
+    const ac = { x: a.x + a.w / 2, y: a.y + a.h }, bc = { x: b.x + b.w / 2, y: b.y + b.h };
+    const p = svg("path", { d: `M${ac.x},${ac.y} C${ac.x},${ac.y + 60} ${bc.x},${bc.y + 60} ${bc.x},${bc.y}`, class: `together${picked && !(picked.has(x.a) && picked.has(x.b)) ? " dim" : ""}` });
+    const t = svg("text", { x: (ac.x + bc.x) / 2, y: Math.max(ac.y, bc.y) + 52, "text-anchor": "middle", class: "together-label" });
+    t.textContent = `change together ×${x.count}`;
+    wiresEl.append(p, t);
+  }
+  for (const [id, el] of els) el.classList.toggle("impact", impact.has(id));
   // Flow steps that aren't wired still get a path, so the token can travel them.
   if (flow) {
     for (const k of flowPairs) {
@@ -371,8 +437,28 @@ function render() {
   }
 }
 
+// The names an import arrow carries, as many as read at a glance.
+function namesOf(symbols) {
+  const names = [...symbols].filter((x) => x !== "*" && x !== "default");
+  const whole = symbols.has("*") || symbols.has("default");
+  if (!names.length) return whole ? "the whole module" : "";
+  return names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3}` : "");
+}
+
+// With one box selected: every box on this level that imports it, directly or through
+// others. That is what a change to it can break.
+function impactOf(wires) {
+  if (S.selected.size !== 1 || S.tangle) return new Set();
+  const into = new Map();
+  for (const w of wires.values()) if (!w.removed) (into.get(w.to) ?? into.set(w.to, []).get(w.to)).push(w.from);
+  const seen = new Set();
+  const todo = [...S.selected];
+  while (todo.length) for (const from of into.get(todo.pop()) ?? []) if (!seen.has(from) && !S.selected.has(from)) { seen.add(from); todo.push(from); }
+  return seen;
+}
+
 function wirePath(a, b) {
-  const x1 = a.x + a.w, y1 = a.y + Math.min(19, a.h / 2), x2 = b.x, y2 = b.y + Math.min(19, b.h / 2);
+  const x1 = a.x + a.w, y1 = a.y + Math.min(19, a.h / 2), x2 = b.x, y2 = b.y + (b.port ?? Math.min(19, b.h / 2));
   if (x2 > x1 + 20) {
     const c = Math.max(30, (x2 - x1) / 2);
     return `M${x1},${y1} C${x1 + c},${y1} ${x2 - c},${y2} ${x2 - 2},${y2}`;
@@ -405,7 +491,7 @@ function boxEl(n, nodes, flow) {
   head.innerHTML = `<i class="dot ${n.by === "human" ? "stale" : n.status ?? "built"}"></i><span class="name"></span><span class="kind"></span>`;
   head.querySelector(".name").textContent = n.name || "untitled";
   head.querySelector(".name").title = n.id;
-  head.querySelector(".kind").textContent = n.kind;
+  head.querySelector(".kind").textContent = kindLabel(n);
   if (S.snap.drift?.includes(n.id)) {
     const d = document.createElement("span");
     d.className = "drift";
@@ -415,13 +501,21 @@ function boxEl(n, nodes, flow) {
   }
   if (kids) {
     const open = document.createElement("button");
-    open.className = "open" + (editedInside(n.id) ? " edited" : "");
+    open.className = "open" + (edited.has(n.id) ? " edited" : "");
     open.textContent = `▸ ${kids}`;
     open.title = "Open";
     open.onclick = (ev) => { ev.stopPropagation(); goTo(n.id); };
     head.appendChild(open);
   }
   el.appendChild(head);
+  if (scanned(n) && n.name !== n.id && n.kind !== "external") {
+    const path = document.createElement("div");
+    path.className = "path";
+    path.textContent = n.id;
+    el.appendChild(path);
+  }
+  if (scanned(n) && n.kind !== "external") el.appendChild(factsEl(n));
+  if (n.seam?.length) el.appendChild(seamEl(n));
   if (inFlow) {
     const b = document.createElement("span");
     b.className = "order";
@@ -441,8 +535,16 @@ function boxEl(n, nodes, flow) {
       if (ev.key === "Escape") commitEdit(el);
       if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { commitEdit(el); pass(); }
     });
-    ed.addEventListener("mousedown", (ev) => ev.stopPropagation());
     el.appendChild(ed);
+  } else if (scanned(n) && !n.pseudo.length && n.kind !== "external") {
+    const b = document.createElement("button");
+    b.className = "describe";
+    const asked = S.described.has(n.id) || (S.snap.busy === "describing" && S.described.has(n.parent ?? null));
+    b.textContent = asked ? "the agent is reading it…" : "Say what this does";
+    b.disabled = busy() || S.snap.agent === "mock";
+    b.title = S.snap.agent === "mock" ? "The demo's agent only plays its recorded session." : "The agent reads it (it can't change anything) and says what it and its boxes do.";
+    b.onclick = (ev) => { ev.stopPropagation(); describe(n.id); };
+    el.appendChild(b);
   } else {
     const ol = document.createElement("ol");
     ol.className = "pseudo";
@@ -465,7 +567,38 @@ function boxEl(n, nodes, flow) {
     el.appendChild(ways);
   }
 
-  if (n.code?.length) {
+  const pins = [...(n.pins ?? []), ...(indexed().fileSmells.get(n.id) ?? []).map((x) => ({ kind: x.kind, text: x.kind === "unused" ? "nothing in the code imports it" : "only re-exports other files" }))];
+  if (pins.length) {
+    // A box stays as short as its description: the pins show as counts until you open them.
+    const open = S.pinsOpen.has(n.id);
+    const sum = document.createElement("button");
+    sum.className = "pinsum";
+    const kinds = new Map();
+    for (const p of pins) kinds.set(p.kind, (kinds.get(p.kind) ?? 0) + 1);
+    sum.textContent = `${open ? "▾" : "▸"} ${[...kinds].map(([k, c]) => `${c} ${k}`).join(" · ")}`;
+    sum.onclick = (ev) => { ev.stopPropagation(); open ? S.pinsOpen.delete(n.id) : S.pinsOpen.add(n.id); render(); };
+    el.appendChild(sum);
+  }
+  if (pins.length && S.pinsOpen.has(n.id)) {
+    const ul = document.createElement("ul");
+    ul.className = "pins";
+    for (const p of pins) {
+      const li = document.createElement("li");
+      li.innerHTML = `<b></b> <span></span>`;
+      li.querySelector("b").textContent = p.kind;
+      li.querySelector("span").textContent = p.text;
+      if (p.file) {
+        const c = document.createElement("button");
+        c.textContent = `${p.file.split("/").at(-1)}${p.line ? `:${p.line}` : ""}`;
+        c.onclick = (ev) => { ev.stopPropagation(); openCode(p); };
+        li.appendChild(c);
+      }
+      ul.appendChild(li);
+    }
+    el.appendChild(ul);
+  }
+
+  if (n.code?.length && !scanned(n)) {
     const refs = document.createElement("div");
     refs.className = "refs";
     for (const c of n.code.slice(0, 3)) {
@@ -499,16 +632,50 @@ function boxEl(n, nodes, flow) {
   return el;
 }
 
-// Whether the person changed something inside this node, so it shows from above.
-function editedInside(id) {
-  const nodes = byId();
-  const under = (n) => { for (let p = n.parent; p; p = nodes.get(p)?.parent) if (p === id) return true; return false; };
-  for (const n of S.draft.nodes) {
-    if (!under(n)) continue;
-    const o = orig(n.id);
-    if (!o || n.removed || o.name !== n.name || o.pseudo.join("\n") !== n.pseudo.join("\n")) return true;
+// How big a box is and how tied in: the size of what it hides, and who it leans on.
+function factsEl(n) {
+  const el = document.createElement("div");
+  el.className = "facts";
+  const bits = [`${count(n.size)} lines`];
+  if (n.usedBy !== undefined) bits.push(`used by ${n.usedBy}`, `uses ${n.uses}`);
+  if (n.tests) bits.push(`${n.tests} test${n.tests === 1 ? "" : "s"}`);
+  el.textContent = bits.join(" · ");
+  return el;
+}
+
+// The box's seam: what the code outside it imports from it, the most used first.
+function seamEl(n) {
+  const el = document.createElement("div");
+  el.className = "seam";
+  const shown = n.seam.slice(0, 6);
+  for (const x of shown) {
+    const s = document.createElement("span");
+    s.textContent = x.name === "*" ? "the whole module" : x.name;
+    s.dataset.name = x.name;
+    s.title = `${x.file} · imported by ${x.users} file${x.users === 1 ? "" : "s"} outside`;
+    el.appendChild(s);
   }
-  return false;
+  const more = (n.seamSize ?? n.seam.length) - shown.length;
+  if (more > 0) {
+    const s = document.createElement("span");
+    s.className = "more";
+    s.textContent = `+${more} more`;
+    el.appendChild(s);
+  }
+  return el;
+}
+
+// The boxes the person changed something inside, so it shows from above. Set once per render.
+let edited = new Set();
+function editedAncestors() {
+  const nodes = byId();
+  const out = new Set();
+  for (const n of S.draft.nodes) {
+    const o = orig(n.id);
+    if (o && !n.removed && o.name === n.name && o.pseudo.join("\n") === n.pseudo.join("\n")) continue;
+    for (let p = n.parent; p; p = nodes.get(p)?.parent) out.add(p);
+  }
+  return out;
 }
 
 // The pseudocode as the person should read it: their edits in blue, crossed-out lines
@@ -545,7 +712,7 @@ function diff(a, b) {
 
 const phase = () => S.snap?.task?.phase ?? null;
 // Scoping shows while there's no task and no map, or while the task is being scoped.
-const scoping = () => (!S.snap?.task && !S.snap?.map) || phase() === "scope" || phase() === "frame";
+const scoping = () => (!S.snap?.task && (!S.snap?.map || S.asking)) || phase() === "scope" || phase() === "frame";
 
 function renderTask() {
   const task = S.snap?.task;
@@ -555,7 +722,7 @@ function renderTask() {
   scope.classList.toggle("alone", on && !S.draft);
   viewport.hidden = on && !S.draft;
   document.querySelector(".flows").hidden = on;
-  $("scope-title").textContent = task?.title || "What do you want to change?";
+  $("scope-title").textContent = task?.title || (S.level ? `What do you want to change in ${S.level}?` : "What do you want to change?");
   if (on) fillThread($("thread"), task, true);
   $("composer").hidden = !!task && phase() !== "scope";
   $("say").placeholder = task ? "answer, or say what's missing" : "e.g. short links should expire after a while";
@@ -623,8 +790,9 @@ async function say() {
   if (busy() || (!text && !S.snap?.task)) return;
   try {
     if (S.snap?.task) await post("/api/ask", { text });
-    else await post("/api/task", { prompt: text });
+    else await post("/api/task", { prompt: text, at: { level: S.level, selected: [...S.selected] } });
     $("say").value = "";
+    S.asking = false;
   } catch (e) {
     showActivity(e.message, "error");
   }
@@ -638,7 +806,13 @@ $("taskchip-btn").onclick = () => {
   $("minithread").hidden = !open;
   $("taskchip-btn").setAttribute("aria-expanded", String(open));
 };
-$("newtask").onclick = () => post("/api/task/close").catch((e) => showActivity(e.message, "error"));
+// A task starts where the person is on the map: the prompt opens beside it.
+$("newtask").onclick = async () => {
+  if (S.snap?.task) await post("/api/task/close").catch((e) => showActivity(e.message, "error"));
+  S.asking = !S.asking;
+  render();
+  if (S.asking) $("say").focus();
+};
 
 // ---------- flows: a path you can watch ----------
 
@@ -705,6 +879,77 @@ function renderFlows() {
     ol.appendChild(li);
   }
   if (!ol.children.length) ol.innerHTML = `<li style="color:var(--muted);font-size:12px">none yet</li>`;
+  renderTangles();
+}
+
+// The tangles on this level, each with the boxes it is about and a way into fixing it.
+const TANGLE_WORDS = {
+  "volatile import": (x) => [`${nameOf(x.a)} imports ${nameOf(x.b)}`, `${nameOf(x.b)} changed in ${x.count} recent commits, far more often, and code relies on ${nameOf(x.a)}`],
+  "change together": (x) => [`${nameOf(x.a)} and ${nameOf(x.b)} change together`, `in ${x.count} commits, with no import between them: a link the code doesn't show`],
+  cycle: (x) => [`${x.ids.map(nameOf).join(" → ")} → …`, "import each other round in a loop"],
+  unused: (x) => [`${nameOf(x.a)}`, "exports names nothing in the code imports"],
+  "pass-through": (x) => [`${nameOf(x.a)}`, "only re-exports what other files define"],
+};
+const sameTangle = (a, b) => !!a && !!b && JSON.stringify(a) === JSON.stringify(b);
+// Box names by id, built once per render.
+let names = null;
+const nameOf = (id) => (names ??= S.draft ? byId() : new Map()).get(id)?.name ?? id;
+
+function renderTangles() {
+  const ol = $("tangles");
+  ol.innerHTML = "";
+  if (!S.draft) return;
+  const here = new Set(S.draft.nodes.filter((n) => (n.parent ?? null) === S.level).map((n) => n.id));
+  const list = smells().filter((x) => smellIds(x).every((id) => here.has(id)));
+  $("tangles-head").hidden = !list.length;
+  for (const x of list.slice(0, 40)) {
+    const [what, why] = TANGLE_WORDS[x.kind](x);
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.className = "tangle" + (sameTangle(S.tangle, x) ? " on" : "");
+    b.innerHTML = `<span class="tk"></span><span class="tw"></span><small></small>`;
+    b.querySelector(".tk").textContent = x.kind;
+    b.querySelector(".tw").textContent = what;
+    b.querySelector("small").textContent = why;
+    b.onclick = () => { S.tangle = sameTangle(S.tangle, x) ? null : x; S.selected = new Set(S.tangle ? smellIds(x) : []); S.edge = null; render(); };
+    li.appendChild(b);
+    if (sameTangle(S.tangle, x)) {
+      li.appendChild(evidenceEl(x));
+      const fix = document.createElement("button");
+      fix.className = "primary fix";
+      fix.textContent = "Fix this";
+      fix.disabled = busy();
+      fix.onclick = () => fixTangle(x, what, why);
+      li.appendChild(fix);
+    }
+    ol.appendChild(li);
+  }
+}
+
+// What makes a tangle true: the imports behind an arrow, file to file, with their names.
+function evidenceEl(x) {
+  const ul = document.createElement("ul");
+  ul.className = "evidence";
+  const ids = smellIds(x);
+  const w = [...lastWires.values()].filter((w) => ids.includes(w.from) && ids.includes(w.to));
+  for (const e of w.flatMap((w) => w.members).slice(0, 8)) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.textContent = `${e.from.split("/").slice(-2).join("/")} → ${e.to.split("/").slice(-2).join("/")}`;
+    b.title = `${e.from} imports ${namesOf(new Set(e.symbols ?? []))} from ${e.to}`;
+    b.onclick = () => openCode({ file: e.from, line: 1 });
+    li.appendChild(b);
+    ul.appendChild(li);
+  }
+  if (!ul.children.length) ul.innerHTML = `<li>${x.kind === "change together" ? "seen in git history, not in the imports" : "seen in the file itself"}</li>`;
+  return ul;
+}
+
+// A tangle becomes a task, with the test a fix has to pass.
+function fixTangle(x, what, why) {
+  const prompt = `Untangle this: ${what} — ${why}.\n\nA fix passes when pieces that change together end up together, pieces that change for different reasons aren't tied, and dependencies point toward what changes less. Look for the one change in structure that resolves it, not a patch.`;
+  S.asking = false;
+  post("/api/task", { prompt, at: { level: S.level, selected: smellIds(x) } }).catch((e) => showActivity(e.message, "error"));
 }
 
 // ---------- top bar ----------
@@ -735,7 +980,7 @@ function renderTop() {
   $("undo").hidden = !snap?.canUndo || busy();
   const pen = $("pen");
   pen.textContent = busy()
-    ? ({ mapping: "agent is mapping", scoping: "agent is reading", framing: "agent is drawing" }[snap.busy] ?? "agent's pen")
+    ? ({ describing: "agent is reading", scoping: "agent is reading", framing: "agent is drawing" }[snap.busy] ?? "agent's pen")
     : scoping() ? "your turn to say" : "your pen";
   pen.className = busy() ? "pen agent" : "pen";
   $("pass").disabled = busy() || !S.draft;
@@ -744,7 +989,8 @@ function renderTop() {
   const whole = $("scopeview");
   whole.hidden = scoping() || !focus || !snap?.map || snap.map.nodes.length <= focus.length;
   whole.textContent = S.scope === "task" ? `Show the whole map (${snap?.map?.nodes.length ?? 0} boxes)` : "Show this task only";
-  $("newtask").hidden = busy() || scoping() || !(phase() === "done" || !snap?.task);
+  $("newtask").hidden = busy() || (scoping() && !S.asking) || !(phase() === "done" || !snap?.task);
+  $("newtask").textContent = S.asking ? "Back to the map" : S.level ? "Change something here" : "Change something";
   if (phase() === "done") $("newtask").className = "primary";
   else $("newtask").className = "ghost";
   showActivity();
@@ -764,7 +1010,17 @@ function goTo(level, focus) {
   S.level = level;
   S.selected = new Set(focus ? [focus] : []);
   S.edge = null;
+  S.tangle = null;
   render();
+  // Opening a box the agent hasn't described yet asks it what the box and its boxes do.
+  const inside = S.draft?.nodes.filter((n) => (n.parent ?? null) === level && scanned(n) && n.kind !== "external") ?? [];
+  if (level && inside.some((n) => !n.pseudo.length)) describe(level);
+}
+
+function describe(id) {
+  if (busy() || S.snap?.agent === "mock" || S.described.has(id)) return;
+  S.described.add(id);
+  post("/api/describe", { id }).catch((e) => { S.described.delete(id); showActivity(e.message, "error"); });
 }
 
 function select(id, add) {
@@ -773,8 +1029,12 @@ function select(id, add) {
   if (add) S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id);
   else S.selected = new Set([id]);
   // Restyle in place: redrawing here would swallow the second click of a double-click.
-  if (hadEdge) return render();
-  for (const el of boxesEl.querySelectorAll(".box")) el.classList.toggle("selected", S.selected.has(el.dataset.id));
+  if (hadEdge || S.tangle) { S.tangle = null; return render(); }
+  const impact = impactOf(lastWires);
+  for (const el of boxesEl.querySelectorAll(".box")) {
+    el.classList.toggle("selected", S.selected.has(el.dataset.id));
+    el.classList.toggle("impact", impact.has(el.dataset.id));
+  }
 }
 
 // ---------- pointer: pan, zoom, move boxes, draw wires ----------
@@ -797,7 +1057,9 @@ const toWorld = (ev) => {
 };
 
 viewport.addEventListener("mousedown", (ev) => {
-  if (ev.button !== 0) return;
+  // A control on the map (a box's buttons, the editor) handles its own click; a drag
+  // anywhere else pans. CSS keeps the drag from selecting text.
+  if (ev.button !== 0 || ev.target.closest("button, input, textarea, select, .edit")) return;
   if (S.editing) commitEdit(document.querySelector(`.box[data-id="${CSS.escape(S.editing)}"]`));
   const start = { x: ev.clientX, y: ev.clientY, vx: S.view.x, vy: S.view.y };
   let moved = false;

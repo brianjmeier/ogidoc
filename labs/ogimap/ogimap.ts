@@ -6,12 +6,15 @@
 //                              [--port 4848] [--remap] [--demo] [--open]
 //                              [--task "<prompt>"] [--task-file brief.json] [--detach]
 //
+// The map starts from a scan of the code (folders, files, imports, seams); opening a box
+// asks the agent, read-only, to say what its boxes do. --remap describes the top level.
+//
 // A task goes: scope (a read-only chat, from your prompt) → frame (the agent draws the
 // part of the map the task touches, with the change on it) → map (you and the agent
 // take turns on the map; code is built underneath) → done.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -25,8 +28,9 @@ import { trusted, TYPES } from "../../src/server.ts";
 import { turnLog } from "../../src/turn-log.ts";
 import { MAP_DIR } from "../../src/paths.ts";
 import { OGIMAP_API } from "./contract.ts";
-import { checkMap, draftFromEdits, driftOf, focusOf, indexOf, intentOf, mergeRegion, regionIds, regionOf, stamped, viewOf, type FlowMap } from "./map.ts";
-import { MAP_FILE, REGION_FILE, framePrompt, mapPrompt, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
+import { checkMap, describeBrief, draftFromEdits, driftOf, focusOf, forAgent, indexOf, intentOf, mergeRegion, overlay, persisted, regionIds, regionOf, stamped, viewOf, withDescription, type FlowMap, type MapNode } from "./map.ts";
+import { MAP_FILE, REGION_FILE, describePrompt, framePrompt, parseDescribed, parseReply, parseScope, scopePrompt, turnPrompt, type Task } from "./prompt.ts";
+import { isCode, scan, type Skeleton } from "./scan.ts";
 
 // Run from source or from the package's compiled dist/: the merge driver sits beside this
 // file, in the same form; the editor and the demo ship as files in the package.
@@ -118,9 +122,64 @@ const rulesPath = join(project, ".ogimap", "rules.md");
 const taskPath = join(project, ".ogimap", "task.json");
 const regionPath = join(project, REGION_FILE);
 
+// ---------- the scan: the map's frame, read from the code ----------
+
+// How much history the scan reads to see what changes often and what changes together.
+const HISTORY = 1000;
+
+function scanProject(): Skeleton | null {
+  try {
+    const listed = git("ls-files", "-s", "-z").split("\0").filter(Boolean).map((l) => {
+      const [meta, path] = l.split("\t");
+      return { link: meta.startsWith("120000"), path };
+    });
+    const links: Record<string, string> = {};
+    for (const x of listed) if (x.link) try { links[x.path] = readlinkSync(join(project, x.path)); } catch {}
+    const files = listed.filter((x) => !x.link && isCode(x.path)).flatMap((x) => {
+      try { return [{ path: x.path, text: readFileSync(join(project, x.path), "utf8") }]; } catch { return []; }
+    });
+    let history: string[][] = [];
+    try {
+      history = git("log", "-n", String(HISTORY), "--name-only", "--format=%x00").split("\0").map((c) => c.split("\n").filter(Boolean)).filter((c) => c.length);
+    } catch {} // a repository with no commits yet
+    // The demo runs in a throwaway copy; its map is still called after the project.
+    return scan(opts.demo ? "shortener" : basename(project), files, { aliases: aliasesOf(), links, history });
+  } catch {
+    return null; // not a git checkout: no scan, the map is only what tasks draw
+  }
+}
+
+// tsconfig's `paths`, relative to the project root. tsconfig may carry comments.
+function aliasesOf(): Record<string, string[]> {
+  try {
+    const raw = readFileSync(join(project, "tsconfig.json"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1");
+    const { baseUrl = ".", paths = {} } = JSON.parse(raw).compilerOptions ?? {};
+    return Object.fromEntries(Object.entries(paths as Record<string, string[]>).map(([k, v]) => [k, v.map((t) => join(baseUrl, t))]));
+  } catch {
+    return {};
+  }
+}
+
+const readMapFile = () => (existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null);
+// The running map: the scan, with what map.json says on it.
+const current = (file: FlowMap | null): FlowMap | null => (skeleton?.nodes.length ? overlay(skeleton, file) : file);
+
+let skeleton: Skeleton | null = null;
+let scannedAt = "";
+function headOf(): string {
+  try { return git("rev-parse", "HEAD"); } catch { return ""; }
+}
+// Scan the code again, and remember which commit it was.
+function rescan() {
+  skeleton = scanProject();
+  scannedAt = headOf();
+}
+rescan();
+
 const state = {
-  map: existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null as FlowMap | null,
-  busy: null as null | "mapping" | "turn" | "scoping" | "framing",
+  map: current(readMapFile()),
+  busy: null as null | "describing" | "turn" | "scoping" | "framing",
+  describing: null as string | null,
   task: (existsSync(taskPath) ? JSON.parse(readFileSync(taskPath, "utf8")) : null) as Task | null,
   activity: [] as string[],
   last: null as null | { summary: string; changed: string[]; error?: string },
@@ -136,7 +195,7 @@ const state = {
 const log = turnLog({ cwd: project, ownFiles: [join(project, ".gitattributes"), join(project, ".ogimap", ".gitignore")], commit: true });
 
 function git(...args: string[]): string {
-  return execFileSync("git", args, { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  return execFileSync("git", args, { cwd: project, encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
 // What each file the map anchors to hashes to now, as git hashes a blob; null for a
@@ -152,11 +211,21 @@ function hashesOf(files: string[]): Map<string, string | null> {
   } catch {}
   return out;
 }
-const hasherFor = (map: FlowMap) => {
-  const hashes = hashesOf([...new Set(map.nodes.flatMap((n) => [...(n.code ?? []).map((c) => c.file), ...Object.keys(n.seen ?? {})]))]);
+// Hashes only the files of these nodes: a scanned map anchors to every file there is.
+const hasherFor = (nodes: MapNode[]) => {
+  const hashes = hashesOf([...new Set(nodes.flatMap((n) => [...(n.code ?? []).map((c) => c.file), ...Object.keys(n.seen ?? {})]))]);
   return (file: string) => hashes.get(file) ?? null;
 };
-const drift = (): string[] => (state.map ? driftOf(state.map, hasherFor(state.map)) : []);
+const drift = (): string[] => (state.map ? driftOf(state.map, hasherFor(state.map.nodes.filter((n) => n.seen))) : []);
+
+// The map back to disk: only what the scan can't find again. Returns the running map.
+function saveMap(map: FlowMap): FlowMap | null {
+  mkdirSync(dirname(mapPath), { recursive: true });
+  const kept = persisted(map, skeleton);
+  writeFileSync(mapPath, JSON.stringify(kept, null, 1));
+  mapStamp = statSync(mapPath).mtimeMs;
+  return current(checkMap(kept));
+}
 
 // After an agent writes its region, every box it handed back is true to the code as it is
 // now (the prompt asks exactly that), so each gets a fresh stamp. Boxes outside the
@@ -171,7 +240,7 @@ function restamp(before: FlowMap | null, after: FlowMap, alsoFresh: Iterable<str
     return old?.seen && !fresh.has(n.id) ? { ...n, seen: old.seen } : n;
   });
   const map = { ...after, nodes: kept };
-  return stamped(map, fresh, hasherFor(map));
+  return stamped(map, fresh, hasherFor(kept.filter((n) => fresh.has(n.id))));
 }
 
 // A checkout Ogimap runs in versions its map like code: the map rebases and merges by
@@ -208,12 +277,17 @@ function send(ev: object) {
 // (a rebase onto main, a pull, a checkout). Between turns, read it again when it did.
 let mapStamp = existsSync(mapPath) ? statSync(mapPath).mtimeMs : 0;
 function followDisk() {
-  if (state.busy || !existsSync(mapPath)) return;
-  const now = statSync(mapPath).mtimeMs;
+  if (state.busy) return;
+  // New commits (a pull, a rebase, a checkout): the code moved, so scan it again.
+  if (headOf() !== scannedAt) {
+    rescan();
+    mapStamp = -1;
+  }
+  const now = existsSync(mapPath) ? statSync(mapPath).mtimeMs : 0;
   if (now === mapStamp) return;
   mapStamp = now;
   try {
-    state.map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
+    state.map = current(readMapFile());
   } catch {}
 }
 
@@ -224,7 +298,7 @@ function standingOf(): { standing: string; failed: boolean } {
     scoping: "The agent is reading the code…",
     framing: "The agent is drawing the map for this task…",
     turn: "The agent has the pen: building what the map says…",
-    mapping: "The agent is drawing the map…",
+    describing: `The agent is reading ${state.describing ?? "the top of the map"} to say what it does…`,
   };
   if (state.busy) return { standing: busy[state.busy], failed: false };
   if (state.task?.phase === "done") return { standing: "Done: everything in this task's part of the map is built.", failed: false };
@@ -232,21 +306,25 @@ function standingOf(): { standing: string; failed: boolean } {
   return { standing: "Your pen: edit the map, then hand it over.", failed: false };
 }
 
-const snapshot = () => (followDisk(), {
-  api: OGIMAP_API,
-  view: state.map ? viewOf(state.map, { focus: state.task?.focus, drift: drift(), ...standingOf() }) : null,
-  map: state.map,
-  layout: existsSync(layoutPath) ? JSON.parse(readFileSync(layoutPath, "utf8")) : {},
-  busy: state.busy,
-  activity: state.activity.slice(-6),
-  last: state.last,
-  canUndo: canUndo(),
-  project: relative(process.cwd(), project).startsWith("..") ? basename(project) : relative(process.cwd(), project) || ".",
-  agent: agent.name,
-  hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
-  task: state.task,
-  drift: drift(),
-});
+function snapshot() {
+  followDisk();
+  const drifted = drift();
+  return {
+    api: OGIMAP_API,
+    view: state.map ? viewOf(state.map, { focus: state.task?.focus, drift: drifted, ...standingOf() }) : null,
+    map: state.map,
+    layout: existsSync(layoutPath) ? JSON.parse(readFileSync(layoutPath, "utf8")) : {},
+    busy: state.busy,
+    activity: state.activity.slice(-6),
+    last: state.last,
+    canUndo: canUndo(),
+    project: relative(process.cwd(), project).startsWith("..") ? basename(project) : relative(process.cwd(), project) || ".",
+    agent: agent.name,
+    hint: hints[Math.min(state.turn, hints.length - 1)] ?? null,
+    task: state.task,
+    drift: drifted,
+  };
+}
 const publish = () => send({ type: "state", ...snapshot() });
 
 function activity(a: string) {
@@ -257,47 +335,29 @@ function activity(a: string) {
 
 // ---------- turns ----------
 
-// Reads what the agent wrote into the new map: the whole map when mapping, a region
-// merged into the map otherwise.
-type Collect = { file: string; read: () => FlowMap };
+// The map with the region the agent wrote merged in. `sent` is the ids it was handed;
+// `returned` collects the ids it handed back, for the task's focus.
+function regionMerged(sent: Set<string>, returned: Set<string>): FlowMap {
+  if (!existsSync(regionPath)) throw new Error(`${REGION_FILE} is missing`);
+  const back = JSON.parse(readFileSync(regionPath, "utf8")) as FlowMap;
+  const merged = restamp(state.map, mergeRegion(state.map, sent, back), back.nodes.map((n) => n.id));
+  for (const n of back.nodes) returned.add(n.id);
+  rmSync(regionPath, { force: true });
+  return saveMap(merged)!;
+}
 
-const wholeMap: Collect = {
-  file: MAP_FILE,
-  read: () => {
-    const map = checkMap(JSON.parse(readFileSync(mapPath, "utf8")));
-    const all = stamped(map, map.nodes.map((n) => n.id), hasherFor(map));
-    writeFileSync(mapPath, JSON.stringify(all, null, 1));
-    return all;
-  },
-};
-
-// `returned` collects the ids the agent handed back, for the task's focus.
-const regionMerged = (sent: Set<string>, returned: Set<string>): Collect => ({
-  file: REGION_FILE,
-  read: () => {
-    if (!existsSync(regionPath)) throw new Error(`${REGION_FILE} is missing`);
-    const back = JSON.parse(readFileSync(regionPath, "utf8")) as FlowMap;
-    const merged = restamp(state.map, mergeRegion(state.map, sent, back), back.nodes.map((n) => n.id));
-    for (const n of back.nodes) returned.add(n.id);
-    writeFileSync(mapPath, JSON.stringify(merged, null, 1));
-    mapStamp = statSync(mapPath).mtimeMs;
-    rmSync(regionPath, { force: true });
-    return merged;
-  },
-});
-
-async function runAgent(prompt: string, collect: Collect = wholeMap): Promise<{ summary: string; changed: string[] }> {
+async function runAgent(prompt: string, sent: Set<string>, returned: Set<string>): Promise<{ summary: string; changed: string[] }> {
   let resume: string | undefined;
   let reply = parseReply(await agent.run({ prompt, cwd: project, onActivity: activity, onSession: (id) => (resume = id) }));
   for (let tries = 0; ; tries++) {
     try {
-      state.map = collect.read();
+      state.map = regionMerged(sent, returned);
       return reply;
     } catch (e) {
       // One chance to fix it, in the same conversation when the CLI can carry one on.
       if (tries > 0 || agent.name === "mock") throw e;
-      activity(`${collect.file} didn't check out; asking for a fix`);
-      const fix = `${collect.file} is not right: ${(e as Error).message}. Fix the file, then reply with the same JSON block.`;
+      activity(`${REGION_FILE} didn't check out; asking for a fix`);
+      const fix = `${REGION_FILE} is not right: ${(e as Error).message}. Fix the file, then reply with the same JSON block.`;
       reply = parseReply(await agent.run({ prompt: resume ? fix : `${prompt}\n\n# Before you start\n\n${fix}`, cwd: project, onActivity: activity, resume }));
     }
   }
@@ -318,17 +378,47 @@ async function guarded(kind: NonNullable<typeof state.busy>, work: () => Promise
   } catch (e) {
     state.last = { summary: "", changed: [], error: (e as Error).message };
   } finally {
+    // A turn changed the code under the scan: read it again.
+    if (kind === "turn") {
+      rescan();
+      state.map = current(readMapFile());
+    }
     state.busy = null;
     publish();
   }
 }
 
-const remap = () => guarded("mapping", () => runAgent(mapPrompt()));
+// Only reading may happen outside a turn: anything else a run changed goes back as it was.
+function putBack(before: Map<string, string>) {
+  for (const [f, hash] of log.begin()) {
+    if (before.get(f) === hash || f.startsWith(".ogimap/")) continue;
+    activity(`only the map may change here, not ${f}; put back`);
+    try { git("checkout", "--", f); } catch { try { git("rm", "-qf", "--cached", f); } catch {} rmSync(join(project, f), { force: true }); }
+  }
+}
+
+// The person opened a box (null: the top of the map). The agent reads it, read-only, and
+// says what its boxes do; that stays on the map until their code changes.
+async function describe(id: string | null) {
+  const before = log.begin();
+  state.describing = id;
+  await guarded("describing", async () => {
+    const brief = describeBrief(state.map!, id);
+    const d = parseDescribed(await reader.run({ prompt: describePrompt(brief), cwd: project, onActivity: activity }));
+    putBack(before);
+    const { map, ids } = withDescription(state.map!, id, d);
+    state.map = saveMap(stamped(map, ids, hasherFor(map.nodes.filter((n) => ids.includes(n.id)))));
+    return { summary: d.summary || `described ${id ?? "the top of the map"}`, changed: [] };
+  });
+  state.describing = null;
+}
 
 // What a turn works in: the task's region, what the person touched, and nodes whose code
 // changed under the map. With no task, the whole map.
 function turnRegion(before: FlowMap, draft: FlowMap, focus: string[], drifted: string[]): Set<string> {
-  if (!state.task?.focus) return new Set(before.nodes.map((n) => n.id));
+  // A small map drawn by tasks alone goes whole; a scanned one never does.
+  if (!state.task?.focus && !skeleton?.nodes.length) return new Set(before.nodes.map((n) => n.id));
+  const plan = before.nodes.filter((n) => n.status === "stale" || n.status === "proposal").map((n) => n.id);
   const was = new Map(before.nodes.map((n) => [n.id, n]));
   const touched = draft.nodes.filter((n) => {
     const o = was.get(n.id);
@@ -336,7 +426,7 @@ function turnRegion(before: FlowMap, draft: FlowMap, focus: string[], drifted: s
   }).map((n) => n.id);
   const parents = draft.nodes.filter((n) => !was.has(n.id) && n.parent).map((n) => n.parent!);
   const wired = draft.edges.filter((e) => e.by === "human" || e.removed).flatMap((e) => [e.from, e.to]);
-  return regionIds(before, [...state.task.focus, ...touched, ...parents, ...wired, ...focus, ...drifted]);
+  return regionIds(before, [...(state.task?.focus ?? []), ...plan, ...touched, ...parents, ...wired, ...focus, ...drifted]);
 }
 
 function turn(draft: FlowMap, focus: string[]) {
@@ -344,14 +434,14 @@ function turn(draft: FlowMap, focus: string[]) {
   const intent = intentOf(before, draft, focus);
   const drifted = drift();
   const ids = turnRegion(before, draft, focus, drifted);
-  const region = regionOf(before, ids);
+  const region = forAgent(regionOf(before, ids));
   mkdirSync(dirname(regionPath), { recursive: true });
   writeFileSync(regionPath, JSON.stringify(region, null, 1));
   activity("the pen is with the agent");
   const rules = existsSync(rulesPath) ? readFileSync(rulesPath, "utf8") : "";
   return guarded("turn", async () => {
     const returned = new Set<string>();
-    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), regionMerged(ids, returned));
+    const r = await runAgent(turnPrompt({ region, intent, rules, task: state.task, drift: drifted.filter((id) => ids.has(id)) }), ids, returned);
     const task = state.task;
     if (task && state.map) {
       const map = state.map;
@@ -407,23 +497,22 @@ async function frame() {
     rmSync(regionPath, { force: true });
     const index = state.map ? indexOf(state.map, drift()) : "";
     const returned = new Set<string>();
-    const r = await runAgent(framePrompt({ task: state.task!, index }), regionMerged(new Set(), returned));
+    const r = await runAgent(framePrompt({ task: state.task!, index }), new Set(), returned);
     state.task!.focus = [...focusOf(state.map!, returned)];
-    for (const [f, hash] of log.begin()) {
-      if (before.get(f) === hash || f.startsWith(".ogimap/")) continue;
-      activity(`framing may not change ${f}; put back`);
-      try { git("checkout", "--", f); } catch { try { git("rm", "-qf", "--cached", f); } catch {} rmSync(join(project, f), { force: true }); }
-    }
+    putBack(before);
     state.task!.phase = "map";
     saveTask();
     return { summary: r.summary || `the map for: ${state.task!.title}`, changed: [...returned] };
   });
 }
 
-function startTask(body: { prompt?: string; title?: string; brief?: string; messages?: Task["messages"] }) {
+function startTask(body: { prompt?: string; title?: string; brief?: string; messages?: Task["messages"]; at?: { level?: string | null; selected?: string[] } }) {
   const prompt = String(body.prompt ?? "").trim();
   if (!prompt) throw new Error("a task starts with a prompt");
-  state.task = { prompt, title: body.title, phase: "scope", messages: body.messages ?? [] };
+  // Started from the map: where the person was looking, if the map has it.
+  const has = (id: unknown): id is string => typeof id === "string" && !!state.map?.nodes.some((n) => n.id === id);
+  const at = body.at ? { level: has(body.at.level) ? body.at.level : null, selected: (body.at.selected ?? []).filter(has) } : undefined;
+  state.task = { prompt, title: body.title, phase: "scope", messages: body.messages ?? [], ...(at ? { at } : {}) };
   state.turn = 0;
   // A task scoped somewhere else (a Tend session, say) goes straight to its map.
   if (body.brief) {
@@ -495,8 +584,12 @@ const server = createServer(async (req, res) => {
         publish();
         return json(res, 200, {});
       }
-      if (url.pathname === "/api/remap") {
-        void remap();
+      if (url.pathname === "/api/describe") {
+        if (!state.map) return json(res, 409, { error: "no map yet" });
+        if (agent.name === "mock") return json(res, 409, { error: "the demo's agent only plays its recorded session" });
+        const id = body.id ?? null;
+        if (id !== null && !state.map.nodes.some((n) => n.id === id)) return json(res, 400, { error: `The map has no box "${id}".` });
+        void describe(id);
         return json(res, 202, {});
       }
       if (url.pathname === "/api/layout") {
@@ -510,7 +603,7 @@ const server = createServer(async (req, res) => {
         const subject = git("log", "-1", "--format=%s");
         log.revert(git("rev-parse", "HEAD"));
         log.record(mark, `Revert "${subject}"`, { ownFiles: false });
-        state.map = existsSync(mapPath) ? checkMap(JSON.parse(readFileSync(mapPath, "utf8"))) : null;
+        state.map = current(readMapFile());
         state.last = { summary: "undid the last turn", changed: [] };
         publish();
         return json(res, 200, {});
@@ -544,5 +637,5 @@ server.listen(Number(opts.port), "127.0.0.1", () => {
   if (opts.open) spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore", detached: true }).unref();
   if (taskFile) startTask(taskFile);
   else if (opts.task) startTask({ prompt: opts.task });
-  else if (opts.remap) void remap();
+  else if (opts.remap && state.map) void describe(null);
 });

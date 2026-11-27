@@ -1,6 +1,6 @@
-// The two prompts: draw the map of a codebase, and take one turn on it.
+// The prompts: scope a task, draw its part of the map, describe a box, and take a turn.
 
-import type { FlowMap } from "./map.ts";
+import { landmarks, type FlowMap } from "./map.ts";
 
 export interface Task {
   prompt: string;
@@ -12,12 +12,14 @@ export interface Task {
   session?: string;
   // The ids of the map this task works in: what the editor shows, and what a turn is handed.
   focus?: string[];
+  // Where on the map the person started it: the box they had open, and what they selected.
+  at?: { level: string | null; selected: string[] };
 }
 
 export const MAP_FILE = ".ogimap/map.json";
 export const REGION_FILE = ".ogimap/region.json";
 
-const schemaIn = (file: string) => `It is JSON, in ${file}:
+const REGION_SCHEMA = `It is JSON, in ${REGION_FILE}:
 
 {
   "title": "what this codebase is, in a few words",
@@ -35,8 +37,6 @@ const schemaIn = (file: string) => `It is JSON, in ${file}:
   "edges": [{ "from": "links.shorten", "to": "codes.makeCode", "label": "new code", "kind": "call | data | event" }],
   "flows": [{ "id": "shorten", "name": "shorten a link", "steps": ["http.server", "routes.route", "links.shorten", "codes.makeCode", "store.save"] }]
 }`;
-const SCHEMA = schemaIn(MAP_FILE);
-const REGION_SCHEMA = schemaIn(REGION_FILE);
 
 // How the region an agent hands back is written into the map. The code does it; the
 // agent only needs to know what its region means.
@@ -67,27 +67,6 @@ const STYLE = `How a good map reads:
   (a request, a command, a job). Steps are node ids in the order the work happens.
 - "code" points at where the node lives, so the person can open it.`;
 
-export function mapPrompt(): string {
-  return `# Draw the flow map of this codebase
-
-You are drawing a visual flow map of the code in this directory for Ogimap, an editor
-where a person understands and changes a codebase through a map of its abstractions
-and their pseudocode, instead of through prose.
-
-Read the code. Don't change any code. Write the map to ${MAP_FILE}.
-
-${SCHEMA}
-
-${STYLE}
-
-Every node you draw from existing code is "built". When you're done, reply with only:
-
-\`\`\`json
-{ "summary": "one short line" }
-\`\`\`
-`;
-}
-
 // Scoping: the person said what they want in a prompt. You may only read. Talk until
 // the task is clear enough to draw, then say so.
 export function scopePrompt({ task, map, said }: { task: Task; map: FlowMap | null; said: string }): string {
@@ -107,7 +86,8 @@ questions a reply, each with the answer you'd pick. When nothing important is op
 you are ready. Decide that yourself; don't ask for permission.
 
 Keep replies short: a few lines, real names in backticks, no essays.
-${map ? `\nA map of this codebase already exists (ids you may point at):\n${map.nodes.map((n) => `- ${n.id}`).join("\n")}\n` : ""}
+${map ? `\nA map of this codebase already exists (ids you may point at; every folder and file is a box with its path as id):\n${landmarks(map).map((n) => `- ${n.id}`).join("\n")}\n` : ""}
+${task.at ? `\nThe person started this from the map, looking inside \`${task.at.level ?? "the top level"}\`${task.at.selected.length ? ` with ${task.at.selected.map((x) => `\`${x}\``).join(", ")} selected` : ""}: start reading there.\n` : ""}
 ## The person's prompt
 
 ` : "## The person answered\n\n"}${said}
@@ -161,7 +141,7 @@ touches, and reuse what the map already has.
 ## The task: ${task.title ?? ""}
 
 ${task.prompt}
-
+${task.at ? `\nThe person started it inside \`${task.at.level ?? "the top level"}\`${task.at.selected.length ? `, with ${task.at.selected.join(", ")} selected` : ""}.\n` : ""}
 ### What scoping settled
 
 ${task.brief ?? ""}
@@ -269,14 +249,103 @@ export interface Reply {
   changed: string[];
 }
 
-export function parseReply(text: string): Reply {
-  const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
-  const candidates = blocks.length ? blocks.reverse() : [text.slice(text.lastIndexOf("{"))];
-  for (const c of candidates) {
-    try {
-      const r = JSON.parse(c);
-      return { summary: String(r.summary ?? ""), changed: Array.isArray(r.changed) ? r.changed.map(String) : [] };
-    } catch {}
+/** The last fenced JSON block in an agent's reply that parses, or the JSON from the first
+ *  `{` when it fenced none; null when there is none. */
+function lastJson(text: string): any {
+  const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]).reverse();
+  for (const c of blocks.length ? blocks : [text.slice(text.indexOf("{"))]) {
+    try { return JSON.parse(c); } catch {}
   }
+  return null;
+}
+
+export function parseReply(text: string): Reply {
+  const r = lastJson(text);
+  if (r) return { summary: String(r.summary ?? ""), changed: Array.isArray(r.changed) ? r.changed.map(String) : [] };
   return { summary: text.trim().split("\n").at(-1)?.slice(0, 160) ?? "", changed: [] };
+}
+
+// ---------- describing a box, when the person opens it ----------
+
+/** What a describe turn is handed: one box (or the top of the map) and what sits inside. */
+export interface DescribeBrief {
+  /** The box being opened, or null for the top of the map. */
+  box: { id: string; name: string; files: number; size: number } | null;
+  children: { id: string; name: string; file: boolean; size: number; seam: string[]; seamSize: number; usedBy: number; uses: number }[];
+  /** Imports between the children, and from or to outside the box, with the names they carry. */
+  arrows: { from: string; to: string; symbols: string[] }[];
+  /** Tangles the scan already found here, in its words. */
+  smells: string[];
+}
+
+export function describePrompt(b: DescribeBrief): string {
+  const where = b.box ? `\`${b.box.id}\` (${b.box.files} files, ${b.box.size} lines)` : "the top of this codebase";
+  const files = b.children.filter((c) => c.file);
+  return `# Say what ${where} does, for Ogimap
+
+Ogimap draws a codebase as a map: boxes for its folders and files, arrows for imports.
+Ogimap read the boxes, their sizes, their seams (the names code outside a box imports
+from it) and the arrows from the code itself; they are exact. What it can't read is
+what each box is *for*. The person just opened ${where}: say what its boxes do.
+
+You are in **read-only** mode: read and search the code, don't change anything.
+
+## The boxes
+
+${b.children.map((c) => `- \`${c.id}\`${c.file ? " (file)" : ""}: ${c.size} lines, used by ${c.usedBy}, uses ${c.uses}${c.seam.length ? `; its seam: ${c.seam.join(", ")}${c.seamSize > c.seam.length ? ` and ${c.seamSize - c.seam.length} more` : ""}` : ""}`).join("\n")}
+
+## Arrows
+
+${b.arrows.length ? b.arrows.map((a) => `- ${a.from} → ${a.to}: ${a.symbols.join(", ")}`).join("\n") : "(none)"}
+${b.smells.length ? `\n## Tangles Ogimap already sees here\n\n${b.smells.map((s) => `- ${s}`).join("\n")}\n` : ""}
+## What to write
+
+${STYLE}
+
+For ${b.box ? "the opened box and " : ""}each box above:
+- "name": what a person would call it, in a word or two (the path is shown beside it).
+- "pseudo": ${b.box ? "1–3 lines for the opened box, what it is for and what it owns; " : ""}1–3 lines
+  for a folder, 2–7 for a file. Real names stay real.
+- "pins": tangles you see reading it that the scan can't: an \`if\` for one value, a
+  parameter only one caller understands, a swallowed error, a retry or a sleep, a
+  disabled test, a copy of logic that lives elsewhere, a call order callers must know.
+  Each with its \`file\` and \`line\`. None is fine; don't invent any.
+${files.length ? `
+For a file, you may also add the functions that matter inside it, as new boxes:
+"id" like "${files[0].id}#name", "parent" the file's id, "code" pointing at it, and
+"edges" between them where one calls another.` : ""}
+
+Reply with only:
+
+\`\`\`json
+{
+  "summary": "one short line",
+  "boxes": [{ "id": "${b.children[0]?.id ?? "id"}", "name": "…", "pseudo": ["…"], "pins": [{ "kind": "special case", "text": "…", "file": "…", "line": 12 }] }],
+  "add": [{ "id": "…#fn", "parent": "…", "name": "…", "kind": "step", "pseudo": ["…"], "code": [{ "file": "…", "line": 3, "symbol": "fn" }] }],
+  "edges": [{ "from": "…#fn", "to": "…#other", "label": "…" }]
+}
+\`\`\`
+`;
+}
+
+export interface Described {
+  summary: string;
+  boxes: { id: string; name?: string; pseudo: string[]; pins?: { kind: string; text: string; file?: string; line?: number }[] }[];
+  add: { id: string; parent: string; name: string; kind?: string; pseudo: string[]; code?: { file: string; line?: number; symbol?: string }[] }[];
+  edges: { from: string; to: string; label?: string }[];
+}
+
+export function parseDescribed(text: string): Described {
+  const r = lastJson(text);
+  if (r) {
+    const lines = (x: unknown) => (Array.isArray(x) ? x.map(String) : []);
+    return {
+      summary: String(r.summary ?? ""),
+      boxes: (Array.isArray(r.boxes) ? r.boxes : []).filter((x: any) => typeof x?.id === "string").map((x: any) => ({ id: x.id, name: typeof x.name === "string" ? x.name : undefined, pseudo: lines(x.pseudo), pins: Array.isArray(x.pins) ? x.pins.filter((p: any) => typeof p?.text === "string") : [] })),
+      add: (Array.isArray(r.add) ? r.add : []).filter((x: any) => typeof x?.id === "string" && typeof x?.parent === "string").map((x: any) => ({ ...x, name: String(x.name ?? x.id), pseudo: lines(x.pseudo) })),
+      edges: (Array.isArray(r.edges) ? r.edges : []).filter((e: any) => typeof e?.from === "string" && typeof e?.to === "string"),
+    };
+  }
+  const said = text.trim().split("\n").at(-1)?.slice(0, 200) || "nothing";
+  throw new Error(`The agent didn't describe it; it said: ${said}`);
 }

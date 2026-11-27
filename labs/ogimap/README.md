@@ -3,8 +3,10 @@
 A proof of concept. Ogidoc goes from plan to code. Ogimap goes the other way round,
 and then back again: it works on a codebase that already exists.
 
-In a big codebase you can't start from a map of everything, so **a task starts as a
-prompt**. The agent reads the code with you, read-only, and asks only what the code
+**You see the map from the start.** Ogimap scans the codebase and draws it as
+folders and files, with the imports between them, before any agent has run. You zoom
+into the part you care about, and the agent says what each box does as you open it.
+From any level, **a task starts as a prompt**. The agent reads the code with you, read-only, and asks only what the code
 can't tell it. When it decides the task is clear, it **draws the part of the flow map
 the task touches, with the change on it as a plan**: boxes for the abstractions, each
 with pseudocode, arrows for calls and data, flows you can play. From then on it is
@@ -22,6 +24,28 @@ ogidoc map . --agent pi      # or pi, or any CLI: --agent-cmd "codex exec -s wor
 Open <http://localhost:4848>. Ogimap ships in the `ogidoc` package from 0.3.0 and reuses
 Ogidoc's agent adapters (`src/agents.ts`); its editor is a page with no build step. From
 a checkout, `node labs/ogimap/ogimap.ts …` runs the same thing from source.
+
+## Start from the whole codebase
+
+| | |
+| --- | --- |
+| ![Tend's top level, scanned](docs/scan-top.png) | **The scan is the frame.** On [Tend](https://github.com/brianjmeier/tend) (2,800 files) the scan takes about 0.15 s, with no agent. Each box is a folder or a file. A folder holding only one folder folds into it. Down a box's left edge runs its **seam**: the names code outside it imports from it, most used first. A deep module reads as few names over many lines. An arrow is the imports between two boxes. It lands on the seam name it uses, and it gets thicker the more names it carries. |
+| ![Zoomed into apps, with a tangle selected](docs/scan-apps.png) | **Zoom in to change it.** `▸ n` opens a box, and the agent (read-only) says what each box inside does: a name, a few lines of pseudocode, and **pins** for what it found (a special case, a swallowed error, a copy, a set call order), each with `file:line`. That is one agent run per box, committed with the map and marked *code changed* when the files move on. **Change something here** starts a task that knows where you are. |
+
+**Tangles.** On the left, the scan lists what is tangled at this level, using
+[untangle-codebase](https://github.com/caldoai/skills/blob/main/skills/untangle-codebase/SKILL.md)'s
+test: pieces that change together end up together, pieces that change for different
+reasons aren't tied, and dependencies point toward what changes less.
+
+- **volatile import**: a box others rely on imports one that git shows changing at least twice as often
+- **change together**: two boxes with no import between them that change in the same commits
+- **cycle**: boxes that import each other round in a loop
+- **unused**: a file nothing in the code imports
+- **pass-through**: a file that only re-exports
+
+Selecting a tangle shows its evidence (which file imports which), and **Fix this** starts a
+task on it with that test in its prompt. Clicking a box lights up everything that imports
+it, so you can see what a change would reach.
 
 ## A task
 
@@ -125,6 +149,9 @@ nothing else:
 - `POST /api/turn` takes the person's `edits` (rewrite a box, rename, remove, add, connect,
   disconnect). Ogimap turns them into its draft and refuses an edit that names no box.
 
+Version 2 adds the scan: each box's `size`, `seam`, `usedBy`, `uses`, `pins` and
+whether it is `described`, the `symbols` an arrow carries, and the map's `smells`.
+
 `contract-example.json` is a real `/api/state`, pinned by `contract.test.ts` against the
 demo. A client keeps a copy and decodes it in its own tests. Change the contract's shape
 and `OGIMAP_API` goes up, and the example with it.
@@ -138,7 +165,10 @@ and `OGIMAP_API` goes up, and the example with it.
 | double-click empty space | sketch a new box |
 | drag a box's `●` port to another box | draw an arrow ("this should use that") |
 | `⌫` | cross out the selected box or arrow; press again to restore |
-| `▸ n` | open a box and see what's inside; arrows to the outside become ghost stubs |
+| `▸ n` | open a box and see what's inside; arrows to the outside become ghost stubs. The agent says what each box inside does the first time |
+| click a box | light up every box that imports it |
+| a box's pin counts | show every pin, each with a `file:line` |
+| a tangle on the left | show its evidence; **Fix this** starts a task on it |
 | `‹ ›` or `⌥[` `⌥]` | cycle the other ways the agent offered |
 | flows on the left | play a path: a token walks the arrows, boxes light up in order |
 | `file:line` chips | open the real code beside the map |
@@ -149,7 +179,7 @@ and `OGIMAP_API` goes up, and the example with it.
 
 ```
 .ogimap/task.json  the task: prompt, the scoping conversation, the brief, its phase
-.ogimap/map.json   nodes (id, name, parent, kind, pseudo[], was[], code anchors, status, ways[]),
+.ogimap/map.json   what the scan can't recreate: names, pseudocode, pins, ways, plans. Nodes (id, name, parent, kind, pseudo[], was[], code anchors, status, ways[]),
                    edges (from, to, label, kind), flows (name, steps[])
 .ogimap/layout.json  where you dragged the boxes; the rest is laid out in columns by what they use
 .ogimap/rules.md     optional house rules, added to every turn
@@ -161,10 +191,16 @@ and `OGIMAP_API` goes up, and the example with it.
 - **Framing** (`framePrompt`) draws the task's part of the map from the brief and the
   conversation, with the change as a plan: `stale` + `was`, `proposal`, `ways`. Only
   `.ogimap/` may change; anything else is put back.
-- **Mapping a whole codebase** (`--remap`, `mapPrompt`) asks the agent for two levels: whiteboard
-  abstractions, and the functions that matter inside them. Pseudocode is 2–7 lines of
-  "code that wouldn't compile", with real names kept real. Edges go between the most
-  specific nodes, and the editor lifts them to whatever level you are looking at.
+- **The scan** (`scan.ts`, pure) reads every tracked file and git's last 1,000 commits,
+  which the caller passes in. It resolves imports (relative paths, tsconfig `paths`,
+  `.js` for `.ts`, tracked symlinks) and returns the tree, the file-to-file arrows with
+  their names, each box's seam, and the tangles. Tests are counted, but they don't make
+  arrows or seams. The running map is `overlay(scan, map.json)`, and a save keeps only
+  what the scan can't recreate (`persisted`). Ogimap scans again when HEAD moves.
+- **Describing a box** (`describePrompt`, `POST /api/describe`) runs the agent read-only
+  on one box and its children and asks for JSON in its reply: names, 2–7 lines of
+  pseudocode each, and pins. It may add functions under a file, but it never changes the
+  structure. `--remap` describes the top level.
 - **Your turn** is a draft copy of the map. On hand-over, `map.ts → intentOf` turns
   the draft into the agent's message: `CHANGE node` with a line diff of its pseudocode,
   `NEW node`, `NEW edge a → b`, `REMOVE …`, `picked way 2 of 3`, and the selection.
@@ -174,14 +210,15 @@ and `OGIMAP_API` goes up, and the example with it.
   gives the agent one chance to fix an invalid one, and commits code and map together.
 
 ```
-ogimap.ts   CLI, HTTP + event stream, turns, git
-map.ts      the map's shape, its check, and intentOf (draft → diff)
-prompt.ts   the mapping and turn prompts, reply parsing
+ogimap.ts   CLI, HTTP + event stream, turns, describe, git
+scan.ts     code + git history → folders, files, arrows, seams, tangles
+map.ts      the map's shape, overlay/persisted, its check, and intentOf (draft → diff)
+prompt.ts   the scope, frame, describe and turn prompts, reply parsing
 web/        the editor: SVG wires + HTML boxes, no framework
 demo/       a small URL shortener, its map, and two recorded turns
 ```
 
-`node --test labs/ogimap/map.test.ts` runs the unit tests.
+`node --test labs/ogimap/*.test.ts` runs the unit tests.
 
 ## Prior art (researched Nov 2026)
 
@@ -215,11 +252,11 @@ What worked, with Claude Code on the demo project:
 - ids stayed stable across turns.
 
 Open questions:
-- **Scale.** The agent rewrites the whole map each turn, which is fine for 20 nodes and
-  not for 2,000. Next: map patches, a static-analysis skeleton (tree-sitter call graph)
-  so anchors and edges are deterministic, and the LLM only for abstraction and
-  pseudocode.
-- **Drift.** Code changed outside Ogimap should mark boxes stale, as Ogidoc's drift does.
+- **Type-only imports.** The scan doesn't tell them apart yet, so some cycles are only
+  cycles of types.
+- **Layer rules and a dependency matrix.** Say which way dependencies may point (in
+  `rules.md`) and show the breaks, plus a matrix view for a whole level at once.
+- **Calls, not just imports.** Arrows inside a file still come from the agent.
 - **More visual verbs:** drag a box into another to move code between modules, split
   or merge boxes, reorder flow steps, pin an example (input → output) to a box as a test.
 - **Comments as pins**, as in Ogidoc, for the rare question that needs words.

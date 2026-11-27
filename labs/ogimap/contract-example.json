@@ -1,11 +1,104 @@
 {
- "api": 1,
+ "api": 2,
  "busy": null,
  "view": {
-  "title": "In-memory URL shortener over HTTP",
+  "title": "shortener",
   "standing": "Your pen: edit the map, then hand it over.",
   "failed": false,
   "boxes": [
+   {
+    "id": "codes",
+    "name": "codes",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "random short codes",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true,
+    "described": true,
+    "size": 7,
+    "seam": [
+     {
+      "name": "makeCode",
+      "users": 1
+     }
+    ],
+    "seamSize": 1,
+    "usedBy": 1,
+    "uses": 0,
+    "pins": []
+   },
+   {
+    "id": "links",
+    "name": "links",
+    "parent": null,
+    "kind": "module",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "create, follow and report on short links",
+      "mark": null
+     },
+     {
+      "text": "owns link lifetime: LINK_TTL = 7 days",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true,
+    "described": true,
+    "size": 20,
+    "seam": [
+     {
+      "name": "follow",
+      "users": 1
+     },
+     {
+      "name": "shorten",
+      "users": 1
+     },
+     {
+      "name": "stats",
+      "users": 1
+     }
+    ],
+    "seamSize": 3,
+    "usedBy": 1,
+    "uses": 3,
+    "pins": []
+   },
+   {
+    "id": "routes",
+    "name": "routes",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "method + path → the links handler that answers it",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true,
+    "described": true,
+    "size": 8,
+    "seam": [
+     {
+      "name": "route",
+      "users": 1
+     }
+    ],
+    "seamSize": 1,
+    "usedBy": 1,
+    "uses": 1,
+    "pins": []
+   },
    {
     "id": "http",
     "name": "http",
@@ -19,7 +112,106 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": 15,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": 0,
+    "uses": 1,
+    "pins": []
+   },
+   {
+    "id": "store",
+    "name": "store",
+    "parent": null,
+    "kind": "store",
+    "state": "to build",
+    "lines": [
+     {
+      "text": "in-memory Map: code → { url, visits }",
+      "mark": "removed"
+     },
+     {
+      "text": "in-memory Map: code → { url, visits, createdAt }",
+      "mark": "added"
+     }
+    ],
+    "ways": 0,
+    "inTask": true,
+    "described": true,
+    "size": 7,
+    "seam": [
+     {
+      "name": "store",
+      "users": 1
+     }
+    ],
+    "seamSize": 1,
+    "usedBy": 1,
+    "uses": 0,
+    "pins": []
+   },
+   {
+    "id": "validate",
+    "name": "validate",
+    "parent": null,
+    "kind": "module",
+    "state": "built",
+    "lines": [
+     {
+      "text": "input checks",
+      "mark": null
+     }
+    ],
+    "ways": 0,
+    "inTask": true,
+    "described": true,
+    "size": 8,
+    "seam": [
+     {
+      "name": "isUrl",
+      "users": 1
+     }
+    ],
+    "seamSize": 1,
+    "usedBy": 1,
+    "uses": 0,
+    "pins": []
+   },
+   {
+    "id": "(outside)",
+    "name": "outside",
+    "parent": null,
+    "kind": "external",
+    "state": "built",
+    "lines": [],
+    "ways": 0,
+    "inTask": false,
+    "described": false,
+    "size": 0,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": 0,
+    "uses": 0,
+    "pins": []
+   },
+   {
+    "id": "(outside)/node:*",
+    "name": "node:*",
+    "parent": "(outside)",
+    "kind": "external",
+    "state": "built",
+    "lines": [],
+    "ways": 0,
+    "inTask": false,
+    "described": false,
+    "size": 0,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": 0,
+    "uses": 0,
+    "pins": []
    },
    {
     "id": "http.server",
@@ -46,22 +238,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
-   },
-   {
-    "id": "routes",
-    "name": "routes",
-    "parent": null,
-    "kind": "module",
-    "state": "built",
-    "lines": [
-     {
-      "text": "method + path → the links handler that answers it",
-      "mark": null
-     }
-    ],
-    "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "routes.route",
@@ -88,26 +272,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
-   },
-   {
-    "id": "links",
-    "name": "links",
-    "parent": null,
-    "kind": "module",
-    "state": "to build",
-    "lines": [
-     {
-      "text": "create, follow and report on short links",
-      "mark": null
-     },
-     {
-      "text": "owns link lifetime: LINK_TTL = 7 days",
-      "mark": "added"
-     }
-    ],
-    "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "links.shorten",
@@ -134,7 +306,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "links.follow",
@@ -165,7 +344,14 @@
      }
     ],
     "ways": 1,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "links.stats",
@@ -192,7 +378,14 @@
      }
     ],
     "ways": 1,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "links.isExpired",
@@ -211,22 +404,14 @@
      }
     ],
     "ways": 2,
-    "inTask": true
-   },
-   {
-    "id": "codes",
-    "name": "codes",
-    "parent": null,
-    "kind": "module",
-    "state": "built",
-    "lines": [
-     {
-      "text": "random short codes",
-      "mark": null
-     }
-    ],
-    "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "codes.makeCode",
@@ -241,22 +426,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
-   },
-   {
-    "id": "validate",
-    "name": "validate",
-    "parent": null,
-    "kind": "module",
-    "state": "built",
-    "lines": [
-     {
-      "text": "input checks",
-      "mark": null
-     }
-    ],
-    "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "validate.isUrl",
@@ -275,26 +452,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
-   },
-   {
-    "id": "store",
-    "name": "store",
-    "parent": null,
-    "kind": "store",
-    "state": "to build",
-    "lines": [
-     {
-      "text": "in-memory Map: code → { url, visits }",
-      "mark": "removed"
-     },
-     {
-      "text": "in-memory Map: code → { url, visits, createdAt }",
-      "mark": "added"
-     }
-    ],
-    "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "store.save",
@@ -313,7 +478,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "store.find",
@@ -328,7 +500,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "store.countVisit",
@@ -343,7 +522,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "tests",
@@ -358,7 +544,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    },
    {
     "id": "tests.expired",
@@ -385,7 +578,14 @@
      }
     ],
     "ways": 0,
-    "inTask": true
+    "inTask": true,
+    "described": true,
+    "size": null,
+    "seam": [],
+    "seamSize": 0,
+    "usedBy": null,
+    "uses": null,
+    "pins": []
    }
   ],
   "edges": [
@@ -453,6 +653,56 @@
     "from": "tests.expired",
     "to": "routes.route",
     "label": "POST then GET old link"
+   },
+   {
+    "from": "links",
+    "to": "validate",
+    "symbols": [
+     "isUrl"
+    ]
+   },
+   {
+    "from": "links",
+    "to": "codes",
+    "symbols": [
+     "makeCode"
+    ]
+   },
+   {
+    "from": "links",
+    "to": "store",
+    "symbols": [
+     "store"
+    ]
+   },
+   {
+    "from": "routes",
+    "to": "links",
+    "symbols": [
+     "shorten",
+     "follow",
+     "stats"
+    ]
+   },
+   {
+    "from": "http",
+    "to": "(outside)/node:*",
+    "symbols": [
+     "createServer"
+    ]
+   },
+   {
+    "from": "http",
+    "to": "routes",
+    "symbols": [
+     "route"
+    ]
+   }
+  ],
+  "smells": [
+   {
+    "kind": "unused",
+    "a": "http"
    }
   ]
  },

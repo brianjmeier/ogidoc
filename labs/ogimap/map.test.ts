@@ -266,3 +266,59 @@ test("a client's edits become the person's draft, and read as a turn's diff", ()
   assert.throws(() => draftFromEdits(tiny(), [{ op: "pseudo", id: "nowhere", lines: [] }]), /no box "nowhere"/);
   assert.throws(() => draftFromEdits(tiny(), [{ op: "disconnect", from: "cart", to: "pay" }]), /no arrow/);
 });
+
+// ---------- the scan under the map ----------
+
+import { readdirSync } from "node:fs";
+import { describeBrief, overlay, persisted, withDescription } from "./map.ts";
+import { scan } from "./scan.ts";
+
+const demoScan = () => {
+  const root = new URL("./demo/shortener/", import.meta.url);
+  const files = ["src", "test"].flatMap((d) => readdirSync(new URL(d, root)).map((f) => `${d}/${f}`)).map((path) => ({ path, text: readFileSync(new URL(path, root), "utf8") }));
+  return scan("shortener", files);
+};
+
+test("a map drawn before the scan keeps its ids: a box on one file stands in for the file", () => {
+  const sk = demoScan();
+  assert.deepEqual(sk.nodes.filter((n) => !n.parent && n.kind === "file").map((n) => n.id).sort(), ["src/codes.js", "src/links.js", "src/routes.js", "src/server.js", "src/store.js", "src/validate.js"]);
+  const m = overlay(sk, plan());
+  const links = m.nodes.find((n) => n.id === "links")!;
+  assert.ok(links.size! > 0 && links.seam!.length > 0, "links carries the scan's size and seam");
+  assert.ok(!m.nodes.some((n) => n.id === "src/links.js"), "no second box for the same file");
+  assert.equal(m.nodes.find((n) => n.id === "links.follow")!.parent, "links");
+  assert.ok(m.edges.some((e) => e.kind === "import" && e.from === "routes" && e.to === "links"), "import arrows use the stand-in ids");
+});
+
+test("what goes back to map.json is only what the scan can't find again", () => {
+  const sk = demoScan();
+  const map = plan();
+  const back = persisted(overlay(sk, map), sk);
+  assert.deepEqual(back.nodes.map((n) => n.id).sort(), map.nodes.map((n) => n.id).sort());
+  assert.ok(back.nodes.every((n) => n.size === undefined && n.seam === undefined));
+  assert.ok(!back.edges.some((e) => e.kind === "import"));
+  assert.equal(back.smells, undefined);
+  // and a scanned map nobody described leaves nothing to keep
+  assert.deepEqual(persisted(overlay(sk, null), sk).nodes, []);
+});
+
+test("describing a box names and explains its boxes, and adds functions only inside its files", () => {
+  const sk = demoScan();
+  const m = overlay(sk, null);
+  const brief = describeBrief(m, null);
+  assert.ok(brief.children.some((c) => c.id === "src/links.js" && c.file && c.seam.length));
+  assert.ok(brief.arrows.some((a) => a.from === "src/routes.js" && a.to === "src/links.js"));
+  const { map, ids } = withDescription(m, null, {
+    summary: "",
+    boxes: [{ id: "src/links.js", name: "links", pseudo: ["shorten(url) → code", "follow(code) → url"], pins: [] }, { id: "nowhere", pseudo: ["x"] }],
+    add: [{ id: "src/links.js#shorten", parent: "src/links.js", name: "shorten", pseudo: ["code = makeCode()"] }, { id: "x#y", parent: "nowhere", name: "y", pseudo: [] }],
+    edges: [],
+  });
+  assert.deepEqual(ids, ["src/links.js", "src/links.js#shorten"]);
+  const kept = persisted(map, sk);
+  assert.deepEqual(kept.nodes.map((n) => n.id).sort(), ["src/links.js", "src/links.js#shorten"]);
+  // read back over the scan, the description sits on the file's box
+  const again = overlay(sk, kept);
+  assert.equal(again.nodes.find((n) => n.id === "src/links.js")!.name, "links");
+  assert.equal(again.nodes.find((n) => n.id === "src/links.js#shorten")!.parent, "src/links.js");
+});

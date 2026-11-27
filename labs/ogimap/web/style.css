@@ -71,11 +71,11 @@ main { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relati
 .flows h2 { font: 600 10.5px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 6px 0 10px; }
 .flows h2:not(:first-child) { margin-top: 24px; }
 .flows ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
-.flows li button { width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 7px; padding: 7px 9px; display: flex; gap: 8px; align-items: center; }
-.flows li button:hover { background: var(--surface-2); }
-.flows li button[aria-pressed="true"] { border-color: var(--flow); background: var(--human-tint); color: var(--flow); }
-.flows li button::before { content: "▶"; font-size: 9px; opacity: 0.6; }
-.flows li button[aria-pressed="true"]::before { content: "■"; opacity: 1; }
+#flows > li > button { width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 7px; padding: 7px 9px; display: flex; gap: 8px; align-items: center; }
+#flows > li > button:hover { background: var(--surface-2); }
+#flows > li > button[aria-pressed="true"] { border-color: var(--flow); background: var(--human-tint); color: var(--flow); }
+#flows > li > button::before { content: "▶"; font-size: 9px; opacity: 0.6; }
+#flows > li > button[aria-pressed="true"]::before { content: "■"; opacity: 1; }
 .help { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 11.5px; color: var(--muted); }
 .help dt { font-family: var(--font-mono); color: var(--ink); }
 .help dd { margin: 0; }
@@ -205,3 +205,44 @@ main { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relati
 
 /* A box whose code changed since the map said what it does. */
 .bh .drift { font: 10px var(--font-mono); color: var(--sym); background: var(--sym-tint); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+
+/* ---------- the scan: what a box hides, its seam, and the tangles between boxes ---------- */
+:root { --tangle: #b4561b; --tangle-tint: rgba(180, 86, 27, 0.09); }
+@media (prefers-color-scheme: dark) { :root { --tangle: #f0a060; --tangle-tint: rgba(240, 160, 96, 0.11); } }
+.box .path { font: 10.5px var(--font-mono); color: var(--muted); padding: 0 12px; margin-top: -2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box .facts { font: 11px var(--font-mono); color: var(--muted); padding: 4px 12px 0; }
+/* The seam sits on the box's left edge, where the arrows that use it come in. */
+.box .seam { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin: 8px 0 4px; padding-left: 12px; border-left: 3px solid color-mix(in srgb, var(--agent) 45%, var(--line)); margin-left: -1.5px; }
+.box .seam span { font: 11px var(--font-mono); color: var(--agent); background: var(--agent-tint); border-radius: 4px; padding: 0 5px; position: relative; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box .seam span::before { content: ""; position: absolute; left: -17px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--agent); }
+.box .seam span.more { color: var(--muted); background: none; }
+.box .seam span.more::before { display: none; }
+.box .describe { margin: 8px 12px 10px; border: 1px dashed var(--line); background: none; border-radius: 6px; padding: 5px 9px; color: var(--muted); font-size: 12px; }
+.box .describe:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+.box .describe:disabled { cursor: default; }
+.box .pins { list-style: none; margin: 4px 0 8px; padding: 0 12px; display: grid; gap: 3px; }
+.box .pins li { font-size: 11.5px; color: var(--tangle); background: var(--tangle-tint); border-radius: 5px; padding: 3px 7px; }
+.box .pins b { font: 600 10px var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; }
+.box .pins button { border: 0; background: none; font: 11px var(--font-mono); color: inherit; text-decoration: underline; padding: 0 0 0 4px; }
+.box.impact { border-color: var(--tangle); box-shadow: 0 0 0 3px var(--tangle-tint); }
+.wires path.wire.import { stroke-opacity: 0.75; }
+.wires path.wire.volatile { stroke: var(--tangle); stroke-opacity: 1; }
+.wires path.wire.looped { stroke-dasharray: 7 3; }
+.wires path.wire.lit { stroke: var(--tangle); stroke-opacity: 1; }
+.wires path.together { fill: none; stroke: var(--tangle); stroke-width: 1.5; stroke-dasharray: 3 5; opacity: 0.85; }
+.wires path.together.dim, .wires text.dim { opacity: 0.15; }
+.wires text.together-label { font: 10.5px var(--font-mono); fill: var(--tangle); }
+.flows .tangle { width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 7px; padding: 6px 8px; display: grid; gap: 1px; }
+.flows .tangle:hover { background: var(--surface-2); }
+.flows .tangle.on { border-color: var(--tangle); background: var(--tangle-tint); }
+.flows .tangle .tk { font: 600 9.5px var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--tangle); }
+.flows .tangle .tw { font-size: 12px; overflow-wrap: anywhere; }
+.flows .tangle small { color: var(--muted); font-size: 11px; }
+.flows .evidence { list-style: none; margin: 4px 0 4px 8px; padding: 0; display: grid; gap: 2px; font-size: 11px; color: var(--muted); }
+.flows .evidence button { border: 0; background: none; padding: 0; font: 11px var(--font-mono); color: var(--ink); text-align: left; overflow-wrap: anywhere; }
+.flows .fix { margin: 4px 0 8px 8px; padding: 5px 10px; font-size: 12px; }
+.flows { width: 250px; }
+/* Dragging pans or moves boxes; only the box being edited takes text selection. */
+.viewport { user-select: none; -webkit-user-select: none; }
+.viewport .edit input, .viewport .edit textarea { user-select: text; -webkit-user-select: text; }
+.box .pinsum { display: block; margin: 2px 12px 8px; padding: 3px 7px; border: 0; border-radius: 5px; background: var(--tangle-tint); color: var(--tangle); font: 600 10.5px var(--font-mono); text-align: left; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }

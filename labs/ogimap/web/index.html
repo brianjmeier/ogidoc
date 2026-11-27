@@ -16,7 +16,7 @@
   <span class="edits" id="edits" hidden tabindex="0"></span>
   <button id="reset" class="ghost" hidden>Reset my edits</button>
   <button id="undo" class="ghost" hidden>Undo agent turn</button>
-  <button id="newtask" class="ghost" hidden>New task</button>
+  <button id="newtask" class="ghost" hidden>Change something</button>
   <span class="pen" id="pen"></span>
   <button id="pass" class="primary">Pass the pen <kbd>⌘↵</kbd></button>
 </header>
@@ -37,6 +37,8 @@
       <button id="taskchip-btn" aria-expanded="false"></button>
       <ol class="thread mini" id="minithread" hidden></ol>
     </div>
+    <h2 id="tangles-head" hidden>Tangles here</h2>
+    <ol id="tangles"></ol>
     <h2>Flows</h2>
     <ol id="flows"></ol>
     <h2>Hands</h2>
@@ -46,7 +48,8 @@
       <dt>dbl-click space</dt><dd>sketch a new box</dd>
       <dt>drag ● port</dt><dd>draw an arrow</dd>
       <dt>⌫</dt><dd>cross out</dd>
-      <dt>▸ n</dt><dd>open a box</dd>
+      <dt>▸ n</dt><dd>open a box; the agent says what's inside</dd>
+      <dt>click a box</dt><dd>lights up what imports it</dd>
       <dt>⌥[ ⌥]</dt><dd>other ways</dd>
       <dt>⌘↵</dt><dd>pass the pen</dd>
     </dl>
